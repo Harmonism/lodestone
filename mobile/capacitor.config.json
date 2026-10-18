@@ -1,0 +1,19 @@
+{
+  "appId": "io.harmonism.munai",
+  "appName": "Lodestone",
+  "webDir": "www",
+  "server": {
+    "url": "https://harmonism.io/lodestone-app/",
+    "allowNavigation": ["harmonism.io"],
+    "errorPath": "offline.html"
+  },
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#0a0a14",
+    "appendUserAgent": "Lodestone-Android"
+  },
+  "plugins": {
+    "CapacitorHttp": { "enabled": false },
+    "SystemBars": { "insetsHandling": "css", "initialViewportFitValueHint": "cover" }
+  }
+}

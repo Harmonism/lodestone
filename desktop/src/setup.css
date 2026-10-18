@@ -1,0 +1,102 @@
+/* Setup pages — same palette as the Lodestone app (harmonia-astro BaseLayout). */
+:root {
+  --bg: #0a0a14; --surface: #12122a; --elevated: #1a1a3a; --hover: #222250;
+  --text: #d8d8e8; --muted: #8888a8; --heading: #f0f0ff;
+  --accent: #9B3DBE; --accent-2: #B892D4; --link: #FFBA2E;
+  --border: #1e1e40; --border-2: #2a2a55; --danger: #e0707a; --ok: #3DBEA0;
+  --serif: 'Cormorant Garamond', 'Iowan Old Style', Georgia, serif;
+  --sans: 'Source Sans 3', 'Source Sans Pro', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color-scheme: dark;
+}
+/* Always dark, like the app and its icon. */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--text); font: 15.5px/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 680px; margin: 0 auto; padding: 40px 20px 32px; display: grid; gap: 16px; }
+.head { display: flex; gap: 18px; align-items: center; margin-bottom: 8px; }
+.mark { width: 64px; height: 64px; border-radius: 14px; flex: none; }
+h1 { font: 600 30px/1.15 var(--serif); color: var(--heading); letter-spacing: .01em; }
+h2 { font: 600 21px/1.25 var(--serif); color: var(--heading); margin-bottom: 8px; }
+.lede { color: var(--muted); margin-top: 4px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; display: grid; gap: 12px; }
+.card.quiet { background: transparent; }
+.muted, .fine { color: var(--muted); }
+.fine { font-size: 13.5px; }
+footer.fine { text-align: center; margin-top: 4px; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+button {
+  font: inherit; color: var(--text); background: var(--elevated); border: 1px solid var(--border-2);
+  border-radius: 10px; padding: 9px 16px; cursor: pointer;
+}
+button:hover:not(:disabled) { background: var(--hover); }
+button:disabled { opacity: .5; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+button.primary:hover:not(:disabled) { filter: brightness(1.1); background: var(--accent); }
+button.link { background: none; border: 0; padding: 0; color: var(--link); text-decoration: underline; text-underline-offset: 2px; }
+input[type=text], input[type=url], input[type=password] {
+  flex: 1; min-width: 0; font: 14px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--text);
+  background: var(--bg); border: 1px solid var(--border-2); border-radius: 10px; padding: 9px 11px;
+}
+input:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+.status { display: flex; gap: 10px; align-items: center; }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--muted); }
+.dot.ok { background: var(--ok); }
+.dot.bad { background: var(--danger); }
+.dot.busy { background: var(--accent-2); animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .dot.busy { animation: none; } }
+
+.pick, .opt { border: 1px solid var(--border-2); border-radius: 12px; padding: 14px 16px; background: var(--bg); display: grid; gap: 6px; }
+.pick .name, .opt .name { color: var(--heading); font-weight: 600; }
+.tag { font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--accent-2); }
+.figs { font-size: 13.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.why { font-size: 14px; }
+details summary { cursor: pointer; color: var(--accent-2); }
+details[open] summary { margin-bottom: 10px; }
+.list { display: grid; gap: 8px; }
+.opt { cursor: pointer; text-align: left; font: inherit; color: inherit; }
+.opt:hover { background: var(--hover); }
+.opt[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.opt.tight { opacity: .6; }
+.group { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
+.custom { display: grid; gap: 6px; margin-top: 12px; font-size: 14px; }
+.progress { display: grid; gap: 6px; }
+.bar { height: 8px; background: var(--elevated); border-radius: 99px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .3s; }
+#barText { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bad-box { border-left: 3px solid var(--danger); padding: 4px 0 4px 12px; display: grid; gap: 10px; }
+.ok-box { border-left: 3px solid var(--ok); padding: 4px 0 4px 12px; }
+.qr { background: #fff; border-radius: 12px; padding: 10px; width: 280px; height: 280px; margin: 0 auto; display: block; }
+code { font: 14px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--elevated); padding: 2px 6px; border-radius: 6px; user-select: all; }
+@media (max-width: 480px) { .wrap { padding: 24px 16px; } h1 { font-size: 26px; } }
+
+/* ── Launcher v2 ─────────────────────────────────────────────────────────── */
+.center { min-height: calc(100vh - 80px); display: grid; place-content: center; justify-items: center; gap: 10px; text-align: center; }
+.center-text { text-align: center; }
+.mark.big { width: 112px; height: 112px; border-radius: 26px; margin-bottom: 8px; box-shadow: 0 12px 40px rgba(155, 61, 190, .25); }
+.breathe { animation: breathe 3.2s ease-in-out infinite; }
+@keyframes breathe { 50% { transform: scale(1.04); box-shadow: 0 16px 56px rgba(155, 61, 190, .4); } }
+@media (prefers-reduced-motion: reduce) { .breathe { animation: none; } }
+#welcome, #failed, #manage { display: grid; gap: 16px; }
+#welcome[hidden], #failed[hidden], #manage[hidden], #waking[hidden] { display: none !important; }
+.big-btn { font-size: 16.5px; padding: 12px 22px; }
+.row.between { justify-content: space-between; }
+.name .size { color: var(--muted); font-weight: 400; }
+.tag.warn { color: var(--danger); }
+.tag.ok { color: var(--ok); }
+.detail { white-space: pre-wrap; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin: 8px 0; max-height: 220px; overflow: auto; }
+.bad-box:empty { display: none; }
+.head .grow { flex: 1; }
+#library { display: grid; gap: 16px; }
+.lang { grid-template-columns: 1fr auto; align-items: center; }
+.lang .size, .pick .size { color: var(--muted); font-weight: 400; }
+.between { justify-content: space-between; }
+.grow { flex: 1; }
+
+/* A model the practitioner rents */
+.field { display: flex; flex-direction: column; gap: 6px; margin: 12px 0 0; font-weight: 600; }
+.field select { font: inherit; font-weight: 400; }
+.field input { font-weight: 400; }
+.field .row { align-items: center; }
+#rPreset { padding: 8px 10px; border-radius: 10px; background: var(--elevated); color: inherit; border: 1px solid var(--border-2); }
+.fine.warn { color: var(--danger); }

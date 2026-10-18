@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<title>Lodestone</title>
+<link rel="stylesheet" href="setup.css">
+</head>
+<body>
+<main class="wrap">
+
+  <!-- Opening / waking: the only screen most launches ever show -->
+  <section id="waking" class="center" hidden>
+    <img src="../build/icon.png" alt="" class="mark big breathe">
+    <h1 id="wakingTitle">Lodestone</h1>
+    <p class="lede" id="wakingText">Opening…</p>
+  </section>
+
+  <!-- First launch -->
+  <section id="welcome" hidden>
+    <header class="head">
+      <img src="../build/icon.png" alt="" class="mark">
+      <div>
+        <h1>Welcome to Lodestone</h1>
+        <p class="lede">The Harmonist companion, living on this computer. Your conversations never leave it.</p>
+      </div>
+    </header>
+
+    <div class="card">
+      <p id="welcomeText"></p>
+      <div id="pick"></div>
+      <div class="row">
+        <button id="begin" class="primary big-btn"></button>
+      </div>
+      <div id="dl" class="progress" hidden>
+        <div class="bar"><i id="bar"></i></div>
+        <div class="row between"><span id="barText"></span><button id="pause" class="link">Pause</button></div>
+      </div>
+      <p id="dlError" class="bad-box" hidden></p>
+      <details class="others" id="others">
+        <summary>Choose a different model</summary>
+        <div id="list" class="list"></div>
+      </details>
+    </div>
+    <p class="fine center-text">After this one download, Lodestone works with no internet connection. It sends nothing anywhere, and keeps no record outside this computer.</p>
+    <p class="fine center-text">No room for a model on this computer? <button id="welcomeHosted" class="link">Use your harmonism.io account: ten free messages a day</button>, or <button id="welcomeRemote" class="link">a model you rent, with your own API key</button>.</p>
+  </section>
+
+  <!-- Something went wrong while starting the model -->
+  <section id="failed" hidden>
+    <header class="head">
+      <img src="../build/icon.png" alt="" class="mark">
+      <div><h1>Lodestone could not start</h1><p class="lede" id="failText"></p></div>
+    </header>
+    <div class="card">
+      <div class="row" id="failActions"></div>
+      <details><summary>Details</summary><pre id="failDetail" class="detail"></pre><button id="showLog" class="link">Show the full log</button></details>
+    </div>
+  </section>
+
+  <!-- Lodestone menu → Model… -->
+  <section id="manage" hidden>
+    <header class="head">
+      <img src="../build/icon.png" alt="" class="mark">
+      <div class="grow"><h1>Model</h1><p class="lede" id="manageText"></p></div>
+      <button id="back" class="primary back">Back</button>
+    </header>
+    <div class="card">
+      <div id="mdl" class="progress" hidden>
+        <div class="bar"><i id="mbar"></i></div>
+        <div class="row between"><span id="mbarText"></span><button id="mpause" class="link">Pause</button></div>
+      </div>
+      <p id="mError" class="bad-box" hidden></p>
+      <div id="manageList" class="list"></div>
+    </div>
+    <p id="leftovers" class="fine" hidden></p>
+    <details class="adv" id="hostedBox">
+      <summary>Your harmonism.io account: ten free messages a day</summary>
+      <p class="fine">For a computer that cannot hold a model, with no key of your own. Lodestone thinks with the models it runs on at harmonism.io and on Telegram, each tested against the doctrine. The corpus, the retrieval, the crisis gate, witness mode, your memory and your practices stay on this computer. What leaves is each turn's question with its context, to harmonism.io and on to the model provider, which keep none of it. Ten messages a day in total across harmonism.io, Telegram and this app.</p>
+      <div id="hSignedOut">
+        <label class="field">Email <input id="hEmail" type="email" autocomplete="username" spellcheck="false"></label>
+        <label class="field">Password <input id="hPassword" type="password" autocomplete="current-password"></label>
+        <span class="row"><button id="hSignIn" class="primary">Sign in</button><a href="#" id="hRegister" class="fine">Create a free account</a></span>
+      </div>
+      <div id="hSignedIn" hidden>
+        <p id="hWho" class="ok-box"></p>
+        <p id="hLeft" class="fine"></p>
+        <label class="field">Model <select id="hModel"></select></label>
+        <span class="row"><button id="hUse" class="primary">Use my harmonism.io account</button><button id="hSignOut" class="link">Sign out</button></span>
+      </div>
+      <p id="hError" class="bad-box" hidden></p>
+    </details>
+    <details class="adv" id="remoteBox">
+      <summary>A model you rent, with your own API key</summary>
+      <p class="fine">For a computer that cannot hold a model, or for a frontier model's depth. The corpus, the retrieval, the crisis gate, witness mode, your memory and your practices stay on this computer and work as before. What leaves is each turn's question with its context, to the provider you choose, which can read it; you pay that provider for what you use. The key is kept encrypted by this computer's keychain and is sent only to that provider.</p>
+      <p id="remoteNow" class="ok-box" hidden></p>
+      <label class="field">Provider <select id="rPreset"></select></label>
+      <p id="rNote" class="fine"></p>
+      <label class="field" id="rUrlRow">Address <input id="rUrl" type="url" placeholder="https://…/v1" spellcheck="false"></label>
+      <label class="field">API key <input id="rKey" type="password" autocomplete="off" spellcheck="false"> <a id="rKeyLink" href="#" class="fine" hidden>Get a key</a></label>
+      <label class="field">Model <span class="row"><input id="rModel" type="text" list="rModels" spellcheck="false" placeholder="model id"><datalist id="rModels"></datalist><button id="rList" class="link">List the models this key can use</button></span></label>
+      <p id="rAssess" class="fine" hidden></p>
+      <div id="rRecBox" hidden><p class="fine">Recommended: the models Lodestone runs on at harmonism.io and on Telegram, each tested against the doctrine. Any other model the provider lists can be typed or picked above; it has not been assessed.</p><span id="rRec" class="row"></span></div>
+      <span class="row"><button id="rSave" class="primary">Connect and use</button><button id="rClear" class="link" hidden>Stop using it</button></span>
+      <p id="rError" class="bad-box" hidden></p>
+    </details>
+    <details class="adv" id="customBox">
+      <summary>Any other model, from Hugging Face</summary>
+      <p class="fine">Paste the link to a <code>.gguf</code> file on Hugging Face (a model split into parts: the link to its first part). Lodestone downloads it, checks every part against the checksum Hugging Face publishes, and runs it with the same doctrine and corpus. It has not been assessed: its answers are its own.</p>
+      <span class="row"><input id="hfInput" type="url" placeholder="https://huggingface.co/owner/repo/blob/main/model.Q4_K_M.gguf" spellcheck="false"><button id="hfAdd">Add</button></span>
+      <p id="hfError" class="bad-box" hidden></p>
+    </details>
+    <details class="adv">
+      <summary>Advanced: use a model server you run yourself</summary>
+      <p class="fine">LM Studio, llama.cpp, Ollama or vLLM, on this computer or another you own. Give the address of its OpenAI-compatible endpoint and set its context window to at least 24,000 tokens. Leave it empty to go back to Lodestone's own model.</p>
+      <span class="row"><input id="upstream" type="url" placeholder="http://127.0.0.1:1234/v1" spellcheck="false"><button id="saveUpstream">Use this server</button></span>
+    </details>
+  </section>
+
+  <!-- Lodestone menu → Library Languages and Updates… -->
+  <section id="library" hidden>
+    <header class="head">
+      <img src="../build/icon.png" alt="" class="mark">
+      <div class="grow"><h1>Updates and library</h1><p class="lede">The app, the corpus, the doctrinal backbone and the library of harmonism.io, kept on this computer. Nothing is fetched unless you open this page.</p></div>
+      <button class="primary back">Back</button>
+    </header>
+
+    <div class="card" id="login" hidden>
+      <h2>harmonism.io asks for its password</h2>
+      <p class="fine">While harmonism.io is in its private beta, updates need the beta password. It is asked once and kept encrypted on this computer.</p>
+      <span class="row"><input id="user" type="text" placeholder="Name" autocomplete="username" spellcheck="false"><input id="pass" type="password" placeholder="Password" autocomplete="current-password"><button id="loginBtn" class="primary">Continue</button></span>
+      <p id="loginError" class="bad-box" hidden></p>
+    </div>
+
+    <div class="card">
+      <h2>Lodestone</h2>
+      <p id="appText"></p>
+      <div class="row" id="appActions"></div>
+      <div id="adl" class="progress" hidden>
+        <div class="bar"><i id="abar"></i></div>
+        <div class="row between"><span id="abarText" class="fine"></span><button id="apause" class="link">Pause</button></div>
+      </div>
+      <p id="appError" class="bad-box" hidden></p>
+    </div>
+
+    <div class="card">
+      <h2>Corpus and doctrinal backbone</h2>
+      <p id="corpusText"></p>
+      <div class="row" id="corpusActions"></div>
+      <div id="cdl" class="progress" hidden><div class="bar"><i id="cbar"></i></div><span id="cbarText" class="fine"></span></div>
+      <p id="modelsText" class="fine"></p>
+      <div class="row" id="modelsActions"></div>
+    </div>
+
+    <div class="card">
+      <h2>The library in other languages</h2>
+      <p class="fine">The app carries the library in English. Each other language is downloaded once, on request, and then reads offline.</p>
+      <div id="ldl" class="progress" hidden>
+        <div class="bar"><i id="lbar"></i></div>
+        <div class="row between"><span id="lbarText" class="fine"></span><button id="lpause" class="link">Pause</button></div>
+      </div>
+      <p id="libError" class="bad-box" hidden></p>
+      <div id="langList" class="list"></div>
+    </div>
+    <p class="fine center-text" id="forgetRow" hidden><button id="forget" class="link">Forget the harmonism.io password</button></p>
+  </section>
+
+</main>
+<script src="launcher.js"></script>
+</body>
+</html>

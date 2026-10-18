@@ -1,0 +1,99 @@
+<svg viewBox="0 0 48 56" xmlns="http://www.w3.org/2000/svg">
+      <style>.mouth-open,.sprite-eyelids{display:none}</style><defs>
+        <linearGradient id="sprite-shimmer" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:#9B3DBE;stop-opacity:0.4" />
+          <stop offset="33%" style="stop-color:#3DBE9B;stop-opacity:0.4" />
+          <stop offset="66%" style="stop-color:#3D6ABE;stop-opacity:0.4" />
+          <stop offset="100%" style="stop-color:#9B3DBE;stop-opacity:0.4" />
+        </linearGradient>
+        <linearGradient id="sprite-base" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#2A2A3E" class="sprite-base-top" />
+          <stop offset="100%" stop-color="#1A1A2E" class="sprite-base-bottom" />
+        </linearGradient>
+        <radialGradient id="sprite-eye-glow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#8B6BAE" stop-opacity="0.35" class="sprite-eye-glow-inner" />
+          <stop offset="100%" stop-color="#8B6BAE" stop-opacity="0" class="sprite-eye-glow-outer" />
+        </radialGradient>
+        <clipPath id="eye-clip-left">
+          <path d="M14.2 22 Q18 18 21.8 22 Q18 25.5 14.2 22 Z" />
+        </clipPath>
+        <clipPath id="eye-clip-right">
+          <path d="M26.2 22 Q30 18 33.8 22 Q30 25.5 26.2 22 Z" />
+        </clipPath>
+        <filter id="eye-blur">
+          <feGaussianBlur stdDeviation="0.35" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        <filter id="body-aura">
+          <feGaussianBlur stdDeviation="1.5" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+
+      
+      <g class="sprite-crystal" filter="url(#body-aura)">
+        <path
+          d="M24 4 L38 14 L40 30 L34 44 L14 44 L8 30 L10 14 Z"
+          fill="url(#sprite-base)"
+          stroke="#4A4A6E"
+          stroke-width="0.6"
+        />
+        <path d="M24 4 L24 44" stroke="#4A4A6E" stroke-width="0.3" opacity="0.5" />
+        <path d="M10 14 L38 14" stroke="#4A4A6E" stroke-width="0.3" opacity="0.4" />
+        <path d="M8 30 L40 30" stroke="#4A4A6E" stroke-width="0.3" opacity="0.4" />
+        <path d="M24 4 L8 30" stroke="#4A4A6E" stroke-width="0.2" opacity="0.3" />
+        <path d="M24 4 L40 30" stroke="#4A4A6E" stroke-width="0.2" opacity="0.3" />
+        <path
+          d="M24 4 L38 14 L40 30 L34 44 L14 44 L8 30 L10 14 Z"
+          fill="url(#sprite-shimmer)"
+          class="shimmer-layer"
+        />
+      </g>
+
+      
+      <g class="sprite-eyes" filter="url(#eye-blur)">
+        
+        <circle cx="18" cy="22" r="4" fill="url(#sprite-eye-glow)" class="eye-glow-left" />
+        <circle cx="30" cy="22" r="4" fill="url(#sprite-eye-glow)" class="eye-glow-right" />
+        
+        <g clip-path="url(#eye-clip-left)">
+          <path d="M14.2 22 Q18 18 21.8 22 Q18 25.5 14.2 22 Z" fill="#F0ECF8" class="sclera-left" />
+          <circle cx="18" cy="22" r="1.8" fill="#8B6BAE" class="eye-left" />
+          <circle cx="18" cy="22" r="0.95" fill="#2A1B5E" class="pupil-left" />
+          <circle cx="17.3" cy="21.3" r="0.55" fill="white" opacity="0.65" class="specular-left-main" />
+          <circle cx="18.6" cy="22.4" r="0.28" fill="white" opacity="0.3" class="specular-left-secondary" />
+        </g>
+        
+        <g clip-path="url(#eye-clip-right)">
+          <path d="M26.2 22 Q30 18 33.8 22 Q30 25.5 26.2 22 Z" fill="#F0ECF8" class="sclera-right" />
+          <circle cx="30" cy="22" r="1.8" fill="#8B6BAE" class="eye-right" />
+          <circle cx="30" cy="22" r="0.95" fill="#2A1B5E" class="pupil-right" />
+          <circle cx="29.3" cy="21.3" r="0.55" fill="white" opacity="0.65" class="specular-right-main" />
+          <circle cx="30.6" cy="22.4" r="0.28" fill="white" opacity="0.3" class="specular-right-secondary" />
+        </g>
+      </g>
+
+      
+      <g class="sprite-eyelids">
+        <path d="M14.8 22 Q18 24.2 21.2 22" stroke="#4A4A6E" stroke-width="0.8" fill="none" stroke-linecap="round" class="eyelid-left" />
+        <path d="M26.8 22 Q30 24.2 33.2 22" stroke="#4A4A6E" stroke-width="0.8" fill="none" stroke-linecap="round" class="eyelid-right" />
+      </g>
+
+      
+      <g class="sprite-mouth">
+        <path d="M20 32 Q24 33 28 32" stroke="#6B5986" stroke-width="0.8" fill="none" class="mouth-closed" />
+        <ellipse cx="24" cy="33" rx="3" ry="2" fill="#0D0D1A" stroke="#4A4A6E" stroke-width="0.5" class="mouth-open" />
+      </g>
+
+      
+      <g class="sprite-feet">
+        <ellipse cx="18" cy="50" rx="4" ry="2.5" fill="#1A1A2E" stroke="#4A4A6E" stroke-width="0.5" class="foot-left" />
+        <ellipse cx="30" cy="50" rx="4" ry="2.5" fill="#1A1A2E" stroke="#4A4A6E" stroke-width="0.5" class="foot-right" />
+      </g>
+    </svg>

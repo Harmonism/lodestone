@@ -1,0 +1,22 @@
+# Fetched or built: tools/fetch-assets.sh brings them back
+app/corpus/
+app/vendor/models/**/*.onnx
+desktop/engines/*/
+desktop/site-en/
+desktop/build-res/
+desktop/dist/
+desktop/release/
+.site-packs/
+node_modules/
+__pycache__/
+*.pyc
+
+# Never published
+mobile/keys/
+mobile/release/
+tools/hold-subject.local
+*.local
+
+# Working copies
+*.bak-*
+.DS_Store

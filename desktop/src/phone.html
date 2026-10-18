@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<title>Use Lodestone from your phone</title>
+<link rel="stylesheet" href="setup.css">
+</head>
+<body>
+<main class="wrap" style="padding-top:24px">
+  <h2>Use Lodestone from your phone</h2>
+  <p>A phone does not run the model itself. It borrows this computer's, over your own Wi-Fi, while Lodestone is open here.</p>
+  <label class="row"><input type="checkbox" id="lan"> <span>Let phones on this Wi-Fi reach Lodestone</span></label>
+  <div id="on" hidden class="card">
+    <p>On the phone, scan this or type the address into its browser:</p>
+    <img id="qr" class="qr" alt="QR code for the address below">
+    <p style="text-align:center"><code id="addr"></code></p>
+    <p class="fine">The phone keeps its own conversations and memory, separate from this computer's; Settings → Sync, or Export and Import, brings them together. Anyone on the same network who knows the address can reach it, so leave this off on public Wi-Fi.</p>
+  </div>
+  <p id="none" class="fine" hidden>This computer is not on a network a phone can see.</p>
+
+  <h2 style="margin-top:28px">The Lodestone app for Android</h2>
+  <p>The app thinks with this computer's model over your Wi-Fi, and can keep its memory in step with this computer without anything leaving your home network. Get it from <b>harmonism.io/lodestone-app/download/Lodestone-android.apk</b>.</p>
+  <p id="pairOff" class="fine">Turn on <em>Let phones on this Wi-Fi reach Lodestone</em> above to pair a phone.</p>
+  <div id="pairOn" hidden class="card">
+    <p>Scan this with the phone's camera, or in the app choose <em>My computer</em> and type the code:</p>
+    <img id="pairQr" class="qr" alt="QR code that opens the Lodestone app and pairs it with this computer">
+    <p style="text-align:center;font-size:28px;letter-spacing:6px"><code id="pairCode"></code></p>
+    <p style="text-align:center" class="fine">Computer: <code id="pairBase"></code></p>
+    <p class="fine">The code works once, for ten minutes; a new one appears here after that. A paired phone can use this computer's model and the synced copy kept here until you forget it below.</p>
+  </div>
+  <div id="pairedBox" hidden>
+    <p><b>Paired phones</b></p>
+    <ul id="pairedList" class="fine"></ul>
+  </div>
+
+  <h2 style="margin-top:28px">Or through Telegram</h2>
+  <p>Lodestone can answer in a Telegram bot of your own, from anywhere, with your memory and practices, and offer a check-in when a practice is due. It answers while this computer is awake and Lodestone is open. Telegram carries these messages: chats with a bot are not end-to-end encrypted.</p>
+  <div id="tgOff" class="card">
+    <p>1. In Telegram, open <b>@BotFather</b>, send <code>/newbot</code>, and give it a name.<br>2. Paste the token it sends back:</p>
+    <span class="row"><input id="tgToken" type="password" autocomplete="off" spellcheck="false" placeholder="123456789:AA…"><button id="tgConnect" class="primary">Connect</button></span>
+  </div>
+  <div id="tgPair" class="card" hidden>
+    <p>Now open your bot, <a id="tgLink" href="#"></a>, press <b>Start</b>, and send this code:</p>
+    <p style="text-align:center;font-size:28px;letter-spacing:6px"><code id="tgCode"></code></p>
+    <p class="fine">Only the chat that sends this code is answered. Anyone else who finds the bot gets no reply.</p>
+  </div>
+  <div id="tgOn" class="card" hidden>
+    <p class="ok-box" id="tgOnText"></p>
+    <label class="row"><input type="checkbox" id="tgOutreach"> <span>A check-in in the chat when a practice is due (once a day at most, between 9:00 and 21:00)</span></label>
+  </div>
+  <p id="tgErr" class="bad-box" hidden></p>
+  <p class="fine" id="tgForgetRow" hidden><button id="tgForget" class="link">Disconnect the bot</button> — Lodestone forgets the token; the conversation stays on this computer.</p>
+</main>
+<script src="phone.js"></script>
+</body>
+</html>

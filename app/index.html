@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<title>Lodestone</title>
+<meta name="description" content="Lodestone, the Harmonist companion, running on your own device. The corpus, the model and the memory stay on your device.">
+<meta name="theme-color" content="#0a0a14" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f8f6f2" media="(prefers-color-scheme: light)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<!-- The Obsidian Sprite, inlined: the host rewrites .svg requests to .png,
+     and an offline-first page should not depend on a fetch it can avoid. -->
+<svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+  <symbol id="lodestone-sprite" viewBox="0 0 48 56">
+<style>.mouth-open,.sprite-eyelids{display:none}</style><defs>
+        <linearGradient id="sprite-shimmer" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:#9B3DBE;stop-opacity:0.4" />
+          <stop offset="33%" style="stop-color:#3DBE9B;stop-opacity:0.4" />
+          <stop offset="66%" style="stop-color:#3D6ABE;stop-opacity:0.4" />
+          <stop offset="100%" style="stop-color:#9B3DBE;stop-opacity:0.4" />
+        </linearGradient>
+        <linearGradient id="sprite-base" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#2A2A3E" class="sprite-base-top" />
+          <stop offset="100%" stop-color="#1A1A2E" class="sprite-base-bottom" />
+        </linearGradient>
+        <radialGradient id="sprite-eye-glow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#8B6BAE" stop-opacity="0.35" class="sprite-eye-glow-inner" />
+          <stop offset="100%" stop-color="#8B6BAE" stop-opacity="0" class="sprite-eye-glow-outer" />
+        </radialGradient>
+        <clipPath id="eye-clip-left">
+          <path d="M14.2 22 Q18 18 21.8 22 Q18 25.5 14.2 22 Z" />
+        </clipPath>
+        <clipPath id="eye-clip-right">
+          <path d="M26.2 22 Q30 18 33.8 22 Q30 25.5 26.2 22 Z" />
+        </clipPath>
+        <filter id="eye-blur">
+          <feGaussianBlur stdDeviation="0.35" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        <filter id="body-aura">
+          <feGaussianBlur stdDeviation="1.5" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+
+      
+      <g class="sprite-crystal" filter="url(#body-aura)">
+        <path
+          d="M24 4 L38 14 L40 30 L34 44 L14 44 L8 30 L10 14 Z"
+          fill="url(#sprite-base)"
+          stroke="#4A4A6E"
+          stroke-width="0.6"
+        />
+        <path d="M24 4 L24 44" stroke="#4A4A6E" stroke-width="0.3" opacity="0.5" />
+        <path d="M10 14 L38 14" stroke="#4A4A6E" stroke-width="0.3" opacity="0.4" />
+        <path d="M8 30 L40 30" stroke="#4A4A6E" stroke-width="0.3" opacity="0.4" />
+        <path d="M24 4 L8 30" stroke="#4A4A6E" stroke-width="0.2" opacity="0.3" />
+        <path d="M24 4 L40 30" stroke="#4A4A6E" stroke-width="0.2" opacity="0.3" />
+        <path
+          d="M24 4 L38 14 L40 30 L34 44 L14 44 L8 30 L10 14 Z"
+          fill="url(#sprite-shimmer)"
+          class="shimmer-layer"
+        />
+      </g>
+
+      
+      <g class="sprite-eyes" filter="url(#eye-blur)">
+        
+        <circle cx="18" cy="22" r="4" fill="url(#sprite-eye-glow)" class="eye-glow-left" />
+        <circle cx="30" cy="22" r="4" fill="url(#sprite-eye-glow)" class="eye-glow-right" />
+        
+        <g clip-path="url(#eye-clip-left)">
+          <path d="M14.2 22 Q18 18 21.8 22 Q18 25.5 14.2 22 Z" fill="#F0ECF8" class="sclera-left" />
+          <circle cx="18" cy="22" r="1.8" fill="#8B6BAE" class="eye-left" />
+          <circle cx="18" cy="22" r="0.95" fill="#2A1B5E" class="pupil-left" />
+          <circle cx="17.3" cy="21.3" r="0.55" fill="white" opacity="0.65" class="specular-left-main" />
+          <circle cx="18.6" cy="22.4" r="0.28" fill="white" opacity="0.3" class="specular-left-secondary" />
+        </g>
+        
+        <g clip-path="url(#eye-clip-right)">
+          <path d="M26.2 22 Q30 18 33.8 22 Q30 25.5 26.2 22 Z" fill="#F0ECF8" class="sclera-right" />
+          <circle cx="30" cy="22" r="1.8" fill="#8B6BAE" class="eye-right" />
+          <circle cx="30" cy="22" r="0.95" fill="#2A1B5E" class="pupil-right" />
+          <circle cx="29.3" cy="21.3" r="0.55" fill="white" opacity="0.65" class="specular-right-main" />
+          <circle cx="30.6" cy="22.4" r="0.28" fill="white" opacity="0.3" class="specular-right-secondary" />
+        </g>
+      </g>
+
+      
+      <g class="sprite-eyelids">
+        <path d="M14.8 22 Q18 24.2 21.2 22" stroke="#4A4A6E" stroke-width="0.8" fill="none" stroke-linecap="round" class="eyelid-left" />
+        <path d="M26.8 22 Q30 24.2 33.2 22" stroke="#4A4A6E" stroke-width="0.8" fill="none" stroke-linecap="round" class="eyelid-right" />
+      </g>
+
+      
+      <g class="sprite-mouth">
+        <path d="M20 32 Q24 33 28 32" stroke="#6B5986" stroke-width="0.8" fill="none" class="mouth-closed" />
+        <ellipse cx="24" cy="33" rx="3" ry="2" fill="#0D0D1A" stroke="#4A4A6E" stroke-width="0.5" class="mouth-open" />
+      </g>
+
+      
+      <g class="sprite-feet">
+        <ellipse cx="18" cy="50" rx="4" ry="2.5" fill="#1A1A2E" stroke="#4A4A6E" stroke-width="0.5" class="foot-left" />
+        <ellipse cx="30" cy="50" rx="4" ry="2.5" fill="#1A1A2E" stroke="#4A4A6E" stroke-width="0.5" class="foot-right" />
+      </g>
+  </symbol>
+</svg>
+<div id="app">
+
+  <!-- ─── Setup ─────────────────────────────────────────── -->
+  <section id="setup" class="screen" hidden>
+    <div class="setup-inner">
+      <svg class="setup-sprite" aria-hidden="true"><use href="#lodestone-sprite"></use></svg>
+      <h1>Lodestone, on your own ground</h1>
+      <p class="lede">The corpus, your memory and Lodestone's safeguards stay on this device. Where Lodestone thinks is your choice: on hardware you own, nothing you say leaves it.</p>
+
+      <section id="accountBox" class="account-box" hidden>
+        <h2>Your harmonism.io account</h2>
+        <p class="hint" id="acctStatus"></p>
+        <div class="row-btns" id="acctBtns"></div>
+        <p class="fine">Optional. It holds your Harmonic Profile, and gives ten free messages a day on the models hosted Lodestone runs on. Lodestone works without it.</p>
+      </section>
+
+      <h2>Where should Lodestone think?</h2>
+      <div class="choices" id="tierChoices"></div>
+
+      <div id="serverFields" class="server-fields" hidden>
+        <label>Server address
+          <input id="srvUrl" type="url" placeholder="http://localhost:11434/v1" autocomplete="off">
+        </label>
+        <label>Model name
+          <input id="srvModel" type="text" placeholder="gemma3:12b" autocomplete="off">
+        </label>
+        <label>Context length the server is set to (tokens)
+          <input id="srvCtx" type="number" min="4096" step="1024" value="32768">
+        </label>
+        <button class="btn ghost" id="srvTest" type="button">Test connection</button>
+        <p class="hint" id="srvStatus"></p>
+      </div>
+
+      <div id="hostedFields" class="server-fields" hidden>
+        <p class="hint" id="hStatus"></p>
+      </div>
+
+      <div id="phoneComputer" class="server-fields" hidden>
+        <p>To think with your computer's model, open Lodestone from that computer: in Lodestone Desktop choose <em>Use from Your Phone…</em> and scan the code with this phone, on the same Wi-Fi. That copy of Lodestone keeps its own conversations; Settings → <em>Export memory</em> and <em>Import memory</em> move them across.</p>
+        <p>On Android, <a href="/lodestone-app/download/Lodestone-android.apk">the Lodestone app</a> pairs with the computer instead: it thinks with the computer's model and can share one memory with it, with nothing leaving your network.</p>
+      </div>
+
+      <div id="orFields" class="server-fields" hidden>
+        <label>OpenRouter key
+          <input id="orKey" type="password" placeholder="sk-or-…" autocomplete="off" spellcheck="false">
+        </label>
+        <p class="fine"><a href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener">Make a key at openrouter.ai.</a> It goes to OpenRouter and nowhere else, and stays on this device, encrypted; if you choose to sync it, it travels encrypted under your sync passphrase. Harmonia never sees it.</p>
+        <label>Model
+          <select id="orModel"></select>
+        </label>
+        <label id="orOtherRow" hidden>Model id on OpenRouter
+          <input id="orOther" type="text" placeholder="maker/model" autocomplete="off" spellcheck="false">
+        </label>
+        <button class="btn ghost" id="orTest" type="button">Test the key</button>
+        <p class="fine">Pasting a key tests it at once.</p>
+        <p class="hint" id="orStatus"></p>
+      </div>
+
+      <div id="gpuNote" class="note" hidden></div>
+
+      <label class="check"><input type="checkbox" id="optSemantic" checked> Also download deep retrieval (multilingual meaning search, about 150 MB)</label>
+
+      <button class="btn primary" id="beginSetup" type="button" disabled>Download and begin</button>
+
+      <div id="setupProgress" class="progress-block" hidden>
+        <div class="prog"><span>Corpus</span><div class="bar"><i id="pgCorpus"></i></div><em id="pgCorpusT"></em></div>
+        <div class="prog" id="pgSemRow"><span>Deep retrieval</span><div class="bar"><i id="pgSem"></i></div><em id="pgSemT"></em></div>
+        <div class="prog" id="pgModelRow"><span>Model</span><div class="bar"><i id="pgModel"></i></div><em id="pgModelT"></em></div>
+        <p class="hint" id="setupMsg"></p>
+      </div>
+
+      <p class="fine"><a href="#" data-open-help>How this works, and how to keep it on your phone</a></p>
+      <p class="fine">The model files come once from Hugging Face; the corpus comes from wherever this page is served. Nothing is sent back, unless you choose harmonism.io or OpenRouter to think with; then each message goes there, and nothing else. Built on Lodestone's doctrinal backbone and the published Harmonism corpus. Harmonism is a transmission, not a product. See <a href="https://harmonism.io/transmission" target="_blank" rel="noopener">Transmission</a>.</p>
+    </div>
+  </section>
+
+  <!-- ─── Main ─────────────────────────────────────────── -->
+  <section id="main" class="screen" hidden>
+    <header class="topbar">
+      <button class="icon-btn" id="btnThreads" aria-label="Conversations" title="Conversations">
+        <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+      </button>
+      <div class="title">
+        <svg class="mini-sprite" id="headSprite" aria-hidden="true"><use href="#lodestone-sprite"></use></svg>
+        <div>
+          <strong>Lodestone</strong>
+          <span id="engineBadge" class="badge">offline</span>
+        </div>
+      </div>
+      <div class="top-actions">
+        <a class="icon-btn labeled desktop-only" id="btnSite" href="/" title="The whole harmonism.io site, on this computer">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6.5C10 5 7 4.5 3.5 5v13c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5C17 4.5 14 5 12 6.5zM12 6.5v13"/></svg><span class="lbl">harmonism.io</span>
+        </a>
+        <button class="icon-btn labeled" id="btnLibrary" title="The articles Lodestone draws on">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h4v16H5zM10 4h4v16h-4zM15.5 4.5l3.8 1-4 15-3.8-1z"/></svg><span class="lbl">Library</span>
+        </button>
+        <button class="icon-btn labeled" id="btnMe" title="Your practices, Wheel reading and what Lodestone remembers">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.2"/><path d="M12 3.5v6.3M12 14.2v6.3M3.5 12h6.3M14.2 12h6.3M6 6l4.4 4.4M13.6 13.6L18 18M18 6l-4.4 4.4M10.4 13.6L6 18"/></svg><span class="lbl">Your path</span>
+        </button>
+        <button class="icon-btn labeled" id="btnSettings" title="Model, appearance, updates and your data">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/></svg><span class="lbl">Settings</span>
+        </button>
+      </div>
+    </header>
+
+    <div id="engineBar" class="engine-bar" hidden>
+      <div class="bar"><i id="engineProg"></i></div>
+      <span id="engineMsg"></span>
+    </div>
+
+    <div id="homeNote" class="home-note" hidden>
+      <p>Keep Lodestone on your Home Screen (Share → <em>Add to Home Screen</em>). Safari erases what a website stores after a week without a visit; opened from the Home Screen, your conversations stay.</p>
+      <button class="icon-btn" id="homeNoteClose" type="button" aria-label="Dismiss">×</button>
+    </div>
+
+    <div id="checkins" class="checkins"></div>
+
+    <main id="chat" class="chat" aria-live="polite"></main>
+
+    <div id="attachBar" class="attach-bar desktop-only" hidden></div>
+    <form id="composer" class="composer" autocomplete="off">
+      <button class="web-toggle desktop-only" id="attachBtn" type="button" aria-label="Attach a file" title="Attach a file: a PDF, a document, a photo or a recording. It is read on this computer.">
+        <svg viewBox="0 0 24 24"><path d="M20.5 11.5l-8.2 8.2a5 5 0 0 1-7.1-7.1l8.6-8.6a3.4 3.4 0 0 1 4.8 4.8l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9"/></svg>
+      </button>
+      <input type="file" id="fileInput" multiple hidden accept=".pdf,.txt,.md,.markdown,.csv,.tsv,.json,.html,.htm,.xml,.srt,.vtt,.log,.yml,.yaml,image/*,audio/*,video/mp4,video/quicktime,.m4a,.mp3,.wav,.ogg,.opus,.flac">
+      <button class="web-toggle desktop-only" id="webBtn" type="button" aria-pressed="false" aria-label="Look this up online" title="Look this up online — for this question only">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.6 2.6 3.8 5.4 3.8 8.5s-1.2 5.9-3.8 8.5c-2.6-2.6-3.8-5.4-3.8-8.5S9.4 6.1 12 3.5z"/></svg>
+      </button>
+      <textarea id="input" rows="1" dir="auto" placeholder="Speak from where you are…" aria-label="Message"></textarea>
+      <button class="send" id="sendBtn" type="submit" aria-label="Send">
+        <svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></svg>
+      </button>
+    </form>
+    <div id="modelRow" class="model-row" hidden>
+      <button id="modelChip" class="model-chip" type="button" aria-haspopup="menu" aria-expanded="false" title="The model Lodestone thinks with. Change it here; the conversation continues.">
+        <span id="modelChipLabel">Model</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div id="modelMenu" class="model-menu" role="menu" hidden></div>
+    </div>
+  </section>
+
+  <!-- ─── Drawers ──────────────────────────────────────── -->
+  <aside id="drawerThreads" class="drawer left" hidden>
+    <div class="drawer-head"><h3>Conversations</h3><button class="icon-btn" data-close aria-label="Close">×</button></div>
+    <button class="btn primary block" id="newThread" type="button">New conversation</button>
+    <ul id="threadList" class="thread-list"></ul>
+  </aside>
+
+  <aside id="drawerLibrary" class="drawer right wide" hidden>
+    <div class="drawer-head"><h3>Library</h3><button class="icon-btn" data-close aria-label="Close">×</button></div>
+    <input id="libSearch" type="search" placeholder="Search the corpus…" class="search">
+    <div id="libMeta" class="hint"></div>
+    <ul id="libList" class="lib-list"></ul>
+  </aside>
+
+  <aside id="drawerReader" class="drawer right wide reader" hidden>
+    <div class="drawer-head">
+      <button class="icon-btn" id="readerBack" aria-label="Back to library">‹</button>
+      <h3 id="readerTitle"></h3>
+      <button class="icon-btn" data-close aria-label="Close">×</button>
+    </div>
+    <div class="reader-meta" id="readerMeta"></div>
+    <article id="readerBody" class="prose"></article>
+    <div class="reader-foot">
+      <button class="btn ghost" id="readerAsk" type="button">Ask Lodestone about this</button>
+      <a id="readerOnline" class="btn ghost" target="_blank" rel="noopener">Open on harmonism.io</a>
+    </div>
+  </aside>
+
+  <aside id="drawerMe" class="drawer right wide" hidden>
+    <div class="drawer-head"><h3>Your path</h3><button class="icon-btn" data-close aria-label="Close">×</button></div>
+    <div class="me-body">
+      <section id="hpBox">
+        <h4>Harmonic Profile</h4>
+        <p class="hint" id="hpStatus"></p>
+        <div class="row-btns" id="hpBtns"></div>
+      </section>
+
+      <section id="readingBox" hidden>
+        <h4>The Wisdom Canon</h4>
+        <p class="hint" id="readingStatus"></p>
+        <div id="readingBody" class="sync-form"></div>
+      </section>
+
+      <section>
+        <h4>Practices</h4>
+        <p class="hint">What you have committed to. Lodestone checks in when one is due. Nothing else is tracked.</p>
+        <ul id="practiceList" class="practice-list"></ul>
+        <form id="practiceForm" class="practice-form">
+          <input id="prText" type="text" placeholder="e.g. Wake at first light, screens off after sunset" required>
+          <select id="prPillar"></select>
+          <select id="prCadence">
+            <option value="1">daily check-in</option>
+            <option value="3">every 3 days</option>
+            <option value="7" selected>weekly</option>
+          </select>
+          <button class="btn primary" type="submit">Add</button>
+        </form>
+      </section>
+
+      <section>
+        <h4>Wheel reading</h4>
+        <p class="hint">Your own reading of where you stand. Lodestone reads it and does not change it.</p>
+        <div class="wheel-wrap">
+          <svg id="wheelSvg" viewBox="-110 -110 220 220" aria-label="Wheel of Harmony self-reading"></svg>
+          <div id="wheelRows" class="wheel-rows"></div>
+        </div>
+      </section>
+
+      <section>
+        <h4>What Lodestone knows about you</h4>
+        <p class="hint">Only what you write here, or ask it to remember. Lodestone infers nothing about your life.</p>
+        <label>Name <input id="meName" type="text" autocomplete="off"></label>
+        <label>Country (two letters, used for crisis-line routing) <input id="meCountry" type="text" maxlength="2" autocomplete="off" placeholder="MA"></label>
+        <textarea id="meNotes" rows="7" placeholder="Situation, what you are navigating, how you prefer to be guided…"></textarea>
+      </section>
+    </div>
+  </aside>
+
+  <aside id="drawerSettings" class="drawer right" hidden>
+    <div class="drawer-head"><h3>Settings</h3><button class="icon-btn" data-close aria-label="Close">×</button></div>
+    <div class="settings-body">
+      <section>
+        <h4>Compute</h4>
+        <div id="setEngine" class="kv"></div>
+        <label>Model <select id="setModel"></select></label>
+        <div id="setAccount" class="row-btns" hidden></div>
+        <button class="btn ghost block" id="setChangeTier" type="button">Change where Lodestone thinks</button>
+      </section>
+      <section class="desktop-only" id="setAdvanced">
+        <h4>Advanced</h4>
+        <p class="fine"><b>Folders Lodestone may read.</b> Your notes, journal or writings: when a question touches them, Lodestone finds the passages that bear on it and reads them with you. Markdown and text files only. Lodestone only reads: it never changes, moves or deletes anything there, and reads nothing outside these folders.</p>
+        <p class="fine" id="setFoldersWhere"></p>
+        <div id="setFolders" class="folder-list"></div>
+        <div class="row-btns"><button class="btn ghost" id="setFolderAdd" type="button">Add a folder…</button><button class="btn ghost" id="setFolderReread" type="button" hidden>Read them again</button></div>
+        <p class="fine" id="setFoldersStats"></p>
+      </section>
+      <section>
+        <h4>Appearance</h4>
+        <div class="seg" id="setTheme">
+          <button type="button" data-v="dark">Dark</button><button type="button" data-v="light">Light</button><button type="button" data-v="auto">Auto</button>
+        </div>
+        <label>Reply language
+          <select id="setLang">
+            <option value="auto">Match what I write</option>
+            <option value="en">English</option><option value="fr">Français</option>
+            <option value="es">Español</option><option value="ar">العربية</option>
+          </select>
+        </label>
+      </section>
+      <section>
+        <h4>Corpus</h4>
+        <div id="setCorpus" class="kv"></div>
+        <button class="btn ghost block" id="setCheckUpdate" type="button">Check for corpus update</button>
+        <p class="hint" id="setUpdateMsg"></p>
+      </section>
+      <section>
+        <h4>Your data</h4>
+        <p class="hint">Sync, below, keeps your devices together. A memory file moves it by hand: it holds your conversations, practices and notes.</p>
+        <button class="btn ghost block" id="setExport" type="button">Export memory</button>
+        <label class="btn ghost block file-btn">Import memory<input type="file" id="setImport" accept="application/json" hidden></label>
+        <button class="btn danger block" id="setWipe" type="button">Erase everything on this device</button>
+      </section>
+      <section id="setSync" hidden>
+        <h4>Sync</h4>
+        <p class="hint" id="syncStatus"></p>
+        <div id="syncBody"></div>
+      </section>
+      <section>
+        <h4>Help</h4>
+        <button class="btn ghost block" type="button" data-open-help>Using Lodestone</button>
+      </section>
+      <p class="fine" id="setAbout"></p>
+    </div>
+  </aside>
+
+
+  <aside id="drawerHelp" class="drawer right wide" hidden>
+    <div class="drawer-head"><h3>Using Lodestone</h3><button class="icon-btn" data-close aria-label="Close">×</button></div>
+    <div class="prose help-body">
+      <h4>What this is</h4>
+      <p>Lodestone is Harmonia's companion. The Harmonism articles and everything you tell it are stored on your own device, and its safeguards run there. The model that answers runs where you choose: on this device or a computer you own, and then nothing you write is sent to anyone; or, if you choose, on harmonism.io's hosted models under your account, or on OpenRouter under your own key, and then each message goes there and nothing else does.</p>
+
+      <h4>First use</h4>
+      <p>Connect to Wi-Fi, choose where Lodestone should think, and press <em>Download and begin</em>. On a computer, <em>This device</em> needs nothing installed and downloads about six gigabytes, once. Keep the page open until it finishes.</p>
+
+      <h4>On a phone or tablet</h4>
+      <p>A phone does not run the model. The models small enough to fit answer badly enough to misrepresent the system they speak for, so that option is not offered — a poor answer in Lodestone's voice is worse than no answer. A phone holds the whole corpus for reading and searching offline, and thinks in one of four ways. <strong>Your computer</strong>: a model on a computer you own, over your own Wi-Fi; nothing leaves your network. <strong>Your harmonism.io account</strong>: the models hosted Lodestone runs on, ten messages a day in total across the website, Telegram and Lodestone's apps. <strong>OpenRouter</strong>: a model you rent with your own key, with no daily limit. <strong>No model</strong>: a question brings back the passages of the corpus that bear on it, with no network at all. Settings → <em>Change where Lodestone thinks</em> moves between them; your conversations stay.</p>
+
+      <h4>Keep it on your phone</h4>
+      <p><strong>iPhone or iPad:</strong> in Safari, tap the Share button, then <em>Add to Home Screen</em>. Safari on iOS 26 or later is required.</p>
+      <p><strong>Android:</strong> install <a href="/lodestone-app/download/Lodestone-android.apk">the Lodestone app</a> (Android 7 or later; allow installing from your browser when Android asks). It is this same app, and it can also pair with Lodestone Desktop on your computer: it then thinks with the computer's model, and Settings → <em>Sync</em> can keep its memory in step with the computer without anything leaving your Wi-Fi. Or, in Chrome, open the menu (three dots) and tap <em>Install app</em> or <em>Add to Home screen</em>.</p>
+      <p><strong>Mac or PC:</strong> in Chrome or Edge, click the install icon at the right end of the address bar.</p>
+      <p>Opened from the home screen, Lodestone works with airplane mode on.</p>
+
+      <h4>If the model will not start</h4>
+      <p>There is no smaller model to fall back to, and that is deliberate: below this size the answers stop being trustworthy in Lodestone's voice, and a confident wrong answer about the system is worse than none. If this computer cannot hold it, or the browser says it has no WebGPU, run the model outside the browser instead — it can hold far more there, and it is the better version anyway. See below.</p>
+
+      <h4>Keeping the articles current</h4>
+      <p>The articles never update by themselves. When you are online, open Settings and press <em>Check for corpus update</em>. Nothing downloads unless you confirm.</p>
+
+      <h4>Moving between phone and computer</h4>
+      <p>Settings → <em>Sync</em> keeps Lodestone on your phone and in Lodestone Desktop on one memory through your harmonism.io account. It is off until you turn it on. Your conversations, notes, Wheel, practices and Harmonic Profile are then kept on harmonism.io, encrypted on each device with a sync passphrase that never leaves it, so harmonism.io stores only what it cannot read. Turn it on once per device with the same account and passphrase; if you forget the passphrase, the synced copy is lost and each device keeps its own.</p>
+      <p>Without sync, Settings → <em>Export memory</em> saves one file with your conversations, practices and notes; import it on the other device. Erasing everything is also there and cannot be undone.</p>
+
+      <div class="web-only">
+      <h4>Lodestone Desktop: Lodestone as an app on your computer</h4>
+      <p>This is the fuller version of Lodestone, and the one a phone uses when it thinks on your own computer. Install <a href="https://harmonism.io/lodestone-desktop">Lodestone Desktop</a> like any other application: for <a href="https://harmonism.io/lodestone-app/download/Lodestone-mac-apple-silicon.dmg">Mac with Apple silicon</a>, <a href="https://harmonism.io/lodestone-app/download/Lodestone-mac-intel.dmg">Mac with Intel</a>, <a href="https://harmonism.io/lodestone-app/download/Lodestone-windows-setup.exe">Windows</a> or <a href="https://harmonism.io/lodestone-app/download/Lodestone-linux.AppImage">Linux</a> (about 400 MB, with the whole English library, the retrieval model and the engine included). On first opening it downloads its model once — from 7 GB, chosen for your computer's memory; Lodestone needs at least 16 GB of memory — with a progress bar, and checks it. There is nothing else to install. From then on Lodestone sits in your Applications folder or Start menu, opens in a few seconds, needs no connection, and carries the whole harmonism.io library in English, with other languages a click away.</p>
+      <p>The app is not yet signed by Apple or Microsoft, so the first opening asks for confirmation. On a Mac: drag Lodestone from the disk image into Applications, open it once, then System Settings → Privacy &amp; Security → <em>Open Anyway</em>. Later versions arrive through Settings → <em>Check for updates</em>. On Windows: <em>More info</em> → <em>Run anyway</em>.</p>
+      </div>
+      <h4 class="desktop-only">Using Lodestone from your phone</h4>
+      <p>To use that computer's model from your phone, choose <em>Use from your phone…</em> in the app's Lodestone menu, switch it on, and scan the code with the phone on the same Wi-Fi. Two consequences worth knowing. The phone then works only while the computer is awake and Lodestone is open on it, and that page cannot be saved for offline use — a plain address on your network is not one browsers will let an app store itself from. And what you tell Lodestone there is kept separately from what you tell the computer, because they are different addresses; Settings → Export and Import move it across.</p>
+
+      <h4>What Lodestone cannot do here</h4>
+      <p>These models are far smaller than the one on harmonism.io. They make mistakes and can state things the articles do not say — which is why nothing below the seven-billion class is offered here at all. When something matters, read the article: every reply lists the articles it drew on, and they open offline. In a crisis Lodestone gives you a helpline, not a conversation; it is a companion, not a clinician.</p>
+    </div>
+  </aside>
+
+  <div id="scrim" class="scrim" hidden></div>
+  <div id="toast" class="toast" hidden></div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

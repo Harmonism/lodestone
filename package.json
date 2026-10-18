@@ -1,0 +1,13 @@
+{
+  "name": "lodestone",
+  "private": true,
+  "type": "module",
+  "description": "Lodestone on owned hardware: build tools for the offline corpus pack.",
+  "scripts": {
+    "build": "python3 tools/build-corpus.py && node tools/embed-corpus.mjs",
+    "serve": "python3 tools/serve.py"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "4.3.0"
+  }
+}

@@ -1,0 +1,150 @@
+{
+  "name": "munai-offline-desktop",
+  "productName": "Lodestone",
+  "version": "1.9.0",
+  "description": "Lodestone, the Harmonist companion, and the harmonism.io library, on your own computer.",
+  "homepage": "https://harmonism.io/lodestone-desktop",
+  "author": {
+    "name": "Harmonia",
+    "email": "harmonia@harmonism.io"
+  },
+  "license": "CC0-1.0",
+  "private": true,
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist:linux": "node pack-library.js && electron-builder --linux AppImage deb --x64 --publish never",
+    "dist:win": "node pack-library.js && electron-builder --win nsis --x64 --publish never",
+    "dist:mac": "node pack-library.js && electron-builder --mac dmg --arm64 --x64 --publish never",
+    "release": "mkdir -p release && cp -p dist/Lodestone-[0-9]*.AppImage dist/Lodestone-[0-9]*.deb dist/Lodestone-[0-9]*.exe dist/Lodestone-[0-9]*-mac-*.dmg release/ 2>/dev/null; ls -lh release",
+    "library": "node pack-library.js"
+  },
+  "dependencies": {
+    "qrcode": "1.5.4",
+    "tar": "^7.5.22"
+  },
+  "devDependencies": {
+    "electron": "44.4.5",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "io.harmonism.munai-offline",
+    "productName": "Lodestone",
+    "copyright": "CC0 \u2014 Harmonia",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "build/icon.png",
+      "package.json",
+      "!**/*.map",
+      "!**/*.bak*"
+    ],
+    "extraResources": [
+      {
+        "from": "../app",
+        "to": "web",
+        "filter": [
+          "**/*",
+          "!**/.DS_Store",
+          "!corpus/corpus.prev.json",
+          "!corpus/exclusions.txt",
+          "!**/*.bak*"
+        ]
+      },
+      {
+        "from": "build-res",
+        "to": "site",
+        "filter": [
+          "site-en.tar.gz",
+          "site-en.json"
+        ]
+      }
+    ],
+    "asar": true,
+    "artifactName": "Lodestone-${version}-${os}-${arch}.${ext}",
+    "mac": {
+      "category": "public.app-category.education",
+      "icon": "build/icon-mac.png",
+      "target": [
+        "dmg"
+      ],
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSLocalNetworkUsageDescription": "Lets a phone on your Wi-Fi use Lodestone through this computer, when you turn that on."
+      },
+      "extraResources": [
+        {
+          "from": "engines/darwin-${arch}",
+          "to": "engine"
+        }
+      ]
+    },
+    "dmg": {
+      "title": "Lodestone",
+      "artifactName": "Lodestone-${version}-mac-${arch}.${ext}"
+    },
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        "nsis"
+      ],
+      "extraResources": [
+        {
+          "from": "engines/win32-x64-vulkan",
+          "to": "engine"
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Lodestone",
+      "artifactName": "Lodestone-${version}-windows-setup.${ext}"
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Education",
+      "executableName": "lodestone",
+      "synopsis": "The Harmonist companion and the Harmonism library, on your own computer",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "desktop": {
+        "entry": {
+          "Name": "Lodestone",
+          "StartupWMClass": "Lodestone"
+        }
+      },
+      "extraResources": [
+        {
+          "from": "engines/linux-x64-vulkan",
+          "to": "engine"
+        }
+      ]
+    },
+    "deb": {
+      "depends": [
+        "libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libuuid1",
+        "libsecret-1-0"
+      ]
+    },
+    "publish": null,
+    "asarUnpack": []
+  }
+}

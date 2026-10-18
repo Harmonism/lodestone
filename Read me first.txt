@@ -1,0 +1,94 @@
+Lodestone — on your own computer
+============================
+
+This folder runs Lodestone on your computer instead of on someone's server. The
+Harmonism articles are in here. The model that answers runs on your machine.
+Your conversations stay in the browser on the device you use them from. After
+the first setup nothing is sent anywhere.
+
+There is also an installable app that does everything below without a window
+of text: Lodestone Desktop for Mac, Windows and Linux, at
+harmonism.io/lodestone-desktop. Use whichever
+you prefer; this folder stays for anyone who would rather not install anything.
+
+
+To start it
+-----------
+
+Mac:      double-click  Lodestone.command
+Windows:  double-click  Lodestone.bat
+
+The first run asks you to install one free program (Ollama, which runs the
+model) and then downloads a model — between 6 and 27 gigabytes, once, depending
+on how much memory your computer has. Later runs take seconds. A window of text
+stays open while Lodestone is running; that is normal. Closing it stops Lodestone.
+
+If macOS says the file is from an unidentified developer: right-click
+Lodestone.command, choose Open, and confirm once.
+
+
+To use it from your phone
+-------------------------
+
+Keep the window open on the computer. It prints two addresses; the second one
+begins with a number, like http://192.168.1.14:8765/. Type that into your
+phone's browser. The phone and the computer must be on the same Wi-Fi.
+
+Two things to know about the phone. It works only while the computer is on and
+this window is open — the model lives on the computer. And what you tell Lodestone
+on the phone is stored separately from what you tell it on the computer; they
+are different browsers. Settings has Export and Import to move it across.
+
+A phone does not run the model itself. The models small enough to fit on a
+phone answer badly enough to misrepresent what they are speaking for, so that
+option is not offered.
+
+
+Which model it uses
+-------------------
+
+The launcher looks at your computer's memory and picks the strongest model
+that fits with room for Lodestone's whole doctrinal backbone:
+
+  64 GB or more    Gemma 4 26B, uncensored, high precision   27 GB
+  32 GB or more    Gemma 4 26B, uncensored                   17 GB
+  16 GB or more    Gemma 3 12B, uncensored                    7 GB
+  less             Qwen3.5 9B, uncensored                     6 GB
+
+"Uncensored" means the refusals the manufacturer trained in have been removed,
+so the model answers on contested ground — health, doctrine, history — instead
+of declining. Everything else it learned is still there; Lodestone's backbone
+supplies the orientation.
+
+The name of the model is written in model.txt in this folder. To use another,
+put any name Ollama can pull in that file (gemma3:12b is a safe choice) and
+start Lodestone again. Larger models answer better and run slower.
+
+
+What is in here
+---------------
+
+  Lodestone.command   the Mac launcher
+  Lodestone.bat       the Windows launcher
+  model.txt               which model to use (made on first run)
+  app/                    the app itself, and the articles
+  tools/serve.py          the small program that serves the app and passes
+                          questions to the model; it logs nothing
+
+Nothing in this folder phones home. There is no telemetry, no account, and no
+update check unless you press the button for one in Settings.
+
+
+If something goes wrong
+-----------------------
+
+The launcher says what is missing and what to do about it. The ordinary cases:
+
+  Ollama is not installed yet — the launcher opens its download page.
+  The model does not work with your Ollama — update Ollama from ollama.com;
+    the launcher tells you when this is the problem.
+  The computer went to sleep while the phone was connected — wake it and
+    reload the page on the phone.
+
+Everything else: harmonism.io/lodestone-app/ has the same instructions in
+the app itself, under Settings → Using Lodestone.
