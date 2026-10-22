@@ -27,7 +27,7 @@ import { buildProfile, renderProfile } from "./profileview.js";
 import { Sync, SyncError, normCode, merge as syncMerge } from "./sync.js";
 import { wire } from "./syncwire.js";
 import * as held from "./held.js";
-import { tidyTranscript, CLEANUP_PROMPT, cleanupRequest, acceptCleanup } from "./tidy.js";
+import { tidyTranscript, CLEANUP_PROMPT, cleanupRequest, acceptCleanup, SPOKEN_SECRET } from "./tidy.js";
 import { isNative, lanFetch, pairWith, pairing, computerServer, parsePairLink, onAppLink } from "./native.js";
 
 const $ = s => document.querySelector(s);
@@ -5043,19 +5043,21 @@ function boxAtStart() {
 // browser, which tends to answer instead of cleaning, nor the account's daily
 // allowance. Never on words the safety layers must read exactly as spoken: a
 // crisis or care phrase, or a key or card number (the privacy gate asks about
-// those at send, and this pass would send them first).
+// those at send, and this pass would send them first), nor on words that name a
+// secret as speech writes it ("my password is…", SPOKEN_SECRET).
 const polishOn = () => S.settings.dictTidy !== false && S.settings.dictPolish !== false && !S.busy
   && S.engineReady && S.engine && !["reader", "device", "hosted"].includes(S.engine.kind);
 async function polishSaid(text, raw) {
-  if (text.split(/\s+/).length < 4) return text;
+  const n = text.split(/\s+/).length;
+  if (n < 4 || n > 800) return text;   // longer: one answer could not be relied on to come back whole
   try {
     const lang = detectLang(raw, S.settings.lang || "auto");
-    if ((S.pack?.runtime?.crisis && detectCrisis(raw, lang, S.pack.runtime.crisis)) || indirectCare(raw) || scanText(raw).length) return text;
+    if ((S.pack?.runtime?.crisis && detectCrisis(raw, lang, S.pack.runtime.crisis)) || indirectCare(raw) || scanText(raw).length || SPOKEN_SECRET.test(raw)) return text;
   } catch { return text; }
   const ask = (async () => {
     let out = "";
     for await (const part of S.engine.stream([{ role: "system", content: CLEANUP_PROMPT }, { role: "user", content: cleanupRequest(text) }],
-      { maxTokens: Math.min(1500, 80 + Math.ceil(text.length / 2)), temperature: 0, background: true })) out = part;
+      { maxTokens: Math.min(6000, 2 * n + 150), temperature: 0, background: true })) out = part;
     return out;
   })();
   try {
