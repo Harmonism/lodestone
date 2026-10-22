@@ -3,8 +3,9 @@
 #
 #   tools/fetch-assets.sh [all|model|corpus|library|engines]     (default: all)
 #
-#   model    the retrieval model's weights (multilingual-e5-small, ONNX, 113 MB),
-#            from Hugging Face, checked against the hash below
+#   model    the retrieval model's weights (multilingual-e5-small, ONNX, 113 MB) and
+#            the voice detector dictation uses (Silero VAD v5, ONNX, 2.2 MB, MIT),
+#            from Hugging Face, checked against the hashes below
 #   corpus   the current corpus pack (app/corpus/), from harmonism.io
 #   library  the English library for Lodestone Desktop (desktop/site-en/), from
 #            harmonism.io, checked against the published index
@@ -19,6 +20,8 @@ SITE="https://harmonism.io/lodestone-app"
 LLAMA="b11243"
 E5_URL="https://huggingface.co/Xenova/multilingual-e5-small/resolve/main/onnx/model_quantized.onnx"
 E5_SHA="f80102d3f2a1229f387d3c81909990d8945513e347b0eab049f7de3c6f98c193"
+VAD_URL="https://huggingface.co/onnx-community/silero-vad/resolve/e71cae966052b992a7eca6b17738916ce0eca4ec/onnx/model.onnx"
+VAD_SHA="a4a068cd6cf1ea8355b84327595838ca748ec29a25bc91fc82e6c299ccdc5808"
 
 TMP_ROOT="$(mktemp -d)"; trap 'rm -rf "$TMP_ROOT"' EXIT
 
@@ -26,13 +29,17 @@ sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$@"; else shasu
 get() { echo "  ↓ $1"; curl -fL --retry 3 --progress-bar -o "$2" "$1"; }
 
 model() {
-  echo "==> retrieval model"
-  local out="$ROOT/app/vendor/models/Xenova/multilingual-e5-small/onnx/model_quantized.onnx"
-  mkdir -p "$(dirname "$out")"
-  if [ -f "$out" ] && [ "$(sha "$out" | cut -c1-64)" = "$E5_SHA" ]; then echo "  present"; return; fi
-  get "$E5_URL" "$out.part"
-  [ "$(sha "$out.part" | cut -c1-64)" = "$E5_SHA" ] || { echo "  hash mismatch"; rm -f "$out.part"; exit 1; }
-  mv "$out.part" "$out"
+  fetch_checked "retrieval model" "$E5_URL" "$E5_SHA" "$ROOT/app/vendor/models/Xenova/multilingual-e5-small/onnx/model_quantized.onnx"
+  fetch_checked "voice detector" "$VAD_URL" "$VAD_SHA" "$ROOT/app/vendor/models/onnx-community/silero-vad/onnx/model.onnx"
+}
+
+fetch_checked() {   # label, url, sha256, destination
+  echo "==> $1"
+  mkdir -p "$(dirname "$4")"
+  if [ -f "$4" ] && [ "$(sha "$4" | cut -c1-64)" = "$3" ]; then echo "  present"; return; fi
+  get "$2" "$4.part"
+  [ "$(sha "$4.part" | cut -c1-64)" = "$3" ] || { echo "  hash mismatch"; rm -f "$4.part"; exit 1; }
+  mv "$4.part" "$4"
 }
 
 corpus() {

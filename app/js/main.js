@@ -8,11 +8,11 @@ import { HostedEngine, OpenRouterEngine, hosted, secrets, phoneRoutesAvailable, 
 import * as unlock from "./unlock.js";
 import { heldBlock, personContext, buildSystem, fitMessages, estTokens, PILLARS, LEVELS, webBlock, foldersBlock, earlierBlock, fullArticleBlock, stripRetrievalNote, summaryBlock, summaryRequest, renderSummary, summaryPlan } from "./prompt.js";
 import { detectLang, detectCrisis, buildCrisisResponse, detectWitness, witnessBlock, governorBlock, crisisLine } from "./safety.js";
-import { careCheck } from "./care.js";
+import { careCheck, indirectCare } from "./care.js";
 import * as presence from "./presence.js";
 import { render } from "./md.js";
 import { readAttachment, filesBlock, kindOf, speechLanguage, transcribeClip, setSpeechMode, sizeLabel } from "./attach.js";
-import { scanMessage, leaveOutMessage, redact, leaveOut } from "./privacygate.js";
+import { scanMessage, leaveOutMessage, redact, leaveOut, scanText } from "./privacygate.js";
 import * as speechWeb from "./speechweb.js";
 import { CloudSpeaker, providerOf, PROVIDER_LABEL, transcribe as cloudTranscribe, FAMILIES, ROUTE_LABEL, chooseRoute, keyKind, testVoiceKey, orFamilyFor, onVoiceSubstitute, clearPolicyBlocks } from "./voicecloud.js";
 import { wikiLookup } from "./wikilookup.js";
@@ -27,6 +27,7 @@ import { buildProfile, renderProfile } from "./profileview.js";
 import { Sync, SyncError, normCode, merge as syncMerge } from "./sync.js";
 import { wire } from "./syncwire.js";
 import * as held from "./held.js";
+import { tidyTranscript, CLEANUP_PROMPT, cleanupRequest, acceptCleanup } from "./tidy.js";
 import { isNative, lanFetch, pairWith, pairing, computerServer, parsePairLink, onAppLink } from "./native.js";
 
 const $ = s => document.querySelector(s);
@@ -4775,8 +4776,8 @@ async function ensureWebSpeech(why, dictating = false) {
 // ─── Dictation (desktop) ─────────────────────────────────────────────────────
 // Click the microphone, speak, click again: the clip is turned into text by
 // Whisper on this computer (the speech model attachments already use,
-// asr-worker.js) and lands in the message box at the caret. It is never sent
-// by itself, so it can be read over first. Lode sends the voice to a provider
+// asr-worker.js) and lands in the message box at the caret, to be read over;
+// pressing send while it listens writes it out and sends it at once. Lode sends the voice to a provider
 // under a key; Lodestone does not: on this computer, nothing leaves.
 
 const D = { rec: null, timer: null, start: 0, working: false };
@@ -4894,7 +4895,7 @@ function talkHeard() {
       text = p ? await cloudTranscribe(p, blob, dictCode(), await voiceCtx(p)) : await transcribeClip(blob, dictLanguage());
     } catch (e) { toast(`Not heard: ${e.message || e}`, 5000); }
     if (!T.on || gen !== T.gen) return;
-    text = String(text || "").trim();
+    text = tidySaid(text);
     if (!text) { talkListen(); return; }
     T.phase = "answering"; setTalk("Lodestone is answering…");
     while (S.busy) await new Promise(r => setTimeout(r, 200));   // an answer stopped by speaking over it is still closing
@@ -4997,32 +4998,84 @@ function endCapture(rec) {
 
 function micStop() { try { D.rec?.mr.stop(); } catch {} }
 
+/** Send, also while dictating: the recording stops, is written out into the box,
+ *  and goes with whatever was typed before it, in one press. */
+function sendOrDictated() {
+  if (D.rec || D.working) { D.sendAfter = true; if (D.rec) micStop(); return; }
+  send();
+}
+
 function micDiscard() {
   const rec = D.rec; if (!rec) return;
-  rec.discard = true;
+  rec.discard = true; D.sendAfter = false;
   try { rec.mr.stop(); } catch { endCapture(rec); }
   toast("Discarded.", 1500);
 }
 
 async function dictated(blob) {
-  if (!blob.size) { toast("Nothing was recorded."); return; }
+  // Send pressed while listening: once the words are in the box, they go.
+  // If nothing was heard, whatever was typed still goes.
+  const thenSend = () => { const go = D.sendAfter; D.sendAfter = false; if (go && $("#input").value.trim() && !S.busy) send(); };
+  if (!blob.size) { toast("Nothing was recorded."); thenSend(); return; }
   D.working = true; setMic();
   $("#recLabel").textContent = `Transcribing on ${HERE}…`; $("#recTime").textContent = ""; $("#recbar").classList.add("working"); $("#recbar").hidden = false;
   try {
     const p = dictViaProvider() ? voiceProvider() : null;
     if (p) $("#recLabel").textContent = `Writing it out through ${PROVIDER_LABEL[p]}…`;
     const text = p ? await cloudTranscribe(p, blob, dictCode(), await voiceCtx(p)) : await transcribeClip(blob, dictLanguage());
-    if (!text) { toast("Nothing was heard."); return; }
-    insertDictation(text);
-  } catch (e) { toast(`Not transcribed: ${e.message || e}`, 6000); }
+    let said = tidySaid(text, boxAtStart());
+    if (said && polishOn()) { $("#recLabel").textContent = "Tidying…"; said = await polishSaid(said, text); }
+    if (!said || !insertDictation(said, true)) toast("Nothing was heard.");
+  } catch (e) { toast(`Not transcribed: ${e.message || e}`, 6000); D.sendAfter = false; }
   finally { D.working = false; setMic(); $("#recbar").hidden = true; $("#recbar").classList.remove("working"); }
+  thenSend();
 }
 
-/** Put dictated text at the caret, with a space when it continues a word. */
-function insertDictation(text) {
+/** Whether dictated words would start a sentence where the caret is. */
+function boxAtStart() {
+  const box = $("#input"), before = box.value.slice(0, box.selectionStart ?? box.value.length);
+  return !before.trim() || /[.!?…؟]["”»)]?\s*$/.test(before);
+}
+
+// The model's pass (Settings → Dictation): what rules cannot do, a speaker changing
+// their mind ("at five, actually six"). Only on a model that already reads the
+// message (a rented one, or one on this computer): never the small model in the
+// browser, which tends to answer instead of cleaning, nor the account's daily
+// allowance. Never on words the safety layers must read exactly as spoken: a
+// crisis or care phrase, or a key or card number (the privacy gate asks about
+// those at send, and this pass would send them first).
+const polishOn = () => S.settings.dictTidy !== false && S.settings.dictPolish !== false && !S.busy
+  && S.engineReady && S.engine && !["reader", "device", "hosted"].includes(S.engine.kind);
+async function polishSaid(text, raw) {
+  if (text.split(/\s+/).length < 4) return text;
+  try {
+    const lang = detectLang(raw, S.settings.lang || "auto");
+    if ((S.pack?.runtime?.crisis && detectCrisis(raw, lang, S.pack.runtime.crisis)) || indirectCare(raw) || scanText(raw).length) return text;
+  } catch { return text; }
+  const ask = (async () => {
+    let out = "";
+    for await (const part of S.engine.stream([{ role: "system", content: CLEANUP_PROMPT }, { role: "user", content: cleanupRequest(text) }],
+      { maxTokens: Math.min(1500, 80 + Math.ceil(text.length / 2)), temperature: 0, background: true })) out = part;
+    return out;
+  })();
+  try {
+    const out = await Promise.race([ask, new Promise(r => setTimeout(() => r(null), 12000))]);   // too slow: the rules' version
+    return acceptCleanup(text, out) ?? text;
+  } catch { return text; }
+}
+
+/** What was said, tidied (Settings → Dictation): hesitations, stutters and Whisper's tags out. */
+const tidySaid = (text, atStart = true) => S.settings.dictTidy === false ? String(text || "").trim()
+  : tidyTranscript(text, { lang: dictCode() || (navigator.language || "").slice(0, 2) || null, atStart });
+
+/** Put dictated text at the caret, with a space when it continues a word. False when nothing is left to put.
+ *  `ready`: already tidied. */
+function insertDictation(text, ready = false) {
   const box = $("#input");
   const at = box.selectionStart ?? box.value.length, end = box.selectionEnd ?? at;
   const before = box.value.slice(0, at), after = box.value.slice(end);
+  if (!ready) text = tidySaid(text, !before.trim() || /[.!?…؟]["”»)]?\s*$/.test(before));
+  if (!text) return false;
   const lead = before && !/\s$/.test(before) ? " " : "";
   const tail = after && !/^\s/.test(after) ? " " : "";
   box.value = before + lead + text + tail + after;
@@ -5030,6 +5083,7 @@ function insertDictation(text) {
   box.focus(); box.setSelectionRange(caret, caret);
   autosize();
   S.dictated = true;   // for the mirror mode: this message was spoken
+  return true;
 }
 
 async function renderDictation() {
@@ -5049,6 +5103,9 @@ async function renderDictation() {
   }
   $("#setDictDownload").hidden = !!info.asr;
   $("#setDictLang").value = S.settings.dictLang || "auto";
+  $("#setDictTidy").checked = S.settings.dictTidy !== false;
+  $("#setDictPolish").checked = S.settings.dictPolish !== false;
+  $("#setDictPolish").disabled = S.settings.dictTidy === false;
 }
 
 async function renderUsageSummary() {
@@ -5065,7 +5122,7 @@ async function renderUsageSummary() {
 }
 
 function bindChrome() {
-  $("#composer").addEventListener("submit", e => { e.preventDefault(); if (S.busy) stopAnswer(); else send(); });
+  $("#composer").addEventListener("submit", e => { e.preventDefault(); if (S.busy) stopAnswer(); else sendOrDictated(); });
   watchChatScroll();
   $("#setCap").addEventListener("change", async e => {
     const v = Number(String(e.target.value).replace(/[$,\s]/g, ""));
@@ -5116,6 +5173,8 @@ function bindChrome() {
   $("#setUsageOpen").onclick = openUsage;
   $("#usageTabs").onclick = e => { const d = e.target.dataset?.d; if (d != null) renderUsage(Number(d)); };
   $("#setDictLang").onchange = async e => { S.settings.dictLang = e.target.value; await store.kv.set("settings", S.settings); };
+  $("#setDictTidy").onchange = async e => { S.settings.dictTidy = e.target.checked; await store.kv.set("settings", S.settings); renderDictation(); };
+  $("#setDictPolish").onchange = async e => { S.settings.dictPolish = e.target.checked; await store.kv.set("settings", S.settings); };
   $("#setDictSource").onclick = async e => { const k = e.target.closest("button")?.dataset.v; if (!k) return; S.settings.dictSource = k; await store.kv.set("settings", S.settings); renderDictation(); setMic(); };
   $("#setVoiceSource").onclick = e => { const k = e.target.closest("button")?.dataset.v; if (k) { speaker.stop(); saveVoice({ source: k }); } };
   // Spoken replies
@@ -5204,7 +5263,7 @@ function bindChrome() {
     document.addEventListener("click", e => { if (!$("#modelRow").contains(e.target)) closeModelMenu(); });
     document.addEventListener("keydown", e => { if (e.key === "Escape") closeModelMenu(); });
   }
-  $("#input").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing && !isHandheld()) { e.preventDefault(); if (!S.busy) send(); } });
+  $("#input").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing && !isHandheld()) { e.preventDefault(); if (!S.busy) sendOrDictated(); } });
   $("#scrim").onclick = closeDrawers;
   document.querySelectorAll("[data-close]").forEach(b => (b.onclick = closeDrawers));
   $("#btnThreads").onclick = () => {

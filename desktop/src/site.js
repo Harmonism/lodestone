@@ -69,20 +69,29 @@ class Site {
 
   /** Unpack a downloaded pack (already verified) and put it in place of the old one. */
   async install(lang, archive, meta) {
-    const staging = path.join(this.userDir, `.staging-${lang}`);
-    fs.rmSync(staging, { recursive: true, force: true });
+    // Clearing a large tree on macOS can fail with ENOTEMPTY or EBUSY while
+    // Spotlight or another process touches it: retry, and never let a leftover
+    // stop the new library from going in place.
+    const rm = (p) => fs.rmSync(p, { recursive: true, force: true, maxRetries: 6, retryDelay: 150 });
+    const tidy = (p) => { try { rm(p); } catch (e) { console.warn(`[library] could not clear ${path.basename(p)} (${e.code || e.message}); left for later`); } };
+    fs.mkdirSync(this.userDir, { recursive: true });
+    for (const n of fs.readdirSync(this.userDir)) if (/^\.(old|staging)-[a-z]+-\d+$/.test(n)) tidy(path.join(this.userDir, n));
+    let staging = path.join(this.userDir, `.staging-${lang}`);
+    tidy(staging);
+    if (fs.existsSync(staging)) staging += `-${Date.now()}`;
     fs.mkdirSync(staging, { recursive: true });
     await tar.x({ file: archive, cwd: staging, strict: true, preservePaths: false });
     const unpacked = lang === "en" ? staging : path.join(staging, lang);
     if (!fs.existsSync(path.join(unpacked, "index.html"))) throw new Error("The downloaded library pack is incomplete.");
     fs.writeFileSync(path.join(unpacked, ".pack.json"), JSON.stringify({ lang, ...meta, installed_at: new Date().toISOString() }));
     const dest = path.join(this.userDir, lang);
-    const old = path.join(this.userDir, `.old-${lang}`);
-    fs.rmSync(old, { recursive: true, force: true });
+    let old = path.join(this.userDir, `.old-${lang}`);
+    tidy(old);
+    if (fs.existsSync(old)) old += `-${Date.now()}`;   // a stubborn leftover is swept on a later install
     if (fs.existsSync(dest)) fs.renameSync(dest, old);
     fs.renameSync(unpacked, dest);
-    fs.rmSync(old, { recursive: true, force: true });
-    fs.rmSync(staging, { recursive: true, force: true });
+    tidy(old);
+    tidy(staging);
   }
 
   remove(lang) {
