@@ -13,6 +13,15 @@ SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEST="${1:-$SRC/../lodestone-public}"
 mkdir -p "$DEST"
 
+# DEST's .git is moved aside for the copy and restored after: macOS's own rsync
+# ignores the protect filter, and --delete-excluded would otherwise remove it.
+GITKEEP=""
+if [ -d "$DEST/.git" ]; then
+  GITKEEP="$(mktemp -d "${TMPDIR:-/tmp}/lodestone-public-git.XXXXXX")"
+  mv "$DEST/.git" "$GITKEEP/.git"
+  trap 'if [ -n "$GITKEEP" ] && [ -d "$GITKEEP/.git" ]; then rm -rf "$DEST/.git"; mv "$GITKEEP/.git" "$DEST/.git"; rmdir "$GITKEEP"; fi' EXIT
+fi
+
 echo "==> copying $SRC → $DEST"
 rsync -a --delete --delete-excluded \
   --filter='P /.git/' \
@@ -28,6 +37,7 @@ rsync -a --delete --delete-excluded \
   --exclude='/mobile/android/local.properties' \
   --exclude='*.local' --exclude='*.bak-*' --exclude='.DS_Store' \
   "$SRC/" "$DEST/"
+if [ -n "$GITKEEP" ]; then rm -rf "$DEST/.git"; mv "$GITKEEP/.git" "$DEST/.git"; rmdir "$GITKEEP"; GITKEEP=""; fi
 
 echo "==> checking for internal or secret material"
 fail=0

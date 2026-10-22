@@ -44,6 +44,7 @@
   --sp-outline:#7A6598;
   --sp-outline-o:0.85;
   --sp-sheen-o:0.55;
+  --sp-sheen-fill:url(#ls-sheen);
   --sp-sparkle:#9B7FC8;
 }
 [data-theme="light"] {

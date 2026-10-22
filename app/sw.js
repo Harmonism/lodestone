@@ -2,7 +2,7 @@
 // The corpus pack and model weights are cached by the app and by WebLLM / transformers.js
 // themselves; this worker only serves the shell and the vendored runtime files.
 // The prefix keeps the app's earlier name: the cache is found by it.
-const VERSION = "munai-offline-shell-v43";   // v43: the rebuilt Obsidian Sprite
+const VERSION = "munai-offline-shell-v44";   // v44: the sprite's dark sheen softened
 const SHELL = [
   "./", "index.html", "styles.css", "manifest.webmanifest",
   "icons/lodestone-192.png", "icons/lodestone-512.png", "icons/lodestone-touch-180.png",
