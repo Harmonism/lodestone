@@ -20,6 +20,19 @@ const POLL_SECONDS = 50;
 const OUTREACH_EVERY_MS = 30 * 60 * 1000;
 const OUTREACH_GAP_MS = 20 * 3600 * 1000;
 const WAKING = [9, 21];   // local hours between which a check-in may be sent
+// Telegram lets a bot fetch files up to 20 MB (Bot API getFile).
+const TG_FILE_MAX = 20 * 1000 * 1000;
+
+/** The file a message carries, as Telegram describes it: { id, name, type, size, voice } or null. */
+function mediaOf(m) {
+  if (m.document) return { id: m.document.file_id, name: m.document.file_name || "document", type: m.document.mime_type || "", size: m.document.file_size || 0 };
+  if (m.photo?.length) { const p = m.photo[m.photo.length - 1]; return { id: p.file_id, name: "photo.jpg", type: "image/jpeg", size: p.file_size || 0 }; }
+  if (m.voice) return { id: m.voice.file_id, name: "voice message.ogg", type: m.voice.mime_type || "audio/ogg", size: m.voice.file_size || 0, voice: true };
+  if (m.video_note) return { id: m.video_note.file_id, name: "video message.mp4", type: "video/mp4", size: m.video_note.file_size || 0, voice: true };
+  if (m.audio) return { id: m.audio.file_id, name: m.audio.file_name || `${m.audio.title || "recording"}.${(m.audio.mime_type || "audio/mpeg").split("/")[1] || "mp3"}`, type: m.audio.mime_type || "", size: m.audio.file_size || 0 };
+  if (m.video) return { id: m.video.file_id, name: m.video.file_name || "video.mp4", type: m.video.mime_type || "video/mp4", size: m.video.file_size || 0 };
+  return null;
+}
 
 /** Lodestone's markdown, reduced to the HTML Telegram accepts. */
 function toTelegramHTML(md) {
@@ -128,20 +141,28 @@ class TelegramBridge {
       return;
     }
     const m = u.message;
-    if (!m || !m.chat || m.chat.type !== "private" || typeof m.text !== "string") return;
-    const chatId = m.chat.id, text = m.text.trim();
+    if (!m || !m.chat || m.chat.type !== "private") return;
+    const media = mediaOf(m);
+    if (typeof m.text !== "string" && !media) {
+      if (String(m.chat.id) === String(c.chatId)) return this.send(m.chat.id, "Lodestone reads words, documents, photos, recordings and videos here; this kind of message it cannot.");
+      return;
+    }
+    const chatId = m.chat.id, text = (m.text ?? m.caption ?? "").trim();
 
     // Pairing: the first chat to send /start with the code shown on the computer.
     if (!c.chatId) {
       const code = (text.match(/^\/start\s+(\d{6})$/) || text.match(/^(\d{6})$/) || [])[1];
-      if (code && c.pairCode && code === c.pairCode) {
-        this.save({ chatId, pairCode: null });
+      const live = c.pairCode && Date.now() < (c.pairExp || Infinity) && (c.pairTries || 0) < 5;
+      if (code && live && code === c.pairCode) {
+        this.save({ chatId, pairCode: null, pairExp: 0, pairTries: 0 });
         return this.send(chatId, "Paired. This chat now reaches Lodestone on your computer, with your memory, your practices and the whole corpus. It answers while the computer is awake and Lodestone is open.\n\n/new starts a fresh conversation.");
       }
-      return this.send(chatId, "Send the six-digit code Lodestone shows on your computer (Lodestone → Use from Your Phone… → Telegram).");
+      if (code && live) this.save({ pairTries: (c.pairTries || 0) + 1 });   // five wrong tries end the code
+      return this.send(chatId, live ? "Send the six-digit code Lodestone shows on your computer (Lodestone → Use from Your Phone… → Telegram)." : "No pairing code is open. On the computer, open Lodestone → Use from Your Phone… → Telegram for a new one.");
     }
     if (String(chatId) !== String(c.chatId)) return;   // someone else's chat: no answer at all
 
+    if (media) return this.converseFile(chatId, text, media);
     if (/^\/start\b/.test(text)) return this.send(chatId, "Lodestone is here. Write as you would in the app.");
     if (/^\/new\b/.test(text)) { await this.ask({ kind: "new" }); return this.send(chatId, "A new conversation. The earlier one stays in Lodestone on your computer."); }
     if (/^\/stop\b/.test(text)) { this.save({ outreach: false }); return this.send(chatId, "No more check-ins from me. /checkins turns them back on."); }
@@ -159,12 +180,37 @@ class TelegramBridge {
     await this.send(chatId, reply);
   }
 
+  /**
+   * A file sent to the bot: fetched from Telegram (20 MB at most, Telegram's
+   * limit for bots), then read by the hidden page exactly as an attachment in
+   * the window is (attach.js), on this computer. A voice message with no
+   * caption is what was said: its transcript is the message.
+   */
+  async converseFile(chatId, text, media) {
+    if (media.size > TG_FILE_MAX) return this.send(chatId, `${media.name} is ${Math.round(media.size / 1e6)} MB; Telegram lets a bot receive files up to 20 MB. Attach it in Lodestone on your computer instead, which reads much larger ones.`);
+    const typing = () => this.call("sendChatAction", { chat_id: chatId, action: "typing" }).catch(() => {});
+    typing(); const t = setInterval(typing, 4500);
+    let reply;
+    try {
+      const f = await this.call("getFile", { file_id: media.id });
+      if (!f?.file_path) throw new Error("Telegram did not hand the file over.");
+      const res = await this.fetch(`${API}/file/bot${this.getToken()}/${f.file_path}`);
+      if (!res.ok) throw new Error(`Telegram answered ${res.status} for the file.`);
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      reply = await this.ask({ kind: "message", text, file: { name: media.name, type: media.type, bytes, voice: !!media.voice } });
+    } catch (e) { reply = `Lodestone could not read ${media.name}: ${e.message}`; }
+    finally { clearInterval(t); }
+    await this.send(chatId, reply);
+  }
+
   /** Once a day, in waking hours: the practices due for a check-in. */
   async outreach() {
     const c = this.cfg();
     if (!this.running || !c.chatId || c.outreach === false) return;
     const h = new Date().getHours();
     if (h < WAKING[0] || h >= WAKING[1]) return;
+    // Lodestone writing first (outreach.js in the page): its own gates, a week at most, shared with the window.
+    try { const first = await this.ask({ kind: "outreach" }); if (first && typeof first === "string") await this.send(c.chatId, first); } catch (e) { this.log?.(`[telegram] writing first: ${e.message}`); }
     if (Date.now() - (c.lastOutreach || 0) < OUTREACH_GAP_MS) return;
     const due = await this.ask({ kind: "due" });
     if (!Array.isArray(due) || !due.length) return;
@@ -181,4 +227,4 @@ class TelegramBridge {
   }
 }
 
-module.exports = { TelegramBridge, toTelegramHTML, chunks };
+module.exports = { TelegramBridge, toTelegramHTML, chunks, mediaOf };

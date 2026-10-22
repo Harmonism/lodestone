@@ -17,21 +17,34 @@
     <p class="lede" id="wakingText">Opening…</p>
   </section>
 
-  <!-- First launch -->
+  <!-- First launch: DeepSeek V4.1 Flash on the account or under one's own key, a model on this computer encouraged -->
   <section id="welcome" hidden>
     <header class="head">
       <img src="../build/icon.png" alt="" class="mark">
       <div>
         <h1>Welcome to Lodestone</h1>
-        <p class="lede">The Harmonist companion, living on this computer. Your conversations never leave it.</p>
+        <p class="lede">The Harmonist companion. Your conversations, your memory and the library are kept on this computer.</p>
       </div>
     </header>
 
+    <div class="card" id="routeCard">
+      <div class="pick">
+        <span class="tag">Recommended to begin · nothing to download</span>
+        <span class="name">DeepSeek V4.1 Flash</span>
+        <span class="why">Tested against Lodestone's doctrine, and the model harmonism.io runs on. Each message, with the passages Lodestone needs to answer it, goes to the service you choose, which reads it; everything else stays on this computer.</span>
+      </div>
+      <div class="row">
+        <button id="welcomeHosted" class="primary big-btn">Use my harmonism.io account · ten free messages a day</button>
+        <button id="welcomeRemote" class="big-btn">Use my own OpenRouter key · no daily limit</button>
+      </div>
+    </div>
+
+    <h2 class="sub-head">Or think entirely on this computer</h2>
     <div class="card">
       <p id="welcomeText"></p>
       <div id="pick"></div>
       <div class="row">
-        <button id="begin" class="primary big-btn"></button>
+        <button id="begin" class="big-btn"></button>
       </div>
       <div id="dl" class="progress" hidden>
         <div class="bar"><i id="bar"></i></div>
@@ -43,8 +56,7 @@
         <div id="list" class="list"></div>
       </details>
     </div>
-    <p class="fine center-text">After this one download, Lodestone works with no internet connection. It sends nothing anywhere, and keeps no record outside this computer.</p>
-    <p class="fine center-text">No room for a model on this computer? <button id="welcomeHosted" class="link">Use your harmonism.io account: ten free messages a day</button>, or <button id="welcomeRemote" class="link">a model you rent, with your own API key</button>.</p>
+    <p class="fine center-text">With a model on this computer, Lodestone works with no internet connection and nothing you say leaves it. Lodestone menu → Model… changes this at any time.</p>
   </section>
 
   <!-- Something went wrong while starting the model -->
@@ -66,18 +78,9 @@
       <div class="grow"><h1>Model</h1><p class="lede" id="manageText"></p></div>
       <button id="back" class="primary back">Back</button>
     </header>
-    <div class="card">
-      <div id="mdl" class="progress" hidden>
-        <div class="bar"><i id="mbar"></i></div>
-        <div class="row between"><span id="mbarText"></span><button id="mpause" class="link">Pause</button></div>
-      </div>
-      <p id="mError" class="bad-box" hidden></p>
-      <div id="manageList" class="list"></div>
-    </div>
-    <p id="leftovers" class="fine" hidden></p>
     <details class="adv" id="hostedBox">
-      <summary>Your harmonism.io account: ten free messages a day</summary>
-      <p class="fine">For a computer that cannot hold a model, with no key of your own. Lodestone thinks with the models it runs on at harmonism.io and on Telegram, each tested against the doctrine. The corpus, the retrieval, the crisis gate, witness mode, your memory and your practices stay on this computer. What leaves is each turn's question with its context, to harmonism.io and on to the model provider, which keep none of it. Ten messages a day in total across harmonism.io, Telegram and this app.</p>
+      <summary>Your harmonism.io account: DeepSeek V4.1 Flash, ten free messages a day</summary>
+      <p class="fine">Nothing to download and no key of your own; DeepSeek V4.1 Flash unless you choose another. Lodestone thinks with the models it runs on at harmonism.io and on Telegram, each tested against the doctrine. The corpus, the retrieval, the crisis gate, witness mode, your memory and your practices stay on this computer. What leaves is each turn's question with its context, to harmonism.io and on to the model provider, which keep none of it. Ten messages a day in total across harmonism.io, Telegram and this app.</p>
       <div id="hSignedOut">
         <label class="field">Email <input id="hEmail" type="email" autocomplete="username" spellcheck="false"></label>
         <label class="field">Password <input id="hPassword" type="password" autocomplete="current-password"></label>
@@ -92,8 +95,8 @@
       <p id="hError" class="bad-box" hidden></p>
     </details>
     <details class="adv" id="remoteBox">
-      <summary>A model you rent, with your own API key</summary>
-      <p class="fine">For a computer that cannot hold a model, or for a frontier model's depth. The corpus, the retrieval, the crisis gate, witness mode, your memory and your practices stay on this computer and work as before. What leaves is each turn's question with its context, to the provider you choose, which can read it; you pay that provider for what you use. The key is kept encrypted by this computer's keychain and is sent only to that provider.</p>
+      <summary>OpenRouter or another provider, with your own key: no daily limit</summary>
+      <p class="fine">Nothing to download and no daily limit: with OpenRouter, DeepSeek V4.1 Flash and the other models hosted Lodestone runs on, or a frontier model's depth. The corpus, the retrieval, the crisis gate, witness mode, your memory and your practices stay on this computer and work as before. What leaves is each turn's question with its context, to the provider you choose, which can read it; you pay that provider for what you use. The key is kept encrypted by this computer's keychain and is sent only to that provider.</p>
       <p id="remoteNow" class="ok-box" hidden></p>
       <label class="field">Provider <select id="rPreset"></select></label>
       <p id="rNote" class="fine"></p>
@@ -105,6 +108,16 @@
       <span class="row"><button id="rSave" class="primary">Connect and use</button><button id="rClear" class="link" hidden>Stop using it</button></span>
       <p id="rError" class="bad-box" hidden></p>
     </details>
+    <h2 class="sub-head">On this computer — nothing leaves it</h2>
+    <div class="card">
+      <div id="mdl" class="progress" hidden>
+        <div class="bar"><i id="mbar"></i></div>
+        <div class="row between"><span id="mbarText"></span><button id="mpause" class="link">Pause</button></div>
+      </div>
+      <p id="mError" class="bad-box" hidden></p>
+      <div id="manageList" class="list"></div>
+    </div>
+    <p id="leftovers" class="fine" hidden></p>
     <details class="adv" id="customBox">
       <summary>Any other model, from Hugging Face</summary>
       <p class="fine">Paste the link to a <code>.gguf</code> file on Hugging Face (a model split into parts: the link to its first part). Lodestone downloads it, checks every part against the checksum Hugging Face publishes, and runs it with the same doctrine and corpus. It has not been assessed: its answers are its own.</p>

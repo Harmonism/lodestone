@@ -11,8 +11,13 @@
 #
 # With a "Developer ID Application" certificate in the keychain the app is
 # signed with it, and notarized when APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and
-# APPLE_TEAM_ID are set. Without one it is ad-hoc signed: it runs on this Mac,
-# and on other Macs after System Settings → Privacy & Security → Open Anyway.
+# APPLE_TEAM_ID are set. Without one it is signed with Lodestone's own
+# certificate (keys/lodestone-mac-signing.p12, self-signed): it runs on this Mac,
+# and on other Macs after System Settings → Privacy & Security → Open Anyway,
+# and keeps one identity from version to version, so the keychain's "Always
+# Allow" for "Lodestone Safe Storage" (the saved sign-in and keys) holds across
+# updates. Ad-hoc signing, whose identity changes with every build and which the
+# keychain therefore asks about again after each update, is the last resort.
 set -euo pipefail
 cd "$(dirname "$0")"
 rm -rf dist   # build output only; nothing in it is kept between builds
@@ -30,6 +35,21 @@ if security find-identity -v -p codesigning 2>/dev/null | grep -q "Developer ID 
   else
     npx electron-builder --mac dmg --arm64 --x64 --publish never -c.mac.hardenedRuntime=true
   fi
+elif [ -f keys/lodestone-mac-signing.p12 ] && [ -f keys/lodestone-mac-signing.pass ]; then
+  # Lodestone's own certificate: no Team ID either, so no hardened runtime.
+  # Built unsigned, signed here with codesign, then packed as it is.
+  ID="Lodestone Local Signing"
+  KC="$HOME/Library/Keychains/login.keychain-db"
+  if ! security find-identity -p codesigning "$KC" 2>/dev/null | grep -q "\"$ID\""; then
+    security import keys/lodestone-mac-signing.p12 -k "$KC" -P "$(cat keys/lodestone-mac-signing.pass)" -T /usr/bin/codesign
+  fi
+  CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac dir --arm64 --x64 --publish never -c.mac.identity=null -c.mac.hardenedRuntime=false
+  for pair in arm64:mac-arm64 x64:mac; do
+    arch="${pair%%:*}"; app="dist/${pair#*:}/Lodestone.app"
+    codesign --force --deep --timestamp=none --sign "$ID" "$app"
+    codesign --verify --deep --strict "$app"
+    CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac dmg "--$arch" --prepackaged "$app" --publish never -c.mac.identity=null
+  done
 else
   # Ad-hoc signing has no Team ID, so the hardened runtime (which only accepts
   # libraries from the same team) must be off, or the app cannot load its own

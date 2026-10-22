@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lodestone's Safety Protocol</title>
+<meta name="description" content="How Lodestone recognises thoughts of suicide or self-harm, refers to crisis services, and says that it is an AI.">
+<style>
+  :root { --bg: #fbfaf7; --text: #1d1b24; --muted: #5d5868; --line: #e3dfd6; --accent: #7b2f9a; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0a0a14; --text: #ece8f4; --muted: #a9a3b8; --line: #2a2838; --accent: #b892d4; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.65 Georgia, "Iowan Old Style", serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 40px 16px 64px; }
+  h1 { font-weight: 400; font-size: 2rem; margin: 0 0 4px; }
+  h2 { font-weight: 400; font-size: 1.3rem; margin: 2rem 0 .4rem; border-top: 1px solid var(--line); padding-top: 1.2rem; }
+  p, li { color: var(--text); }
+  .lead { color: var(--muted); }
+  a { color: var(--accent); }
+  .help { border: 1px solid var(--accent); border-radius: 10px; padding: 12px 16px; margin: 1.2rem 0; }
+  small { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Lodestone's Safety Protocol</h1>
+  <p class="lead">How Lodestone recognises thoughts of suicide or self-harm, points to people who can help, and reminds you that it is an AI. In force from version 1.13 of the app (October 2026), in Lodestone Desktop, the web app, the phone app and the practitioner's own Telegram bot.</p>
+
+  <div class="help"><strong>If you are in danger now</strong>, call your local emergency number, or find a crisis line in your country at <a href="https://www.befrienders.org">befrienders.org</a>. In the United States, call or text 988.</div>
+
+  <h2>Lodestone is an AI</h2>
+  <p>Lodestone is an artificial intelligence, not a person: a companion shaped by Harmonism's corpus, answered by a language model. It is not a therapist, a doctor or a crisis service. It says so in its own voice when it matters, and it says so again after three hours of continuous conversation, when it also invites a pause (the <em>pause bell</em>, once every three hours of a sitting, in the window and over Telegram).</p>
+  <p>Lodestone is made for adults. Companion chatbots may not be suitable for some minors.</p>
+
+  <h2>Three layers, before any model reads the message</h2>
+  <ol>
+    <li><strong>The crisis gate.</strong> Every message is first checked, on your device, against phrases of active suicidal intent, self-harm, acute dissociation, an overdose and a child in danger, in English, French, Spanish and Arabic. A match is answered by a fixed text that no model writes: it says what it heard, gives the crisis line for your country (Settings → What Lodestone knows about you → Country) or the international directory, and stays. The message is not sent to any model.</li>
+    <li><strong>The care layer, by phrase.</strong> Indirect expressions (“everyone would be better off without me”, “I don't want to be here anymore”, “I hurt myself again”) are recognised by a second list.</li>
+    <li><strong>The care layer, by meaning.</strong> Where the meaning model is on (it ships with the app), the message is read by meaning as well, so what is said in other words is still recognised. Its threshold was set on sentences in four languages, including ordinary ones that come close (a tiring job, a grandparent's death, a practice of “dying to the ego”).</li>
+  </ol>
+  <p>On a care moment the model answers, told to ask plainly and gently whether you are thinking of ending your life or harming yourself, to stay, to give no detail of any means, and to point to a human being. When the recognition is clear, the app itself adds the crisis line beneath the answer, so the referral never depends on the model.</p>
+
+  <h2>Against dependence</h2>
+  <p>Lodestone counts the messages of the last day. After ten it stops inviting further conversation; after twenty it closes each answer by returning you to your own ground: the practice, the body, the people who require you. It never scores your use of it. Its outreach (writing first) is capped at once a week, and the weekly review is off until you choose it.</p>
+
+  <h2>What stays on your device</h2>
+  <p>All three layers run on your device. No record of a crisis is sent anywhere by Lodestone; a crisis answer is kept in your conversation like any other, and goes where your conversations go (your devices, and, if you turned sync on, your account, encrypted on your devices).</p>
+
+  <h2>Limits</h2>
+  <p>No recognition is complete: words can be missed and ordinary sentences mistaken. Lodestone cannot call for help on your behalf and does not know where you are. If someone is in danger, contact emergency services directly.</p>
+
+  <p><small>Published under California's SB 243 and New York's law on AI companions. Questions: <a href="mailto:harmonia@harmonism.io">harmonia@harmonism.io</a>.</small></p>
+</main>
+</body>
+</html>

@@ -6,7 +6,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 const on = (ch, fn) => { const h = (_e, p) => fn(p); ipcRenderer.on(ch, h); return () => ipcRenderer.removeListener(ch, h); };
 const call = (ch, ...a) => ipcRenderer.invoke(ch, ...a);
 
-if (location.protocol === "file:") {
+if (location.protocol === "file:" && /\/(launcher|phone)\.html$/.test(location.pathname)) {
   contextBridge.exposeInMainWorld("desktop", {
     status: () => call("status"),
     download: id => call("download", id),
@@ -26,6 +26,9 @@ if (location.protocol === "file:") {
     hostedStatus: () => call("hosted-status"),
     hostedUse: model => call("hosted-use", model),
     hostedSignOut: () => call("hosted-sign-out"),
+    // The account's page on harmonism.io, in the app: consent, plan, the bundle.
+    accountCall: (method, path, body) => call("account-call", method, path, body),
+    accountOpenBundle: () => call("account-open-bundle"),
     revealLog: () => call("reveal-log"),
     library: () => call("library"),
     checkUpdates: () => call("updates-check"),
@@ -60,6 +63,13 @@ if (location.protocol === "file:") {
     foldersRemove: p => call("folders-remove", p),
     foldersReread: () => call("folders-reread"),
     searchFolders: q => call("folders-search", q),
+    // The life book: Lodestone's own folder in the practitioner's vault
+    lifebookStatus: () => call("lifebook-status"),
+    lifebookChoose: () => call("lifebook-choose"),
+    lifebookForget: () => call("lifebook-forget"),
+    lifebookOpen: () => call("lifebook-open"),
+    lifebookEntries: () => call("lifebook-entries"),
+    lifebookWrite: change => call("lifebook-write", change),
     switchModel: choice => call("switch-model", choice),
     openUpdates: () => call("open-updates"),
     openLibrary: lang => call("open-library", lang),
@@ -67,14 +77,17 @@ if (location.protocol === "file:") {
     // Sync: encrypted in the window, carried under the account by the app
     syncAccount: () => call("sync-account"),
     syncSignIn: (email, password) => call("sync-sign-in", email, password),
+    syncUnlockTake: () => call("sync-unlock-take"),
     syncCall: (method, query, body) => call("sync-call", method, query, body),
     syncLocal: (method, query, body) => call("sync-local", method, query, body),
     heldCall: (path, body) => call("held-call", path, body),
+    voiceSpeak: (text, gender, lang) => call("voice-speak", text, gender, lang),
     syncKeyGet: () => call("sync-key-get"),
     syncKeySet: key => call("sync-key-set", key),
     webLookup: question => call("web-lookup", question),
     // Attachments: the speech model and the current model's vision, downloaded on first use
     asrDownload: () => call("asr-download"),
+    convertFile: (name, bytes) => call("convert-file", name, bytes),
     visionDownload: () => call("vision-download"),
     onProgress: fn => on("progress", fn),
     // Bridge mode only (the hidden page that answers the practitioner's Telegram bot)

@@ -45,9 +45,10 @@ app.setName(APP_NAME);
 if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
 
 const { createServer, APP } = require("./server");
-const { Engine, engineDir } = require("./engine");
-const { downloadModel, modelBytes, freeBytes } = require("./download");
+const { Engine, engineDir, EXE } = require("./engine");
+const { download, downloadModel, modelBytes, freeBytes } = require("./download");
 const models = require("./models");
+const { ggufInfo } = require("./gguf");
 const { Site, LANGS } = require("./site");
 const { Updates } = require("./updates");
 const { Companion } = require("./companion");
@@ -57,6 +58,7 @@ const { Hosted, BASE: HARMONISM } = require("./hosted");
 const speech = require("./speech");
 const { TelegramBridge } = require("./telegram");
 const { FolderIndex } = require("./folders");
+const { LifeBook } = require("./lifebook");
 const { SyncStore } = require("./syncstore");
 const { createPhoneAccess } = require("./pairing");
 
@@ -79,9 +81,50 @@ let cfg = {
   auth: null,           // harmonism.io's beta password, encrypted by the OS keychain
   braveKey: null,       // optional, for "Look this up online"
   folders: [],          // folders Lodestone may read, chosen in Settings → Advanced
+  lifeBook: null,       // the vault whose Lodestone/ folder is the life book, chosen in Settings → Life book
 };
-function loadCfg() { try { cfg = { ...cfg, ...JSON.parse(fs.readFileSync(cfgPath(), "utf8")) }; } catch {} }
-function saveCfg() { try { fs.mkdirSync(userDir(), { recursive: true }); fs.writeFileSync(cfgPath(), JSON.stringify(cfg, null, 2)); } catch {} }
+// The settings hold the encrypted keys, the Telegram token, the pairings: a
+// file that cannot be read is moved aside, not overwritten by the defaults at
+// the next save, and every save goes to a file beside it renamed into place,
+// so a crash or a full disk mid-write leaves the last good one (1.12, after Lode).
+let cfgUnreadable = null, cfgLocked = false;
+function loadCfg() {
+  let raw;
+  // Only a file that is not there means "no settings yet" (1.13.1): a file held
+  // by another program for a moment (an antivirus, a backup) is tried again, and
+  // if it still cannot be read, nothing is saved over it this session.
+  for (let i = 0; ; i++) {
+    try { raw = fs.readFileSync(cfgPath(), "utf8"); break; }
+    catch (e) {
+      if (e.code === "ENOENT") return;
+      if (i >= 4) {
+        // Refused for good (its permissions changed): kept aside, as an unreadable
+        // file is, and Lodestone starts from its defaults. Held: nothing is saved over it.
+        if (e.code === "EACCES" || e.code === "EPERM") {
+          const aside = cfgPath() + ".unreadable-" + Date.now();
+          try { fs.renameSync(cfgPath(), aside); cfgUnreadable = aside; console.warn(`[config] desktop.json could not be read (${e.code}); kept as ${path.basename(aside)}`); return; } catch {}
+        }
+        cfgLocked = true; console.warn(`[config] desktop.json could not be read (${e.code}); nothing will be saved over it this session`); return;
+      }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+    }
+  }
+  try { cfg = { ...cfg, ...JSON.parse(raw) }; }
+  catch {
+    cfgUnreadable = cfgPath() + ".corrupt-" + Date.now();
+    try { fs.renameSync(cfgPath(), cfgUnreadable); } catch {}
+    console.warn(`[config] desktop.json could not be read; kept as ${path.basename(cfgUnreadable)}, starting from the defaults`);
+  }
+}
+function saveCfg() {
+  if (cfgLocked) return;
+  try {
+    fs.mkdirSync(userDir(), { recursive: true });
+    const tmp = `${cfgPath()}.${process.pid}-${Date.now()}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(cfg, null, 2), { mode: 0o600 });
+    fs.renameSync(tmp, cfgPath());
+  } catch (e) { console.warn("[config] not saved: " + e.message); }
+}
 
 // ─── Models ─────────────────────────────────────────────────────────────────
 
@@ -90,7 +133,67 @@ const byId = id => allModels().find(m => m.id === id) || null;
 const dirOf = m => path.join(modelsDir(), m.id.replace(/[^A-Za-z0-9._-]+/g, "_"));
 const fileOf = (m, f) => path.join(dirOf(m), path.basename(f.path));
 const firstFile = m => fileOf(m, m.files[0]);
-const isDownloaded = m => m.files.every(f => { try { return fs.statSync(fileOf(m, f)).size === f.size; } catch { return false; } });
+// A model on the Prism engine counts as downloaded only once that engine is here
+// too, so "Download" fetches whichever is missing. Which models need it: those
+// the catalog marks (`engine: "prism"`), and any file whose tensor types say so,
+// read from its head as Lode desktop does (gguf.js), so a ternary file added
+// from Hugging Face runs as well. Read once per file and remembered.
+const prismDir = () => path.join(userDir(), "engines", models.PRISM_ENGINE.tag);
+const hasPrism = () => fs.existsSync(path.join(prismDir(), EXE));
+const needsMemo = new Map();
+function needsOf(m) {
+  if (!m) return null;
+  if (m.engine) return m.engine;
+  const f = firstFile(m);
+  let st; try { st = fs.statSync(f); } catch { return null; }
+  const k = `${f}:${st.size}:${st.mtimeMs}`;
+  if (!needsMemo.has(k)) { let n = null; try { n = ggufInfo(f).needs; } catch {} needsMemo.set(k, n); }
+  return needsMemo.get(k);
+}
+const engineFor = m => needsOf(m) === "prism" ? prismDir() : null;
+const isDownloaded = m => (!m.engine || hasPrism()) && m.files.every(f => { try { return fs.statSync(fileOf(m, f)).size === f.size; } catch { return false; } });
+
+/**
+ * Fetch and unpack the Prism engine: one archive from the fork's GitHub release,
+ * checked against its SHA-256 by download(), unpacked with the system's tar
+ * (bsdtar on macOS and Windows 10+, which reads .zip too), and moved into place
+ * only once llama-server is found inside it.
+ */
+async function ensurePrism({ signal, onProgress = () => {} } = {}) {
+  if (hasPrism()) return;
+  const a = models.prismAsset();
+  if (!a) throw new Error("This model needs Prism ML's engine, which has no build for this kind of computer.");
+  const root = path.dirname(prismDir());
+  const archive = path.join(root, a.name), tmp = prismDir() + ".unpack";
+  await download({ fetch: (u, init) => net.fetch(u, init), url: a.url, dest: archive, size: a.size, sha256: a.sha256, signal, onProgress: p => onProgress({ ...p, what: "engine" }) });
+  fs.rmSync(tmp, { recursive: true, force: true });
+  fs.mkdirSync(tmp, { recursive: true });
+  try {
+    require("child_process").execFileSync("tar", ["-xf", archive, "-C", tmp], { windowsHide: true, stdio: "ignore" });
+  } catch { fs.rmSync(tmp, { recursive: true, force: true }); throw new Error("Prism ML's engine was downloaded but could not be unpacked on this computer."); }
+  // The macOS and Linux archives hold one folder; the Windows one is flat.
+  const find = d => fs.existsSync(path.join(d, EXE)) ? d
+    : fs.readdirSync(d, { withFileTypes: true }).filter(x => x.isDirectory()).map(x => find(path.join(d, x.name))).find(Boolean) || null;
+  const bin = find(tmp);
+  if (!bin) { fs.rmSync(tmp, { recursive: true, force: true }); throw new Error("Prism ML's engine archive does not contain llama-server."); }
+  fs.rmSync(prismDir(), { recursive: true, force: true });
+  fs.renameSync(bin, prismDir());
+  fs.rmSync(tmp, { recursive: true, force: true });
+  fs.rmSync(archive, { force: true });
+}
+
+/**
+ * Start the engine on model `m`: the bundled one, or Prism ML's when the model
+ * needs it, fetched first if it is not here yet (a file downloaded before this
+ * version, or added by hand). A file of tensor types neither engine reads is
+ * refused before anything starts.
+ */
+async function startEngine(m, { mmproj = null, onStatus = () => {} } = {}) {
+  const needs = needsOf(m);
+  if (needs === "unknown") throw new Error("This model file uses a format neither of Lodestone's engines can read.");
+  if (needs === "prism" && !hasPrism()) { onStatus("Fetching Prism ML's engine, which this model needs…"); await ensurePrism(); }
+  return engine.start(firstFile(m), { mmproj, dir: engineFor(m), onStatus });
+}
 const chosenModel = () => byId(cfg.model) || byId(models.defaultFor(memGB));
 // A model's vision projector, if the catalog names one; downloaded on first use.
 const mmprojOf = m => m?.mmproj ? path.join(dirOf(m), path.basename(m.mmproj.path)) : null;
@@ -136,7 +239,7 @@ function leftovers() {
 
 const engine = new Engine({
   dir: engineDir(app.isPackaged, process.resourcesPath),
-  logFile: path.join(os.tmpdir(), "lodestone-engine.log"),
+  logFile: path.join(userDir(), "engine.log"),   // not the shared temporary folder (1.12)
   pidFile: path.join(userDir(), "engine.pid"),
 });
 for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(sig, () => { engine.killNow(); app.exit(0); });
@@ -221,8 +324,12 @@ const hosted = new Hosted({
     try { if (safeStorage.isEncryptionAvailable()) enc = safeStorage.encryptString(v.refresh).toString("base64"); } catch {}
     hostedSession = enc ? null : v;
     cfg.hosted = { email: v.email, refresh: enc };
+    delete cfg.hostedExpired;
     saveCfg();
   },
+  // The account stays known when its sign-in expires, so Lodestone keeps the
+  // same person's memory open and asks only for the password again.
+  onExpired: email => { cfg.hostedExpired = email; saveCfg(); },
 });
 let hostedSession = null;
 remote.setHosted(hosted);
@@ -236,7 +343,7 @@ const upstream = () => cfg.remote
   ? { url: origin() + "/v1", isEngine: false, remote: true, where: remoteWhere() }
   : cfg.upstream
   ? { url: cfg.upstream.replace(/\/+$/, ""), isEngine: false }
-  : { url: engine.running ? engine.url + "/v1" : null, isEngine: true };
+  : { url: engine.running ? engine.url + "/v1" : null, isEngine: true, key: engine.running ? engine.apiKey : null };
 const companion = new Companion({ webRoot, corpusRoot: () => updates.corpusRoot(), upstream });
 // The Lodestone app for Android: pairing by a code under Use from Your
 // Phone (pairing.js), and the synced copy kept on this computer (syncstore.js),
@@ -257,7 +364,7 @@ const server = createServer({
   webRoot, site, companion, corpusRoot: () => updates.corpusRoot(), asrRoot, phone: phoneAccess,
   getConfig: () => {
     if (cfg.remote) return { upstream: null, isEngine: false, remote: { conf: cfg.remote, key: remoteKey.get(), fetch: (u, init) => net.fetch(u, init) } };
-    const u = upstream(); return { upstream: u.url, isEngine: u.isEngine };
+    const u = upstream(); return { upstream: u.url, isEngine: u.isEngine, key: u.key || null };
   },
 });
 let port = PORT;
@@ -361,13 +468,15 @@ function lockDown(w) {
   // Links to harmonism.io open here when the page is in the library; other
   // links open in the practitioner's own browser.
   w.webContents.setWindowOpenHandler(({ url }) => {
-    const local = url.startsWith(origin()) ? url : localFor(url);
+    // Lodestone's own origin by its parsed origin (1.13.1): "http://127.0.0.1:47863@evil.example/" began with it.
+    let own = false; try { own = new URL(url).origin === origin(); } catch {}
+    const local = own ? url : localFor(url);
     if (local) w.loadURL(local);
     else if (/^https?:/.test(url)) shell.openExternal(url);
     return { action: "deny" };
   });
   w.webContents.on("will-navigate", (e, url) => {
-    if (url.startsWith(origin() + "/") || url.startsWith("file:")) return;
+    if (url.startsWith(origin() + "/") || ownPage(url)) return;
     e.preventDefault();
     const local = localFor(url);
     if (local) w.loadURL(local);
@@ -386,7 +495,8 @@ function createWindow(first = null) {
     },
   });
   lockDown(win);
-  win.once("ready-to-show", () => win.show());
+  // Opens filling the screen (maximized, not full screen); the size above is what it returns to when un-maximized.
+  win.once("ready-to-show", () => { win.maximize(); win.show(); });
   win.on("closed", () => {
     win = null;
     // The hidden Telegram page is a window too; without this, closing Lodestone's
@@ -423,7 +533,13 @@ function openPhoneWindow() {
 // The setup pages (file://) get the full set; pages on the app's own origin
 // (Lodestone and the library) get only what their buttons need.
 
-const fromSetupPage = e => (e.senderFrame?.url || "").startsWith("file:");
+// Lodestone's own setup pages, by their exact files: not any local page a drop could open (1.12).
+const OWN_PAGES = ["launcher.html", "phone.html"].map(f => path.join(__dirname, f));
+function ownPage(url) {
+  if (!String(url || "").startsWith("file:")) return false;
+  try { return OWN_PAGES.includes(require("url").fileURLToPath(String(url).split(/[?#]/)[0])); } catch { return false; }
+}
+const fromSetupPage = e => ownPage(e.senderFrame?.url);
 const fromAppPage = e => (e.senderFrame?.url || "").startsWith(origin() + "/");
 function handle(name, fn, { app: allowApp = false } = {}) {
   ipcMain.handle(name, async (e, ...args) => {
@@ -437,14 +553,14 @@ let dlCtrl = null;
 let engineError = null;
 const describe = m => ({
   id: m.id, label: m.label, why: m.why, ugi: m.ugi || null, hand: m.hand, minMem: m.minMem, custom: !!m.custom,
-  repo: m.repo, size: models.size(m), parts: m.files.length,
+  repo: m.repo, page: models.page(m), untested: !!m.untested, weaker: !!m.weaker, size: models.size(m), parts: m.files.length,
   downloaded: isDownloaded(m), partial: modelBytes(m.files, dirOf(m)),
 });
 
 handle("status", async () => {
   fs.mkdirSync(modelsDir(), { recursive: true });
   return {
-    platform: process.platform, memGB, minMem: models.MIN_MEM,
+    platform: process.platform, memGB, minMem: models.minMemHere(),
     // The offered list: retired entries appear only to those who have or use them.
     catalog: allModels().filter(x => !x.retired || isDownloaded(x) || cfg.model === x.id).map(describe).sort((a, b) => a.size - b.size),   // lightest first
     defaultId: models.defaultFor(memGB), chosen: chosenModel().id,
@@ -467,6 +583,7 @@ handle("download", async (e, id) => {
       fetch: (u, init) => net.fetch(u, init), files: m.files, urlFor: p => models.url(m.repo, p),
       dir: dirOf(m), signal: dlCtrl.signal, onProgress: p => send(e, "progress", p),
     });
+    if (needsOf(m) === "prism") await ensurePrism({ signal: dlCtrl.signal, onProgress: p => send(e, "progress", p) });
     return true;
   } finally { dlCtrl = null; }
 });
@@ -481,7 +598,7 @@ handle("start", async (e, id) => {
   try {
     const mmproj = hasMmproj(m) ? mmprojOf(m) : null;
     if (!(engine.running && engine.model === firstFile(m) && (engine.mmproj || null) === mmproj))
-      await engine.start(firstFile(m), { mmproj, onStatus: s => send(e, "log", s) });
+      await startEngine(m, { mmproj, onStatus: s => send(e, "log", s) });
     if (cfg.remote && !isHosted(cfg.remote)) cfg.remoteSaved = cfg.remote;
     cfg.model = m.id; cfg.upstream = null; cfg.remote = null; saveCfg();
     return { ok: true };
@@ -538,10 +655,17 @@ handle("set-upstream", async (e, url) => {
 
 // A rented model. The key given here is tried with one short request before
 // anything is saved; an empty key keeps the one already saved.
-const keyOr = key => (typeof key === "string" && key.trim()) ? key.trim() : remoteKey.get();
-handle("remote-models", async (e, conf, key) => remote.listModels((u, init) => net.fetch(u, init), conf, keyOr(key)));
+// The saved key goes only where it was saved for (1.13.1): the same provider at
+// the same address. Another preset or address needs its own key.
+function keyOr(key, conf) {
+  if (typeof key === "string" && key.trim()) return key.trim();
+  const saved = byok(), c = remote.normalize(conf);
+  if (saved && c && saved.preset === c.preset && String(saved.baseUrl || "").replace(/\/+$/, "") === String(c.baseUrl || "").replace(/\/+$/, "")) return remoteKey.get();
+  throw new Error(saved ? "Paste the key for this provider: the key saved is for another one." : "Paste the key for this provider.");
+}
+handle("remote-models", async (e, conf, key) => remote.listModels((u, init) => net.fetch(u, init), conf, keyOr(key, conf)));
 handle("set-remote", async (e, conf, key) => {
-  const k = keyOr(key);
+  const k = keyOr(key, conf);
   const c = remote.normalize(conf);
   await remote.test((u, init) => net.fetch(u, init), c, k);
   const enc = remoteKey.set(k);
@@ -556,7 +680,7 @@ handle("set-remote", async (e, conf, key) => {
 // Hosted mode: sign in, use, sign out. Signing in costs no message.
 const hostedErr = e => { throw new Error(String(e?.message || e)); };
 handle("hosted-sign-in", async (e, email, password) => {
-  try { await hosted.signIn(email, password); return await hosted.status(true); } catch (err) { hostedErr(err); }
+  try { const r = await hosted.signIn(email, password); await stretchForUnlock(r.email, password); return await hosted.status(true); } catch (err) { hostedErr(err); }
 });
 handle("hosted-status", async () => {
   if (!hosted.signedIn()) return null;
@@ -572,30 +696,56 @@ handle("hosted-use", async (e, model) => {
   saveCfg();
   return { ok: true };
 });
-handle("hosted-sign-out", async () => { hosted.signOut(); return true; });
+handle("hosted-sign-out", async () => { hosted.signOut(); delete cfg.hostedExpired; saveCfg(); return true; });
 
-// Sync. The window encrypts every record under the practitioner's
-// passphrase before it reaches here; this only carries the ciphertext to
+// Sync. The window encrypts every record under the key its devices keep
+// before it reaches here; this only carries the ciphertext to
 // harmonism.io under the account, whose token the window never holds.
 const SYNC_API = HARMONISM + "/lodestone-sync-api.php";
-const SYNC_QUERY = /^(\?meta=1|\?since=\d{1,15})?$/;
-handle("sync-account", async () => hosted.account(), { app: true });
+const SYNC_QUERY = /^(\?meta=1|\?unlock=1|\?since=\d{1,15}|\?link=1(&id=[A-Za-z0-9_-]{16,32})?)?$/;   // ?link: handing the sync key to a new device; ?unlock: the lock the password opens (sync.js)
+// A sign-in kept here that this build cannot read (an ad-hoc signed update the
+// keychain no longer opens to) is the same person's, expired: their memory stays
+// open and Lodestone asks for the password again, never for a new account.
+const knownAccount = () => cfg.hostedExpired || (cfg.hosted?.email && !hosted.signedIn() ? cfg.hosted.email : null);
+handle("sync-account", async () => hosted.account() || (knownAccount() ? { email: knownAccount(), expired: true } : null), { app: true });
 handle("sync-sign-in", async (e, email, password) => {
-  try { return await hosted.signIn(email, password); } catch (err) { hostedErr(err); }
+  try { const r = await hosted.signIn(email, password); await stretchForUnlock(r.email, password); return r; } catch (err) { hostedErr(err); }
+}, { app: true });
+// The password, stretched as unlock.js stretches it (PBKDF2-SHA-256, 600,000
+// rounds, the account's email as salt), held here until the window takes it,
+// once, to open the synced memory with (sync.js). The password itself is not kept.
+let unlockHandoff = null;
+async function stretchForUnlock(email, password) {
+  email = String(email || "").trim().toLowerCase();
+  if (!email || !password) return;
+  try {
+    const raw = await new Promise((res, rej) => require("crypto").pbkdf2(Buffer.from(String(password).normalize("NFKC"), "utf8"), Buffer.from("lodestone-unlock-v1:" + email, "utf8"), 600000, 32, "sha256", (err, k) => err ? rej(err) : res(k)));
+    if (unlockHandoff) unlockHandoff.raw.fill(0);
+    unlockHandoff = { email, raw, at: Date.now() };
+  } catch {}
+}
+handle("sync-unlock-take", async () => {
+  const h = unlockHandoff; unlockHandoff = null;
+  if (!h) return null;
+  const out = { email: h.email, raw: h.raw.toString("base64"), at: h.at };
+  h.raw.fill(0);
+  return out;
 }, { app: true });
 handle("sync-call", async (e, method, query, body) => {
   method = String(method || "GET").toUpperCase();
   query = String(query || "");
   if (!["GET", "PUT", "POST", "DELETE"].includes(method) || !SYNC_QUERY.test(query)) return { ok: false, code: "bad_request", message: "Not a sync call." };
-  if (!hosted.signedIn()) return { ok: false, code: "auth", status: 401, message: "Sign in to your harmonism.io account first." };
+  if (!hosted.signedIn()) return { ok: false, code: "auth", status: 401, message: cfg.hostedExpired ? "Your harmonism.io sign-in on this computer has expired. Sign in again." : "Sign in to your harmonism.io account first." };
   try {
     const res = await hosted.call({ url: SYNC_API + query, method, headers: body != null ? { "Content-Type": "application/json" } : {}, body: body != null ? JSON.stringify(body) : undefined });
     const json = await res.json().catch(() => ({}));
     return res.ok ? { ok: true, status: res.status, json }
       : { ok: false, status: res.status, code: json.error?.code || "http", message: json.error?.message || `harmonism.io answered ${res.status}.` };
   } catch (err) {
+    // Say what went wrong: a sign-in to renew is not an unreachable site.
     const message = String(err.message || err);
-    return { ok: false, code: /sign in/i.test(message) ? "auth" : "network", message: /sign in/i.test(message) ? message : "harmonism.io could not be reached. Lodestone will sync when you are back online." };
+    if (err.code === "auth" || /sign (you )?in/i.test(message)) return { ok: false, code: "auth", status: 401, message };
+    return { ok: false, code: "network", message: `harmonism.io could not be reached (${message}). Lodestone will sync when you are back online.` };
   }
 }, { app: true });
 // The OpenRouter key, when the practitioner ticks it: sent from the keychain,
@@ -613,7 +763,56 @@ handle("held-call", async (e, path, body) => {
     const res = await hosted.call({ url: HARMONISM + "/" + path, method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
     const json = await res.json().catch(() => ({}));
     return { ok: res.ok, status: res.status, json, message: res.ok ? "" : (json.error || `harmonism.io answered ${res.status}.`) };
-  } catch (err) { return { ok: false, code: "network", message: "harmonism.io could not be reached." }; }
+  } catch (err) {
+    const message = String(err.message || err);
+    if (err.code === "auth" || /sign (you )?in/i.test(message)) return { ok: false, code: "auth", status: 401, message };
+    return { ok: false, code: "network", message: `harmonism.io could not be reached (${message}).` };
+  }
+}, { app: true });
+
+// The account's page, in the app: what harmonism.io's dashboard shows,
+// reached under the account's sign-in. Only these calls, nothing else.
+const ACCOUNT_CALLS = [
+  ["POST", "member/companion-consent.php"],          // { action: status | revoke }
+  ["GET", "member/sovereignty-bundle.php?status=1"],
+  ["GET", "member/dashboard-api.php?action=membership"],
+];
+handle("account-call", async (e, method, path, body) => {
+  method = String(method || "GET").toUpperCase(); path = String(path || "");
+  if (!ACCOUNT_CALLS.some(([m, p]) => m === method && p === path)) return { ok: false, code: "bad_request", message: "Not an account call." };
+  if (method === "POST" && !["status", "revoke"].includes(body?.action)) return { ok: false, code: "bad_request", message: "Not an account call." };
+  if (!hosted.signedIn()) return { ok: false, code: "auth", status: 401, message: cfg.hostedExpired ? "Your harmonism.io sign-in on this computer has expired. Sign in again." : "Sign in to your harmonism.io account first." };
+  try {
+    const res = await hosted.call({ url: HARMONISM + "/" + path, method, headers: body != null ? { "Content-Type": "application/json" } : {}, body: body != null ? JSON.stringify(body) : undefined });
+    const json = await res.json().catch(() => ({}));
+    return { ok: res.ok, status: res.status, json, message: res.ok ? "" : (json.error?.message || json.error || `harmonism.io answered ${res.status}.`) };
+  } catch (err) {
+    const message = String(err.message || err);
+    if (err.code === "auth" || /sign (you )?in/i.test(message)) return { ok: false, code: "auth", status: 401, message };
+    return { ok: false, code: "network", message: `harmonism.io could not be reached (${message}).` };
+  }
+}, { app: true });
+// The Sovereignty Bundle downloads in the browser, as from the dashboard: its
+// address carries a short-lived sign-in, the only way a download link can.
+handle("account-open-bundle", async () => {
+  if (!hosted.signedIn()) return { ok: false, message: "Sign in to your harmonism.io account first." };
+  try { await shell.openExternal(HARMONISM + "/member/sovereignty-bundle.php?token=" + encodeURIComponent(await hosted.token())); return { ok: true }; }
+  catch (err) { return { ok: false, message: String(err.message || err) }; }
+}, { app: true });
+
+// A natural voice on the harmonism.io account: the answer's text goes to
+// lodestone-voice-api.php under the account's sign-in and comes back as MP3,
+// read by Grok's Ara or Rex within the account's daily allowance.
+handle("voice-speak", async (e, text, gender, lang) => {
+  text = String(text || "").slice(0, 1200);
+  if (!text.trim()) return { ok: false, code: "bad_request", message: "Nothing to read." };
+  if (!hosted.signedIn()) return { ok: false, code: "auth", message: "Sign in to your harmonism.io account first." };
+  try {
+    const res = await hosted.call({ url: HARMONISM + "/lodestone-voice-api.php?speak=1", method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, gender: gender === "male" ? "male" : "female", lang: String(lang || "en").slice(0, 2) }) });
+    if (!res.ok) { const j = await res.json().catch(() => ({})); return { ok: false, status: res.status, message: j.error?.message || `harmonism.io answered ${res.status}.` }; }
+    return { ok: true, audio: new Uint8Array(await res.arrayBuffer()) };
+  } catch (err) { return { ok: false, code: "network", message: `harmonism.io could not be reached (${String(err.message || err)}).` }; }
 }, { app: true });
 
 // Sync through this computer: Lodestone's own window reaches the synced
@@ -664,6 +863,31 @@ handle("folders-remove", async (e, p) => { cfg.folders = (cfg.folders || []).fil
 handle("folders-reread", async () => { folderIndex.invalidate(); return { folders: cfg.folders || [], stats: folderIndex.build() }; }, { app: true });
 handle("folders-search", async (e, question) => (cfg.folders || []).length ? folderIndex.search(String(question || "").slice(0, 2000)) : [], { app: true });
 
+// The life book: Lodestone's own folder in the practitioner's vault, the
+// one place Lodestone writes, and only a change the practitioner kept from a card.
+const lifeBook = new LifeBook(() => { const v = cfg.lifeBook; try { return v && fs.statSync(v).isDirectory() ? v : null; } catch { return null; } });
+const lbStatus = () => { const d = lifeBook.dir(); return { vault: d ? cfg.lifeBook : null, dir: d, notes: d ? lifeBook.entries().length : 0 }; };
+handle("lifebook-status", async () => lbStatus(), { app: true });
+handle("lifebook-choose", async e => {
+  const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender) || win, { title: "Your vault", message: "Lodestone will keep its notes in a folder of its own, Lodestone/, inside it, and write nowhere else.", buttonLabel: "Keep the life book here", properties: ["openDirectory", "createDirectory"] });
+  if (r.canceled || !r.filePaths?.[0]) return lbStatus();
+  const p = r.filePaths[0];
+  if (p === os.homedir() || p === path.parse(p).root) throw new Error("Choose your vault's folder, not your whole home folder.");
+  cfg.lifeBook = p; saveCfg();
+  lifeBook.cache = null;
+  lifeBook.ensure();
+  return lbStatus();
+}, { app: true });
+handle("lifebook-forget", async () => { cfg.lifeBook = null; saveCfg(); lifeBook.cache = null; return lbStatus(); }, { app: true });
+handle("lifebook-open", async () => { const d = lifeBook.dir(); if (d && fs.existsSync(d)) await shell.openPath(d); return true; }, { app: true });
+handle("lifebook-entries", async () => lifeBook.dir() ? lifeBook.entries() : [], { app: true });
+handle("lifebook-write", async (e, change) => {
+  if (!lifeBook.dir()) throw new Error("No vault is chosen for the life book.");
+  const c = change && typeof change === "object" ? change : {};
+  const r = lifeBook.write({ op: String(c.op || ""), path: String(c.path || ""), text: c.text == null ? undefined : String(c.text), find: c.find == null ? undefined : String(c.find), replace: c.replace == null ? undefined : String(c.replace), mtime: Number(c.mtime) || 0 });
+  return { rel: r.rel, backup: r.backup, mtime: r.mtime };
+}, { app: true });
+
 handle("quick-models", async () => {
   const saved = byok();
   const sc = saved ? remote.normalize(saved) : null;
@@ -697,7 +921,7 @@ handle("switch-model", async (e, choice) => {
     engineError = null;
     const mmproj = hasMmproj(m) ? mmprojOf(m) : null;
     if (!(engine.running && engine.model === firstFile(m) && (engine.mmproj || null) === mmproj))
-      await engine.start(firstFile(m), { mmproj, onStatus: s => send(e, "progress", { what: "engine", text: s }) });
+      await startEngine(m, { mmproj, onStatus: s => send(e, "progress", { what: "engine", text: s }) });
     cfg.model = m.id; cfg.upstream = null; cfg.remote = null; saveCfg();
     return { ok: true, label: m.label };
   }
@@ -813,7 +1037,16 @@ handle("qr", async (e, text) => require("qrcode").toDataURL(text, { margin: 1, w
 
 // Telegram (from the phone window)
 
-const tgState = () => ({
+// The bot's pairing code (1.13.1): from a cryptographic source, good for thirty
+// minutes and five tries, as the phone's code is; the window shows a new one
+// when it has expired or been spent, while the bot is not yet paired.
+const tgCode = () => ({ pairCode: String(require("crypto").randomInt(0, 1000000)).padStart(6, "0"), pairExp: Date.now() + 30 * 60 * 1000, pairTries: 0 });
+const tgState = () => {
+  const t = cfg.telegram;
+  if (t?.token && !t.chatId && (!t.pairCode || Date.now() > (t.pairExp || 0) || (t.pairTries || 0) >= 5)) { Object.assign(t, tgCode()); saveCfg(); }
+  return tgStateNow();
+};
+const tgStateNow = () => ({
   on: !!cfg.telegram?.token, paired: !!cfg.telegram?.chatId, pairCode: cfg.telegram?.pairCode || null,
   bot: telegram.me?.username || cfg.telegram?.bot || null, outreach: cfg.telegram?.outreach !== false,
   status: telegram.status, error: telegram.lastError, persisted: !!cfg.telegram?.token && cfg.telegram.token !== "session",
@@ -827,8 +1060,7 @@ handle("tg-set-token", async (e, token) => {
   const bot = await telegram.check().catch(err => { tgToken.session = null; throw new Error(`Telegram refused the token (${err.message}).`); });
   let enc = "session";
   try { if (safeStorage.isEncryptionAvailable()) enc = safeStorage.encryptString(token).toString("base64"); } catch {}
-  const pairCode = String(Math.floor(100000 + Math.random() * 900000));
-  cfg.telegram = { token: enc, bot, chatId: null, pairCode, outreach: true, lastOutreach: 0 };
+  cfg.telegram = { token: enc, bot, chatId: null, ...tgCode(), outreach: true, lastOutreach: 0 };
   saveCfg();
   telegram.start(); openBridge();
   return tgState();
@@ -885,8 +1117,13 @@ handle("vision-download", async e => {
   } catch (err) { dlCtrl = null; return { ok: false, message: err.message }; }
   dlCtrl = null;
   // The engine has to load the projector: a few seconds' restart.
-  try { await engine.start(firstFile(m), { mmproj: mmprojOf(m) }); return { ok: true }; }
+  try { await startEngine(m, { mmproj: mmprojOf(m) }); return { ok: true }; }
   catch (err) { engineError = { message: err.message, detail: err.detail || "" }; return { ok: false, message: `The model could not restart with its vision: ${err.message}` }; }
+}, { app: true });
+// Formats the page cannot open (old Word, HEIC, TIFF…), converted on this computer (src/convert.js).
+handle("convert-file", async (_e, name, bytes) => {
+  if (typeof name !== "string" || !(bytes instanceof ArrayBuffer || ArrayBuffer.isView(bytes))) return null;
+  return require("./convert").convert(name.slice(0, 255), bytes);
 }, { app: true });
 handle("open-models", async () => { showLauncher("models"); }, { app: true });
 handle("open-updates", async () => { showLauncher("library"); }, { app: true });
@@ -983,8 +1220,28 @@ async function ensureLibrary(meta) {
   catch (e) { dialog.showErrorBox(APP_NAME, "Lodestone could not place its library on this computer.\n\n" + (e.message || e)); }
 }
 
+// What a page may ask the browser for (1.12, after Lode): Lodestone's own pages
+// the microphone (dictation, never the camera), notifications and copying;
+// nothing for any other page, the hidden Telegram page included.
+const PAGE_PERMS = new Set(["media", "notifications", "clipboard-sanitized-write", "fullscreen"]);
+function pagePermission(wc, permission, details = {}) {
+  const url = details.requestingUrl || details.securityOrigin || wc?.getURL?.() || "";
+  if (!url.startsWith(origin() + "/") && url !== origin()) return false;
+  if (bridgeWin && wc === bridgeWin.webContents) return false;
+  if (!PAGE_PERMS.has(permission)) return false;
+  if (permission === "media") {
+    const types = details.mediaTypes || (details.mediaType ? [details.mediaType] : []);
+    return types.length > 0 && types.every(t => t === "audio");
+  }
+  return true;
+}
+
 app.whenReady().then(async () => {
   loadCfg();
+  session.defaultSession.setPermissionRequestHandler((wc, permission, cb, details) => cb(pagePermission(wc, permission, details)));
+  session.defaultSession.setPermissionCheckHandler((wc, permission, requestingOrigin, details) =>
+    permission === "media" ? (requestingOrigin === origin() || String(requestingOrigin).startsWith(origin() + "/")) && (!details?.mediaType || details.mediaType === "audio")
+      : pagePermission(wc, permission, { requestingUrl: requestingOrigin }));
   migrateModels();
   loadStoredCatalog();
   await offerMoveToApplications();
@@ -1008,6 +1265,8 @@ app.whenReady().then(async () => {
   if (win) showLauncher(); else createWindow();
   if (cfg.telegram?.token === "session") { cfg.telegram = null; saveCfg(); }   // a token kept for one session only
   if (cfg.telegram?.token) { telegram.start(); openBridge(); }
+  if (cfgLocked) dialog.showMessageBox({ type: "warning", message: "Lodestone could not read its settings.", detail: "Another program may be holding the file. Lodestone started with its defaults and will not save over your settings this time; quit and open it again to use them." }).catch(() => {});
+  if (cfgUnreadable) dialog.showMessageBox({ type: "warning", message: "Lodestone's settings could not be read.", detail: `They were kept aside as ${path.basename(cfgUnreadable)} in Lodestone's data folder, and Lodestone started from its defaults. The model downloaded on this computer is still there; a rented model's key, the Telegram bot and the paired phones need setting up again.` }).catch(() => {});
 });
 
 app.on("activate", () => { if (!win) createWindow(); });

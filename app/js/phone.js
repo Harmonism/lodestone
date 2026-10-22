@@ -182,6 +182,7 @@ class Hosted {
     const j = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(j.error?.message || `harmonism.io answered ${res.status}.`);
     this.cached = { at: Date.now(), value: j };
+    if (Array.isArray(j.models) && j.models.length) this.models = j.models;   // kept for names, past the minute's cache
     return j;
   }
 }
@@ -194,22 +195,29 @@ export class HostedEngine {
   }
   async isCached() { return true; }
   async load() { if (!(await hosted.account())) throw new Error("Not signed in to harmonism.io."); }
-  async *stream(messages, { maxTokens, temperature = 0.7 } = {}) {
-    this.ctrl = new AbortController();
+  async *stream(messages, { maxTokens, temperature = 0.7, web = false, background = false } = {}) {
+    const ctrl = new AbortController(); if (background) this.bgUsage = null; else { this.ctrl = ctrl; this.lastUsage = null; }   // a background call (learning, a summary) is not what Stop stops (1.13.1)
     const body = { messages, stream: true, temperature, max_tokens: maxTokens };
     if (this.model) body.model = this.model;
+    if (web) body.web = true;   // the server adds OpenRouter's web search for this turn
     const res = await hosted.call(hostedApi(), {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: this.ctrl.signal,
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: ctrl.signal,
     });
     hosted.cached = null;
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
       throw new Error(j.error?.message || `harmonism.io answered ${res.status}.`);
     }
-    yield* readSSE(res);
+    yield* readSSE(res, u => { if (background) this.bgUsage = u; else this.lastUsage = u; });
   }
   interrupt() { try { this.ctrl?.abort(); } catch {} }
-  describe() { return `${this.model || "hosted Lodestone"} · harmonism.io`; }
+  /** The model's name, not its id: from the account's list, else the tested list; "" is the server's default. */
+  label() {
+    const list = hosted.models || [];
+    const m = this.model ? list.find(x => x.id === this.model) || recommendedFor(this.model) : list.find(x => x.default);
+    return m?.label || this.model || "hosted Lodestone";
+  }
+  describe() { return `${this.label()} · harmonism.io`; }
 }
 
 // ─── OpenRouter, under the practitioner's own key ────────────────────────────
@@ -224,6 +232,8 @@ export const OPENROUTER_KEYS_URL = "https://openrouter.ai/settings/keys";
 //   reasoning "none" asks the provider to answer without deliberating;
 //   ""  leaves reasoning on where the provider makes it mandatory, with
 //       minTokens as the floor so the reasoning does not eat the answer.
+// The default wherever Lodestone runs: on the account or under the practitioner's own key.
+export const DEFAULT_REMOTE = "deepseek/deepseek-v4.1-flash";
 export const RECOMMENDED = [
   { id: "deepseek/deepseek-v4.1-flash", label: "DeepSeek V4.1 Flash", maker: "DeepSeek", licence: "MIT", reasoning: "none", minTokens: 0, note: "The default on harmonism.io" },
   { id: "z-ai/glm-5.3-flash", label: "GLM-5.3 Flash", maker: "Zhipu", licence: "MIT", reasoning: "", minTokens: 8000, note: "Reasons before every answer" },
@@ -281,10 +291,11 @@ export class OpenRouterEngine {
     if (!this.key) throw new Error("No OpenRouter key is saved.");
     if (!this.model) throw new Error("No model is chosen.");
   }
-  async *stream(messages, { maxTokens, temperature = 0.7 } = {}) {
+  async *stream(messages, { maxTokens, temperature = 0.7, web = false, background = false } = {}) {
     if (!this.key) await this.load();
-    this.ctrl = new AbortController();
-    const body = { model: this.model, messages, stream: true, temperature, max_tokens: maxTokens };
+    const ctrl = new AbortController(); if (background) this.bgUsage = null; else { this.ctrl = ctrl; this.lastUsage = null; }   // a background call (learning, a summary) is not what Stop stops (1.13.1)
+    // usage.include: OpenRouter ends the stream with the turn's tokens and its cost in dollars.
+    const body = { model: this.model, messages, stream: true, temperature, max_tokens: maxTokens, usage: { include: true } };
     // A recommended model runs as hosted Lodestone runs it: reasoning off where the
     // provider allows it, a token floor where reasoning is mandatory, and only
     // providers that do not keep the conversation for training.
@@ -294,9 +305,11 @@ export class OpenRouterEngine {
       if (r.minTokens && (body.max_tokens || 0) < r.minTokens) body.max_tokens = r.minTokens;
       body.provider = { data_collection: "deny" };
     }
-    const res = await fetch(OPENROUTER + "/chat/completions", { method: "POST", headers: orHeaders(this.key), body: JSON.stringify(body), signal: this.ctrl.signal });
+    // Look this up: OpenRouter searches the web for this turn (Exa; about $0.007 a search).
+    if (web) body.plugins = [{ id: "web", engine: "exa", max_results: 5 }];
+    const res = await fetch(OPENROUTER + "/chat/completions", { method: "POST", headers: orHeaders(this.key), body: JSON.stringify(body), signal: ctrl.signal });
     if (!res.ok) throw await providerError(res, "OpenRouter");
-    yield* readSSE(res);
+    yield* readSSE(res, u => { if (background) this.bgUsage = u; else this.lastUsage = u; });
   }
   interrupt() { try { this.ctrl?.abort(); } catch {} }
   describe() { return `${recommendedFor(this.model)?.label || this.model} · openrouter.ai`; }

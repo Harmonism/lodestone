@@ -110,20 +110,20 @@ def main():
         page.wait_for_function("document.querySelectorAll('#tierChoices .choice').length > 0")
         page.wait_for_timeout(500)
         labels = page.eval_on_selector_all("#tierChoices .choice strong", "ns => ns.map(n => n.textContent)")
-        check("phone order: OpenRouter, account, computer, no model", labels == ["OpenRouter, with my own key", "My harmonism.io account", "My computer's model server", "No model: read and search"], str(labels))
+        check("phone order: account, OpenRouter, computer, no model", labels == ["My harmonism.io account", "OpenRouter, with my own key", "My computer's model server", "No model: read and search"], str(labels))
         pressed = page.eval_on_selector_all("#tierChoices .choice[aria-pressed=true] strong", "ns => ns.map(n => n.textContent)")
-        check("OpenRouter preselected on a phone", pressed == ["OpenRouter, with my own key"], str(pressed))
+        check("the harmonism.io account preselected on a phone, its tested models named with DeepSeek V4.1 Flash the default", pressed == ["My harmonism.io account"] and "DeepSeek V4.1 Flash (default)" in page.text_content("#tierChoices .choice[aria-pressed=true] .models"), str(pressed))
         check("account is its own step, signed out, with links back to Lodestone",
               page.is_visible("#accountBox") and page.get_attribute("#acctBtns a:nth-child(1)", "href") == "/member/login.php?return=lodestone"
               and page.get_attribute("#acctBtns a:nth-child(2)", "href") == "/member/register.php?return=lodestone", page.text_content("#acctStatus"))
         check("Begin disabled before a key", page.is_disabled("#beginSetup"))
 
-        page.click("#tierChoices .choice:has-text('My computer')")
+        page.click("#tierChoices .choice:has(strong:has-text('My computer'))")
         check("computer route on a phone is a pointer to Lodestone Desktop, not a form", page.is_visible("#phoneComputer") and page.is_hidden("#serverFields") and page.is_disabled("#beginSetup"))
-        page.click("#tierChoices .choice:has-text('harmonism.io account')")
+        page.click("#tierChoices .choice:has(strong:has-text('harmonism.io account'))")
         check("hosted route needs the account first", page.is_disabled("#beginSetup") and "Sign in" in page.text_content("#hStatus"), page.text_content("#hStatus"))
 
-        page.click("#tierChoices .choice:has-text('OpenRouter')")
+        page.click("#tierChoices .choice:has(strong:has-text('OpenRouter'))")
         page.fill("#orKey", "sk-or-v1-badkeybadkeybadkeybad00")
         page.wait_for_function("document.querySelector('#orStatus').textContent.includes('refused')", timeout=8000)
         check("a pasted bad key is tested and refused without pressing Test", True, page.text_content("#orStatus"))
@@ -144,11 +144,22 @@ def main():
         check("model menu shown on the phone", page.is_visible("#modelRow") and "openrouter.ai" in page.text_content("#modelChipLabel"), page.text_content("#modelChipLabel"))
         page.click("#modelChip"); page.wait_for_timeout(400)
         groups = page.eval_on_selector_all("#modelMenu .model-group", "ns => ns.map(n => n.textContent)")
-        check("menu: OpenRouter models and no model, no account while signed out", any("OpenRouter" in g for g in groups) and not any("account" in g for g in groups) and any("No model" in g for g in groups), str(groups))
+        check("menu: the account (signed out: one step to sign in), OpenRouter's models and no model, each saying who reads", groups[0].startswith("Your harmonism.io account — harmonism.io reads each turn") and "Sign in for ten free messages a day" in page.text_content("#modelMenu") and any(g.startswith("OpenRouter, your key — OpenRouter reads") for g in groups) and any("No model" in g for g in groups), str(groups))
+        check("menu: another model id can be typed under OpenRouter", page.is_visible("#modelMenu .model-other input"))
         page.click("#modelMenu .model-item:has-text('GLM-5.3 Flash')"); page.wait_for_timeout(600)
         page.fill("#input", "And Logos?"); page.click("#sendBtn")
         page.wait_for_function("[...document.querySelectorAll('.msg.assistant .body')].filter(b => b.textContent.includes('OpenRouter answer')).length >= 2", timeout=20000)
         check("switching in the menu changes the model in place", LOG["openrouter"][-1]["body"]["model"] == "z-ai/glm-5.3-flash" and LOG["openrouter"][-1]["body"].get("max_tokens") == 8000)
+
+        # Setup opened from the menu is not a one-way door: a route not ready leaves Begin off, and Back restores the route as it was.
+        page.click("#modelChip"); page.wait_for_timeout(400)
+        page.click("#modelMenu .model-manage"); page.wait_for_selector("#setup:not([hidden])", timeout=10000)
+        page.click("#tierChoices .choice:has(strong:has-text('computer'))"); page.wait_for_timeout(200)
+        check("setup from the menu: an unready route disables Begin, and Back is offered", page.is_disabled("#beginSetup") and page.is_visible("#setupBack"))
+        page.click("#setupBack"); page.wait_for_selector("#main:not([hidden])", timeout=10000); page.wait_for_timeout(400)
+        page.fill("#input", "Back again?"); page.click("#sendBtn")
+        page.wait_for_function("[...document.querySelectorAll('.msg.assistant .body')].filter(b => b.textContent.includes('OpenRouter answer')).length >= 3", timeout=20000)
+        check("Back restores the saved route untouched", LOG["openrouter"][-1]["body"]["model"] == "z-ai/glm-5.3-flash" and "openrouter.ai" in page.text_content("#modelChipLabel"), page.text_content("#modelChipLabel"))
 
         page.click("#btnMe"); page.wait_for_timeout(500)
         check("Your path offers the assessment and, signed out, the account", page.get_attribute("#hpBtns a:nth-child(1)", "href") == "/assessment.php?return=lodestone"
@@ -164,7 +175,7 @@ def main():
         page.click("#modelChip"); page.wait_for_timeout(600)
         groups = page.eval_on_selector_all("#modelMenu .model-group", "ns => ns.map(n => n.textContent)")
         check("signed in on the website: the account's models join the menu", any("harmonism.io account" in g and "7 of 10" in g for g in groups), str(groups))
-        page.click("#modelMenu .model-item:has-text('DeepSeek V4.1 Flash') >> nth=1"); page.wait_for_timeout(600)
+        page.click("#modelMenu .model-item:has-text('DeepSeek V4.1 Flash') >> nth=0")   # the account's, first; page.wait_for_timeout(600)
         page.fill("#input", "What is Dharma?"); page.click("#sendBtn")
         page.wait_for_function("[...document.querySelectorAll('.msg.assistant .body')].some(b => b.textContent.includes('from the mock'))", timeout=20000)
         h = LOG["hosted"][-1]
@@ -225,7 +236,8 @@ def main():
         pg.goto(base + "/lodestone-app/")
         pg.wait_for_function("document.querySelectorAll('#tierChoices .choice').length > 0")
         l2 = pg.eval_on_selector_all("#tierChoices .choice strong", "ns => ns.map(n => n.textContent)")
-        check("a computer's browser keeps This device first", l2[0] == "This device", str(l2))
+        p2 = pg.eval_on_selector_all("#tierChoices .choice[aria-pressed=true] strong", "ns => ns.map(n => n.textContent)")
+        check("a computer's browser also begins on the account, with this browser's model offered after the computer", l2[:2] == ["My harmonism.io account", "OpenRouter, with my own key"] and "This browser" in l2 and l2.index("This browser") > l2.index("My computer's model server") and p2 == ["My harmonism.io account"], f"{l2} {p2}")
         ctx3.close(); b.close()
     srv.shutdown()
     if php: php.terminate()

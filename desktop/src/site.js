@@ -87,6 +87,7 @@ class Site {
 
   remove(lang) {
     if (lang === "en") return false; // the shipped English library stays
+    if (!Object.prototype.hasOwnProperty.call(LANGS, lang)) return false;   // a language Lodestone knows, never a path (1.13.1)
     fs.rmSync(path.join(this.userDir, lang), { recursive: true, force: true });
     return true;
   }

@@ -132,7 +132,7 @@ class Companion {
       const payload = { model: await this.model(up), messages: fitted.messages, stream: true, temperature: 0.7, top_p: 0.8, presence_penalty: 1.0, max_tokens: TIER.maxTokens };
       if (up.isEngine) payload.chat_template_kwargs = { enable_thinking: false };
       upRes = await fetch(up.url + "/chat/completions", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), signal: ctrl.signal,
+        method: "POST", headers: { "Content-Type": "application/json", ...(up.isEngine && up.key ? { Authorization: `Bearer ${up.key}` } : {}) }, body: JSON.stringify(payload), signal: ctrl.signal,
       });
     } catch (e) {
       return json(502, { error: "Lodestone's model could not be reached. It may still be waking; try again in a moment." });

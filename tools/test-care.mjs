@@ -1,0 +1,20 @@
+// The care phrases, the privacy gate's password rules and normalize (1.13.1, second pass).
+import { indirectCare, careCheck } from "../app/js/care.js";
+import { scanText } from "../app/js/privacygate.js";
+import { normalize } from "../app/js/safety.js";
+let pass = 0, fail = 0;
+const ok = (c, name) => { c ? pass++ : fail++; console.log(`${c ? "ok  " : "FAIL"} ${name}`); };
+const lvl = t => indirectCare(t)?.level || null;
+ok(lvl("I spend my life working") === null, "whole words: 'spend my life' is not 'end my life'");
+ok(lvl("I cut myself shaving") === "ask", "'I cut myself shaving' asks, does not refer");
+ok(lvl("j'ai envie de mourir de rire") === "ask", "'envie de mourir de rire' asks");
+ok(lvl("my brother is suicidal") === "ask", "someone else's 'suicidal' asks");
+ok(lvl("I could kill myself laughing") === "ask", "'kill myself laughing' asks");
+for (const t of ["I want to kill myself", "I'm suicidal", "I´m suicidal", "i've been cutting myself", "I want to die", "Je veux mourir", "أريد أن أموت", "I don’t want to live anymore"]) ok(lvl(t) === "refer", `plain: ${t}`);
+ok((await careCheck("I could kill myself laughing", null))?.level === "refer", "no meaning layer: an indirect phrase refers");
+ok((await careCheck("I could kill myself laughing", async () => { throw new Error("x"); }))?.level === "refer", "meaning layer failed: an indirect phrase refers");
+ok(normalize("I don´t") === "i don't", "normalize: ´ is an apostrophe, not a space and an accent");
+for (const t of ["my password was changed yesterday", "Secret: the meeting", "passwordless login"]) ok(!scanText(t).length, `prose, not a secret: ${t}`);
+for (const t of ["password: hunter2!", "DB_PASSWORD=s3cr3t", "my password is Tr0ub4dor"]) ok(scanText(t).length === 1, `a secret: ${t}`);
+console.log(`\n${pass} passed, ${fail} failed`);
+process.exit(fail ? 1 : 0);

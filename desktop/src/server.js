@@ -53,7 +53,7 @@ const MIME = {
 const BACK_LINK = `<a class="lodestone-back" href="${APP}" title="Back to the conversation (${process.platform === "darwin" ? "⌘1" : "Ctrl+1"})"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Back to Lodestone</a>`;
 const PAGE_SCRIPT = `<script>(function(){try{var g=Storage.prototype.getItem;Storage.prototype.getItem=function(k){if(k==="munai-anon-msg-count")return"0";if(k==="munai-anon-nudge-shown")return"1";return g.call(this,k)};document.documentElement.classList.add("lodestone-app")}catch(e){}
 if(window.top===window)document.addEventListener("DOMContentLoaded",function(){if(document.querySelector(".lodestone-back"))return;document.body.insertAdjacentHTML("beforeend",${JSON.stringify(BACK_LINK)})});})();</script><style>.nav-account-link{display:none!important}
-.lodestone-back{position:fixed;left:20px;bottom:20px;z-index:150;display:inline-flex;align-items:center;gap:6px;padding:9px 16px 9px 11px;border-radius:999px;background:var(--bg-elevated,#1a1a3a);border:1px solid var(--border,#2a2a55);color:var(--text,#d8d8e8);font:600 15px/1 "Source Sans 3",system-ui,-apple-system,"Segoe UI",sans-serif;text-decoration:none;box-shadow:0 4px 18px rgba(0,0,0,.35)}
+.lodestone-back{position:fixed;left:20px;bottom:20px;z-index:2147483647;display:inline-flex;align-items:center;gap:6px;padding:9px 16px 9px 11px;border-radius:999px;background:var(--bg-elevated,#1a1a3a);border:1px solid var(--border,#2a2a55);color:var(--text,#d8d8e8);font:600 15px/1 "Source Sans 3",system-ui,-apple-system,"Segoe UI",sans-serif;text-decoration:none;box-shadow:0 4px 18px rgba(0,0,0,.35)}
 .lodestone-back:hover{border-color:#9B3DBE;color:var(--text-heading,#fff)}.lodestone-back svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 @media print{.lodestone-back{display:none}}</style>`;
 
@@ -131,7 +131,7 @@ function serveUnder(root, rel, req, res, hdrPath = null) {
   serveFile(file, hdrPath || rel, req, res);
 }
 
-async function passthrough(target, req, res, body) {
+async function passthrough(target, req, res, body, key = null) {
   // When the practitioner presses Stop the page drops the request; dropping the
   // upstream one with it is what makes the engine stop generating.
   const ctrl = new AbortController();
@@ -140,7 +140,7 @@ async function passthrough(target, req, res, body) {
   try {
     up = await fetch(target, {
       method: req.method, body: req.method === "GET" || req.method === "HEAD" ? undefined : body,
-      headers: { "Content-Type": req.headers["content-type"] || "application/json" },
+      headers: { "Content-Type": req.headers["content-type"] || "application/json", ...(key ? { Authorization: `Bearer ${key}` } : {}) },
       signal: ctrl.signal,
     });
   } catch (e) {
@@ -194,13 +194,35 @@ function cors(req, res, p, origins = NATIVE_ORIGINS) {
   res.setHeader("Access-Control-Max-Age", "600");
   return true;
 }
+// Who may use this server (1.12, after Lode's audit): a page elsewhere in the
+// browser cannot spend the model or the practitioner's rented key.
+//   Host: an address, localhost or a .local name; a name that resolves here by
+//   DNS rebinding (an attacker's domain pointed at 127.0.0.1) is refused.
+//   Origin: when a page sends one, it is this server's own page, or the
+//   Lodestone app for Android (NATIVE_ORIGINS); any other site is refused.
+function hostOk(host) {
+  const h = String(host || "").toLowerCase().replace(/:\d+$/, "");
+  return h === "localhost" || /^\d{1,3}(\.\d{1,3}){3}$/.test(h) || /^\[[0-9a-f:.]+\]$/.test(h) || /^[a-z0-9-]+(\.[a-z0-9-]+)*\.local$/.test(h);
+}
+function originOk(req, origins) {
+  const o = req.headers.origin;
+  if (!o) return true;                       // not from a web page (or a same-origin GET)
+  if (origins.has(o)) return true;
+  try { const u = new URL(o); return (u.protocol === "http:" && u.host === String(req.headers.host || "").toLowerCase()); } catch { return false; }
+}
+// From the network (phone access on), the model and the companion answer only a
+// paired phone (1.13.1): the Android app sends its token; a phone's browser,
+// opened from the QR code, trades the code in the address for one and keeps it
+// as a cookie. This computer itself is always answered.
+const loopback = req => /^(127\.|::1$|::ffff:127\.)/.test(req.socket?.remoteAddress || "");
+const cookieToken = req => (/(?:^|;\s*)lodestone_pair=([A-Za-z0-9_-]{20,})/.exec(req.headers.cookie || "") || [])[1] || null;
 const bearer = req => (/^Bearer\s+(\S+)$/i.exec(req.headers.authorization || "") || [])[1] || null;
 
 function createServer({ webRoot, corpusRoot, site, companion, getConfig, asrRoot = null, phone = null, nativeOrigins = NATIVE_ORIGINS }) {
   webRoot = path.resolve(webRoot);
 
   async function model(req, res, sub) {
-    const { upstream, isEngine, remote } = getConfig();
+    const { upstream, isEngine, remote, key } = getConfig();
     if (remote) return remoteModel(remote, req, res, sub, req.method === "POST" ? await readBody(req) : undefined);
     if (!upstream) return send(res, 503, { error: "Lodestone's model is not running. Open the Lodestone menu → Model… to start it." });
     let body = req.method === "POST" ? await readBody(req) : undefined;
@@ -212,7 +234,8 @@ function createServer({ webRoot, corpusRoot, site, companion, getConfig, asrRoot
         body = Buffer.from(JSON.stringify(o));
       } catch {}
     }
-    return passthrough(upstream.replace(/\/+$/, "") + sub, req, res, body);
+    // The bundled engine's key (engine.js), added here and never given to the page.
+    return passthrough(upstream.replace(/\/+$/, "") + sub, req, res, body, isEngine ? key : null);
   }
 
   function library(p, req, res) {
@@ -236,6 +259,8 @@ function createServer({ webRoot, corpusRoot, site, companion, getConfig, asrRoot
       let p;
       try { p = decodeURIComponent(new URL(url, "http://x").pathname); } catch { return send(res, 400, "bad path", "text/plain"); }
 
+      if (!hostOk(req.headers.host)) return send(res, 421, "This address does not reach Lodestone.", "text/plain");
+      if (!originOk(req, nativeOrigins)) return send(res, 403, { error: { code: "origin", message: "Only Lodestone's own pages may use this." } });
       const crossOrigin = cors(req, res, p, nativeOrigins);
       if (req.method === "OPTIONS") {
         if (!crossOrigin) return send(res, 405, "method not allowed", "text/plain");
@@ -261,13 +286,18 @@ function createServer({ webRoot, corpusRoot, site, companion, getConfig, asrRoot
         return send(res, r.status, r.json);
       }
 
+      // Each is tried on its own: an old or forgotten cookie does not hide a good token, nor the reverse.
+      const paired = () => loopback(req) || (!!phone && (phone.authorized(bearer(req)) || phone.authorized(cookieToken(req))));
+      const unpaired = () => send(res, 401, { error: { code: "auth", message: "This phone is not paired with Lodestone Desktop. On the computer, open Lodestone → Use from Your Phone…, and scan the code again." } });
+
       // The model
-      if (p.startsWith("/v1/")) return model(req, res, url.slice(3));
-      if (p.startsWith(APP + "v1/")) return model(req, res, url.slice(APP.length + 2));
+      if (p.startsWith("/v1/")) return paired() ? model(req, res, url.slice(3)) : unpaired();
+      if (p.startsWith(APP + "v1/")) return paired() ? model(req, res, url.slice(APP.length + 2)) : unpaired();
 
       // Everything else PHP was a service of harmonism.io's server
       if (req.method === "POST") {
         if (/(^|\/)companion-api\.php$/.test(p)) {
+          if (!paired()) return unpaired();
           let body;
           try { body = JSON.parse((await readBody(req, 2 * 1024 * 1024)).toString("utf8")); } catch { return send(res, 400, { error: "Unreadable request." }); }
           return companion.handle(body, req, res);
@@ -327,4 +357,4 @@ function createServer({ webRoot, corpusRoot, site, companion, getConfig, asrRoot
   };
 }
 
-module.exports = { createServer, lanAddresses, APP };
+module.exports = { createServer, lanAddresses, APP, hostOk, originOk };

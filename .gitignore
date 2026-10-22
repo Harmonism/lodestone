@@ -6,13 +6,16 @@ desktop/site-en/
 desktop/build-res/
 desktop/dist/
 desktop/release/
+desktop/release-old/
 .site-packs/
+.computer-zip/
 node_modules/
 __pycache__/
 *.pyc
 
 # Never published
 mobile/keys/
+desktop/keys/
 mobile/release/
 tools/hold-subject.local
 *.local

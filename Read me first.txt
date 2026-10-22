@@ -23,8 +23,11 @@ model) and then downloads a model — between 6 and 27 gigabytes, once, dependin
 on how much memory your computer has. Later runs take seconds. A window of text
 stays open while Lodestone is running; that is normal. Closing it stops Lodestone.
 
-If macOS says the file is from an unidentified developer: right-click
-Lodestone.command, choose Open, and confirm once.
+If macOS says the file is from an unidentified developer, or that it cannot
+be opened: on macOS 15 (Sequoia) or later, try to open Lodestone.command once,
+then open System Settings → Privacy & Security, scroll down, click Open Anyway
+and confirm. On earlier versions, right-click Lodestone.command, choose Open,
+and confirm once.
 
 
 To use it from your phone

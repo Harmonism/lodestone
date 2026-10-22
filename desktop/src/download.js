@@ -85,13 +85,22 @@ async function fetchInto({ fetch, url, part, size, signal, onProgress }) {
   }
   if (have && res.status !== 206) have = 0;           // the server ignored the resume request
   const out = fs.createWriteStream(part, { flags: have ? "a" : "w" });
+  // A write that fails (a full disk) ends the download with its reason (1.13.1):
+  // unheard, it was an uncaught error and a download waiting forever on "drain".
+  let failed = null;
+  const failure = new Promise((_, reject) => out.on("error", e => {
+    failed = e;
+    reject(e.code === "ENOSPC" ? Object.assign(new Error("The disk is full: free some space, then download again; it resumes where it stopped."), { permanent: true }) : e);
+  }));
+  failure.catch(() => {});
   const reader = res.body.getReader();
   let done = have, last = 0, lastBytes = have, rate = 0;
   try {
     for (;;) {
       const { done: end, value } = await reader.read();
       if (end) break;
-      if (!out.write(value)) await new Promise(r => out.once("drain", r));
+      if (failed) await failure;
+      if (!out.write(value)) await Promise.race([new Promise(r => out.once("drain", r)), failure]);
       done += value.length;
       const now = Date.now();
       if (now - last > 250) {
@@ -102,8 +111,10 @@ async function fetchInto({ fetch, url, part, size, signal, onProgress }) {
       }
     }
   } finally {
-    await new Promise(r => out.end(r));
+    try { reader.cancel().catch(() => {}); } catch {}
+    if (failed) out.destroy(); else await new Promise(r => out.end(r));
   }
+  if (failed) await failure;
 }
 
 /**

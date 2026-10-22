@@ -27,7 +27,7 @@
 // chooses before anything is read; every export here calls it.
 
 import * as store from "./store.js";
-import { Sync } from "./sync.js";
+import { Sync, mergeState } from "./sync.js";
 import { wire } from "./syncwire.js";
 import { hosted } from "./phone.js";
 import { isHPCode, parseHP } from "./hp.js";
@@ -203,21 +203,64 @@ export async function recent(limit = RECENT) {
   return out;
 }
 
+/**
+ * A Harmonic Profile code joins this memory: the Wheel reading, the summary the
+ * apps read, and the code itself (the website reads the profile from it). Every
+ * surface takes a code in through here or through main.js ingestHPCode, which
+ * writes the same keys. Returns the parsed profile; throws on a bad code.
+ */
+export async function takeCode(code) {
+  await bind();
+  const clean = String(code || "").replace(/\s+/g, "");
+  if (!isHPCode(clean)) throw new Error("That is not a Harmonic Profile code: it begins with HP:: and has no spaces.");
+  const r = parseHP(clean);
+  const wheel = { ...((await store.kv.get("wheel")) || {}), ...r.wheel };
+  await store.kv.set("wheel", wheel);
+  await store.kv.set("assessment", r.summary);
+  await store.kv.set("hp_code", clean);
+  await store.kv.set("hp_fresh", true);
+  syncSoon();
+  return r;
+}
+
 /** A Harmonic Profile the assessment left in this browser joins the memory (and Lodestone's app reads it too). */
 export async function takePending() {
   let code = null;
   try { code = localStorage.getItem(HP_PENDING); } catch {}
   if (!code || !isHPCode(code)) return false;
   try { localStorage.removeItem(HP_PENDING); } catch {}
-  try {
-    const r = parseHP(code);
-    const wheel = { ...((await store.kv.get("wheel")) || {}), ...r.wheel };
-    await store.kv.set("wheel", wheel);
-    await store.kv.set("assessment", r.summary);
-    await store.kv.set("hp_code", code.trim());
-    await store.kv.set("hp_fresh", true);
-    return true;
-  } catch { return false; }
+  try { await takeCode(code); return true; } catch { return false; }
+}
+
+/**
+ * What a page that draws the person (the dashboard) sends: the memory, the
+ * Harmonic Profile code the apps hold, and the Wheel as Lodestone reads it.
+ */
+export async function forPage() {
+  await bind();
+  await takePending();
+  const c = await load();
+  return {
+    state: c?.state || null,
+    wheel: (await store.kv.get("wheel")) || {},
+    ...(await store.kv.get("hp_code") ? { hp_code: await store.kv.get("hp_code") } : {}),
+    ...(await store.kv.get("hp_fresh") ? { hp_fresh: true } : {}),
+  };
+}
+
+/** What such a page gives back: the memory with the profile taken in, kept and synced. */
+export async function settle(j) {
+  if (!j || !j.munai_state) return false;
+  await apply(j.munai_state);
+  await store.kv.del("hp_fresh");
+  syncSoon();
+  return true;
+}
+
+/** Whether this memory holds a Harmonic Profile, for a page to offer the paste field. */
+export async function hasProfile() {
+  await bind();
+  return !!(await store.kv.get("hp_code")) || !!(await store.kv.get("assessment"));
 }
 
 /** What a request carries: the memory, the latest messages, the profile the apps hold. */
@@ -240,8 +283,42 @@ export async function record({ threadId = WEB_THREAD, title = "On harmonism.io",
   await store.threads.put(t);
 }
 
+/**
+ * The website's conversation as the Sprite shows it: the latest messages of
+ * the "On harmonism.io" thread in this memory, oldest first, after taking in what
+ * other devices added. The same thread the app lists.
+ */
+export async function webThread(limit = 40) {
+  await bind();
+  if (!(await signedIn())) return [];
+  await autoSync();
+  await freshen();
+  const msgs = (await store.messages.forThread(WEB_THREAD)).sort((a, b) => a.ts - b.ts).slice(-limit);
+  return msgs.filter(m => (m.role === "user" || m.role === "assistant") && m.content)
+    .map(m => ({ role: m.role, content: String(m.content) }));
+}
+
 async function clearThread(threadId) {
   for (const m of await store.messages.forThread(threadId)) await store.messages.del(m.id);
+}
+
+/**
+ * Sync without a switch, from any page of the site: signed in, an
+ * account with no synced copy gets one from this browser at once; an account
+ * whose copy lives on other devices is reported as "join", for the page to
+ * offer letting this browser in (the app does it, at /lodestone-app/#sync,
+ * on the same storage). Asked once a minute at most per page.
+ */
+let autoAt = 0, autoLast = null, autoFor = null;
+export async function autoSync({ fresh = false } = {}) {
+  const { name } = await bind();
+  if (await syncer().isOn().catch(() => false)) return { state: "on" };   // local, and the common case
+  // The answer belongs to one memory: another account signed in here asks afresh.
+  if (!fresh && autoLast && autoFor === name && Date.now() - autoAt < 60000) return autoLast;
+  if (!available() || !(await signedIn())) return { state: "signed-out" };
+  const r = await syncer().ensure();
+  autoAt = Date.now(); autoLast = r; autoFor = name;
+  return r;
 }
 
 export async function syncSoon() {
@@ -277,6 +354,7 @@ export async function heldFetch(url, init = {}, ctx = {}) {
   let tok;
   try { if (!(await signedIn())) return fetch(url, init); tok = await auth(); } catch { return fetch(url, init); }
   await bind();
+  await autoSync();
   try { await migrate(); } catch (e) { console.warn("[held] migration later:", e?.message || e); }
   await freshen();
   await takePending();
@@ -363,7 +441,10 @@ async function runMigrate() {
     const j = await res.json().catch(() => ({}));
     if (!res.ok || j.error) throw new Error(j.error || `harmonism.io answered ${res.status}.`);
     if (!j.empty) {
-      if (!(await load())) await store.kv.set(COMPANION, { state: j.state, blocks: {}, at: Date.now() });
+      // The server's memory joins what this device already holds; it is never
+      // dropped because something got here first (a synced copy, an earlier turn).
+      const have = await load();
+      await store.kv.set(COMPANION, { state: mergeState(have?.state, j.state), blocks: have?.blocks || {}, at: Date.now() });
       const msgs = j.messages || [];
       if (msgs.length) {
         let t = await store.threads.get(WEB_THREAD);
@@ -424,10 +505,15 @@ async function confirmIfSynced(m) {
   if (res.ok && !j.error) await store.kv.set("held:migrated", { ...m, confirmed: Date.now() });
 }
 
-/** For a page to say where the memory is: { synced, migrated, confirmed }. */
+/** For a page to say where the memory is: { synced, state, last, pending, migrated, confirmed }. */
 export async function status() {
   await bind();
+  const a = await autoSync();
   const m = await store.kv.get("held:migrated");
-  const conf = await syncer().conf();
-  return { synced: !!conf.on, last: conf.last || null, migrated: !!m, confirmed: !!m?.confirmed };
+  const sy = syncer();
+  const conf = await sy.conf();
+  // Devices of this account waiting to be let in (shown only where this browser can let them in).
+  let pending = 0;
+  try { if (conf.on && (await sy.canLink())) pending = (await sy.pendingLinks()).length; } catch {}
+  return { synced: !!conf.on, state: a.state, last: conf.last || null, error: conf.error?.message || null, pending, migrated: !!m, confirmed: !!m?.confirmed };
 }

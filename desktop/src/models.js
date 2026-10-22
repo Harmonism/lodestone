@@ -128,7 +128,68 @@ const BUNDLED = [
     ugi: { w: 9.2, natint: 21.3, lean: -6.4, base: { w: 3.0, natint: 18.7, lean: -11.7 } },
     why: "Lodestone's minimum standard, for 16 GB computers. Uncensoring it made it more capable, and moved it toward the political centre.",
   },
+  // Added 18 Oct 2026 at Tahir's request, offered as untested; recommended from 16 GB up to 45 GB since 19 Oct; about 5.8 GB resident when loaded.
+  // Ternary weights (PTQ1_0) that only the Prism ML fork of llama.cpp can run, so
+  // this entry carries `engine: "prism"`: the first time it is downloaded, that
+  // engine is fetched too (PRISM_ENGINE below) and the model runs on it alone.
+  // Not through the fidelity suite: its calls timed out on 15 Oct, and its
+  // base, Qwen3.8-27B, gave the consensus answer on autism twice.
+  // Sizes and hashes from the HF API, 18 Oct 2026; the PTQ1_0 hash re-computed
+  // on the downloaded file.
+  {
+    id: "bonsai2-27b-heretic",
+    untested: true,
+    engine: "prism",
+    label: "Bonsai 2 27B · uncensored (Heretic), ternary",
+    repo: "OS-Software/Ternary-Bonsai-2-27B-Uncensored-Heretic-GGUF",
+    files: [{ path: "Ternary-Bonsai-2-27B-Uncensored-Heretic-PTQ1_0.gguf", size: 5946648928, sha256: "a18c3e17da397838305522b3ee877f9d2cbf4facd04ba01a394b22f3f3a477be" }],
+    mmproj: { repo: "OS-Software/Ternary-Bonsai-2-27B-Uncensored-Heretic-GGUF", path: "mmproj-Q8_0.gguf", size: 629246976, sha256: "6807ede61d570bb86ba34b756a0fa109edc33668604de867c6ea6d8f1d631903" },
+    minMem: 16, hand: "PrismML, on Alibaba's Qwen",
+    why: "A 27-billion-parameter model compressed to ternary weights, so it fits in 6 GB and runs on a 16 GB laptop. Not yet tested against Lodestone's doctrine: the model it was built from gave the consensus answer on autism in Harmonia's tests. It runs on a second engine, Prism ML's, downloaded with it (about 12–36 MB).",
+  },
+  // Added 19 Oct 2026 at Tahir's request, for computers under 16 GB: the
+  // only Bonsai that fits them. Prism ML's own ternary packing of Qwen 3.5 9B, the
+  // base withdrawn from this list on 29 Sep for answers that misrepresented the
+  // system; so it is labelled smaller and weaker as well as untested, and the
+  // welcome still offers DeepSeek V4.1 Flash first. Sizes and hashes from the HF
+  // API, 19 Oct 2026; the PTQ1_0 hash re-computed on the downloaded file.
+  {
+    id: "bonsai2-9b",
+    untested: true,
+    weaker: true,
+    engine: "prism",
+    label: "Bonsai 2 9B · unmodified, ternary",
+    repo: "prism-ml/Ternary-Bonsai-2-9B-gguf",
+    files: [{ path: "Ternary-Bonsai-2-9B-PTQ1_0.gguf", size: 1997486976, sha256: "3561df7ac7d26a71ffa991ac2db740b10841c3a350aa2676ccd3ff5d428b4e8b" }],
+    mmproj: { repo: "prism-ml/Ternary-Bonsai-2-9B-gguf", path: "Ternary-Bonsai-2-9B-mmproj-Q8_0.gguf", size: 624229664, sha256: "e0cb6f6988cea323ef798cd77d019bbb819af75582f034eaab0e7232314953db" },
+    minMem: 8, hand: "PrismML, on Alibaba's Qwen",
+    why: "For computers with less than 16 GB of memory: a 9-billion-parameter model in 2 GB. Smaller and weaker than the models above, and not yet tested against Lodestone's doctrine; the model it was built from, Qwen 3.5 9B, was withdrawn from Lodestone for answers that misrepresented the system. If the internet is at hand, DeepSeek V4.1 Flash through your account or your own key answers far better. It runs on Prism ML's engine, downloaded with it.",
+  },
 ];
+
+// The engine for `engine: "prism"` models: Prism ML's fork of llama.cpp, which
+// adds the ternary kernels mainline llama.cpp lacks (PTQ1_0, PQ2_0). The same
+// build Lode desktop runs (engines/prism-darwin-arm64: its llama-server is
+// byte-identical to this release's macOS arm64 one), where Bonsai first ran on
+// the Mac. Not bundled: fetched from the fork's GitHub release only when such a
+// model is first needed, checked against the SHA-256 GitHub publishes for each
+// asset (re-computed on the downloaded archives, 18 Oct 2026), and unpacked into
+// the data folder. One build per platform the app ships, the same back-ends as
+// the bundled engine: Metal on Apple silicon, Vulkan on Windows and Linux.
+const PRISM_ENGINE = {
+  tag: "prism-b10772-e8fd209",
+  assets: {
+    "darwin-arm64": { name: "llama-prism-b10772-e8fd209-bin-macos-arm64.tar.gz", size: 11534167, sha256: "b4cbf62095ab7f30bf5a5c457e415090777a8d185986300978ca297d88f9b7a3" },
+    "darwin-x64": { name: "llama-prism-b10772-e8fd209-bin-macos-x64.tar.gz", size: 11573384, sha256: "be57416ed344bf0415a23400e772d6ce9e329d2854e77fa0f94bd9e3af03598a" },
+    "linux-x64": { name: "llama-prism-b10772-e8fd209-bin-ubuntu-vulkan-x64.tar.gz", size: 35857261, sha256: "bf0849e2ad6ca39aed5338ab6072ea10f83c9ab28e30e1f34b553b87550af16e" },
+    "win32-x64": { name: "llama-prism-b10772-e8fd209-bin-win-vulkan-x64.zip", size: 31242630, sha256: "f365ad7c56fb9df8805eb4f701bd068ee36c61da894dc7c52f48644d1fa2b625" },
+  },
+};
+/** This computer's Prism engine archive, with its download address, or null. */
+function prismAsset(platform = process.platform, arch = process.arch) {
+  const a = PRISM_ENGINE.assets[`${platform}-${arch}`];
+  return a ? { ...a, url: `https://github.com/PrismML-Eng/llama.cpp/releases/download/${PRISM_ENGINE.tag}/${a.name}` } : null;
+}
 
 // A test-only entry, never shown: MUNAI_TEST_MODEL=tiny exercises the whole
 // download → engine → conversation path with a 0.5 GB file.
@@ -139,6 +200,8 @@ if (process.env.MUNAI_TEST_MODEL === "tiny") BUNDLED.push({
 });
 
 const MIN_MEM = 16;
+/** The least memory any model offered on this computer needs: 8 GB where Prism ML's engine runs (Bonsai 2 9B). */
+const minMemHere = () => (prismAsset() && CATALOG.some(m => m.id === SMALL_LOCAL.id) ? 8 : MIN_MEM);
 
 // The catalog in use: the one this version shipped with, or a newer one the
 // practitioner fetched from harmonism.io (Library Languages and Updates…).
@@ -150,9 +213,22 @@ const CATALOG = [...BUNDLED];
 const BUNDLED_DEFAULTS = [[240, "deepseek-v4-flash"], [46, "qwen35-35b-a3b"], [30, "gemma4-26b-heretic"], [0, "ministral-14b"]];
 const DEFAULTS = BUNDLED_DEFAULTS.map(d => [...d]);
 
-/** The default for a machine with `memGB` of RAM (unified memory on Apple silicon). */
+// The local model recommended where it runs, the one exception to "never a default":
+// Bonsai 2 27B Heretic, on computers of 16 GB up to the
+// class where a larger model fits (46 GB, Qwen 3.5 35B). Still shown as untested.
+// A model on this computer is no longer the first-launch default: DeepSeek V4.1
+// Flash, on the account or under the practitioner's key, is (launcher.html).
+const PREFERRED_LOCAL = { id: "bonsai2-27b-heretic", from: 15, below: 46 };   // 15: a "16 GB" PC can report a little under 16
+// Under 16 GB: the smaller Bonsai, where Prism ML's engine runs. 16 GB is the
+// floor for holding the doctrine; 8 GB the floor for any useful answer (Tahir, 19 Oct).
+const SMALL_LOCAL = { id: "bonsai2-9b", from: 7 };
+
+/** The model recommended for a machine with `memGB` of RAM (unified memory on Apple silicon). */
 function defaultFor(memGB) {
   if (process.env.MUNAI_TEST_MODEL === "tiny") return "tiny";
+  const has = id => prismAsset() && CATALOG.some(m => m.id === id && !m.retired);
+  if (memGB >= PREFERRED_LOCAL.from && memGB < PREFERRED_LOCAL.below && has(PREFERRED_LOCAL.id)) return PREFERRED_LOCAL.id;
+  if (memGB < PREFERRED_LOCAL.from && has(SMALL_LOCAL.id)) return SMALL_LOCAL.id;
   for (const [min, id] of DEFAULTS) if (memGB >= min && CATALOG.some(m => m.id === id && !m.retired)) return id;
   return CATALOG.filter(m => !m.retired).pop()?.id;
 }
@@ -201,22 +277,29 @@ const catalogHash = ({ models, defaults, recommended }) =>
  */
 function applyCatalog(data, keep = () => false) {
   const ids = new Set(data.models.map(m => m.id));
-  const kept = BUNDLED.filter(m => !ids.has(m.id) && keep(m));
+  // A model on a second engine belongs to the app version that knows that engine:
+  // it is never published (bundledData), so a fetched list never removes it.
+  const kept = BUNDLED.filter(m => !ids.has(m.id) && (m.engine || keep(m)));
   CATALOG.splice(0, CATALOG.length, ...data.models, ...kept);
   if (data.defaults.length) DEFAULTS.splice(0, DEFAULTS.length, ...data.defaults.sort((a, b) => b[0] - a[0]));
 }
 
 /** This version's own catalog, in the published shape (for the exporter and the comparison). */
 function bundledData(recommended) {
-  return { models: BUNDLED.map(m => ({ ...m })), defaults: BUNDLED_DEFAULTS.map(d => [...d]), recommended };
+  // Models on a second engine are left out: an older app reading the published
+  // list would download them and fail to load them on its own engine.
+  return { models: BUNDLED.filter(m => !m.engine).map(m => ({ ...m })), defaults: BUNDLED_DEFAULTS.map(d => [...d]), recommended };
 }
 
 const size = m => m.files.reduce((n, f) => n + f.size, 0);
 
 /** The next smaller model, offered when one will not load on this computer. */
 function smallerThan(m) {
-  return CATALOG.filter(x => x.id !== "tiny" && !x.retired && size(x) < size(m)).sort((a, b) => size(b) - size(a))[0] || null;
+  return CATALOG.filter(x => x.id !== "tiny" && !x.retired && !x.untested && size(x) < size(m)).sort((a, b) => size(b) - size(a))[0] || null;
 }
+
+/** The model's page on Hugging Face, where its files can also be downloaded by hand. */
+const page = m => `https://huggingface.co/${m.repo}`;
 
 const url = (repo, p) => `https://huggingface.co/${repo}/resolve/main/${p.split("/").map(encodeURIComponent).join("/")}`;
 
@@ -255,4 +338,4 @@ async function fromHuggingFace(input, fetch) {
   };
 }
 
-module.exports = { CATALOG, MIN_MEM, defaultFor, smallerThan, size, url, fromHuggingFace, validateCatalog, catalogHash, applyCatalog, bundledData };
+module.exports = { CATALOG, MIN_MEM, minMemHere, defaultFor, smallerThan, size, url, page, prismAsset, PRISM_ENGINE, fromHuggingFace, validateCatalog, catalogHash, applyCatalog, bundledData };

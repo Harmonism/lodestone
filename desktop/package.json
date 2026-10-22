@@ -1,7 +1,7 @@
 {
   "name": "munai-offline-desktop",
   "productName": "Lodestone",
-  "version": "1.9.0",
+  "version": "1.13.1",
   "description": "Lodestone, the Harmonist companion, and the harmonism.io library, on your own computer.",
   "homepage": "https://harmonism.io/lodestone-desktop",
   "author": {
@@ -76,7 +76,8 @@
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
-        "NSLocalNetworkUsageDescription": "Lets a phone on your Wi-Fi use Lodestone through this computer, when you turn that on."
+        "NSLocalNetworkUsageDescription": "Lets a phone on your Wi-Fi use Lodestone through this computer, when you turn that on.",
+        "NSMicrophoneUsageDescription": "Lodestone listens only while you dictate a message, after you click the microphone. Your voice is transcribed on this computer and goes nowhere."
       },
       "extraResources": [
         {

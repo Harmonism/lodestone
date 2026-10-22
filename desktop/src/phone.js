@@ -20,7 +20,9 @@ async function render(st) {
   const addr = st.addresses[0] ? `http://${st.addresses[0]}:${st.port}/lodestone-app/` : null;
   $("#on").hidden = !(st.lan && addr);
   $("#none").hidden = !(st.lan && !addr);
-  if (st.lan && addr) { $("#addr").textContent = addr; $("#qr").src = await D.qr(addr); }
+  // The browser's address carries the pairing code (1.13.1): opened from the QR code, the page pairs itself.
+  const withCode = addr && st.pair ? `${addr}#pair=${st.pair.code}` : addr;
+  if (st.lan && addr) { $("#addr").textContent = addr; if (withCode !== render.qrShown) { render.qrShown = withCode; $("#qr").src = await D.qr(withCode); } }
 }
 $("#lan").onchange = async e => render(await D.setLan(e.target.checked));
 D.phoneStatus().then(render);

@@ -4,7 +4,23 @@
 const THINK_RE = /<think>[\s\S]*?(<\/think>|$)/g;
 export const stripThink = s => s.replace(THINK_RE, "").replace(/^\s+/, "");
 
-export async function* readSSE(res) {
+/**
+ * The usage a provider reports at the end of a stream, in one shape:
+ * { in, out, cost } — cost in US dollars, or null when the provider gives none
+ * (OpenRouter gives it when asked with usage: { include: true }; a model on the
+ * practitioner's own computer costs nothing and reports tokens only).
+ */
+export function normUsage(u) {
+  if (!u || typeof u !== "object") return null;
+  const n = v => (Number.isFinite(Number(v)) ? Number(v) : 0);
+  const inTok = n(u.prompt_tokens ?? u.input_tokens), outTok = n(u.completion_tokens ?? u.output_tokens);
+  const cost = u.cost != null && Number.isFinite(Number(u.cost)) ? Number(u.cost) : null;
+  if (!inTok && !outTok && cost == null) return null;
+  return { in: inTok, out: outTok, cost };
+}
+
+/** `onUsage`, if given, receives the provider's usage block when the stream carries one. */
+export async function* readSSE(res, onUsage = null) {
   const reader = res.body.getReader(); const dec = new TextDecoder();
   let buf = "", raw = "";
   for (;;) {
@@ -20,6 +36,7 @@ export async function* readSSE(res) {
       let j;
       try { j = JSON.parse(payload); } catch { continue; }
       if (j.error) throw new Error(j.error.message || "The provider stopped.");
+      if (j.usage && onUsage) { try { onUsage(j.usage); } catch {} }
       const d = j.choices?.[0]?.delta?.content;
       if (d) { raw += d; yield stripThink(raw); }
     }

@@ -7,7 +7,9 @@ Two browsers stand for two devices on one harmonism.io account: a phone and a
 computer. The app is served at http://localhost:8797/lodestone-app/ (a secure
 context, as https is); /lodestone-sync-api.php is the real endpoint, run by
 `php -S` with sign-in verification stubbed (a token "tok-<uuid>" is that
-user). Both devices think with "No model", so no model is needed.
+user). Every device thinks with "No model", so no model is needed. The
+sign-in service is stood in for where a password is checked (page.route), as
+the endpoint's sign-in verification is.
 """
 import json, os, sqlite3, subprocess, sys, tempfile, threading, time, urllib.request, urllib.error
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
@@ -73,15 +75,17 @@ def main():
         session = json.dumps({"access_token": "tok-" + UID, "refresh_token": "R1", "expires_at": int(time.time()) + 3600, "token_type": "bearer", "user": {"email": "t@example.org"}})
         devices = {}
         errors = []
-        for name, opts in (("phone", iphone), ("computer", {"viewport": {"width": 1280, "height": 860}})):
+        signin = lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps({"access_token": "tok-" + UID, "refresh_token": "R2", "expires_in": 3600, "token_type": "bearer", "user": {"email": "t@example.org"}}))
+        for name, opts in (("phone", iphone), ("computer", {"viewport": {"width": 1280, "height": 860}}), ("laptop", {"viewport": {"width": 1280, "height": 860}}), ("tablet", {"viewport": {"width": 1280, "height": 860}})):
             ctx = b.new_context(**opts)
             ctx.add_init_script(f"try {{ localStorage.setItem({json.dumps(SB_KEY)}, {json.dumps(session)}); }} catch {{}}")
             pg = ctx.new_page()
             pg.on("pageerror", lambda e, n=name: errors.append(f"{n}: {e}"))
             pg.on("console", lambda m, n=name: m.type == "error" and not m.text.startswith("Failed to load resource") and errors.append(f"{n}: {m.text}"))
             pg.on("dialog", lambda d: d.accept())
+            pg.route("**/auth/v1/token**", signin)   # the password is checked by the sign-in service: stood in for here
             devices[name] = pg
-        A, B = devices["phone"], devices["computer"]
+        A, B, C, D = devices["phone"], devices["computer"], devices["laptop"], devices["tablet"]
         base = f"http://localhost:{PORT}/lodestone-app/"
 
         def setup(pg, question):
@@ -97,10 +101,11 @@ def main():
             pg.wait_for_function("!document.querySelector('#sendBtn').classList.contains('stop') && document.querySelectorAll('.msg.assistant').length >= 1", timeout=20000)
             pg.wait_for_timeout(800)
 
-        js = lambda pg, code: pg.evaluate(f"(async () => {{ const store = await import('./js/store.js'); const phone = await import('./js/phone.js'); {code} }})()")
+        js = lambda pg, code: pg.evaluate(f"(async () => {{ const store = await import('./js/store.js'); const phone = await import('./js/phone.js'); const unlock = await import('./js/unlock.js'); {code} }})()")
         count = lambda pg: js(pg, "return (await store.threads.list()).length;")
         def settings(pg):
-            if pg.is_hidden("#drawerSettings"): pg.click("#btnSettings")
+            # The top button, or the one under the docked conversations (wide windows): whichever shows.
+            if pg.is_hidden("#drawerSettings"): pg.evaluate("[...document.querySelectorAll('#btnSettings, #btnSettingsSide')].find(b => b.offsetParent)?.click()")
             pg.wait_for_selector("#setSync:not([hidden])", timeout=8000); pg.wait_for_timeout(400)
         def close(pg): pg.keyboard.press("Escape"); pg.wait_for_timeout(200)
         def wait_synced(pg, t=15000):
@@ -109,21 +114,18 @@ def main():
         def db(q, *a):
             c = sqlite3.connect(DB); r = c.execute(q, a).fetchall(); c.close(); return r
 
-        # ── the phone turns sync on ──────────────────────────────────────────
+        # ── the phone: signed in, sync is on by itself ───────────────
         setup(A, "What is Presence? MARKER-ALPHA")
         js(A, f"await phone.secrets.set('openrouter', {json.dumps(GOOD)}); await store.kv.set('practices', [{{id:'p1', title:'Morning sitting'}}]);")
         settings(A)
-        check("sync is off by default, saying memory is on this device only", "Off" in A.text_content("#syncStatus") and A.is_visible("#syncOn"), A.text_content("#syncStatus"))
-        fine = A.text_content("#syncBody")
-        check("the notice says it is kept on harmonism.io, encrypted, unreadable to Harmonia, and that a lost passphrase loses it",
-              all(w in fine for w in ["keeps a copy", "harmonism.io", "encrypts", "Harmonia cannot read it", "forget the passphrase"]) and "as published" in fine)
-        A.click("#syncOn"); A.wait_for_selector("#syncPass")
-        check("first device is asked to choose a passphrase twice", A.is_visible("#syncPass2"), A.text_content("#syncStatus"))
-        A.fill("#syncPass", "short"); A.fill("#syncPass2", "short"); A.click("#syncGo")
-        A.wait_for_function("document.querySelector('#syncMsg').textContent.includes('ten characters')", timeout=5000)
-        check("a short passphrase is refused", True)
-        A.fill("#syncPass", PASS); A.fill("#syncPass2", PASS); A.check("#syncSetupKey"); A.click("#syncGo")
         A.wait_for_selector("#syncNow", timeout=30000)
+        check("signed in, the first device turns sync on by itself, with nothing to press and no passphrase", A.locator("#syncOn").count() == 0 and A.locator("#syncPass").count() == 0, A.text_content("#syncStatus"))
+        check("no offer to be let in on the first device", A.is_hidden("#syncBanner"))
+        fine = A.text_content("#syncBody")
+        check("the notice says it is kept on harmonism.io, encrypted, opened by the password, unreadable as kept, and lost only without password and recovery code",
+              all(w in fine for w in ["keeps a copy", "harmonism.io", "encrypts", "your password", "it cannot read", "recovery code"]) and "as published" in fine)
+        check("the OpenRouter key travels by default", A.is_checked("#syncKey"))
+        A.click("#syncNow"); A.wait_for_timeout(300)
         st = wait_synced(A)
         A.screenshot(path=os.path.join(ROOT, "sync-phone.png"), full_page=False)
         check("the phone is on and synced", "Synced" in st and "encrypted" in st, st)
@@ -131,25 +133,39 @@ def main():
         blob = " ".join(r[1] for r in rows) + " " + " ".join(r[0] for r in rows)
         check("the server holds records", len(rows) >= 3, f"{len(rows)} records")
         check("nothing readable reaches the server (text, key, names)", not any(w in blob for w in SECRET_WORDS + [GOOD, "practices", "profile", "openrouter"]))
-        meta = db("SELECT uid, salt, chk FROM space")
-        check("the space is kept under the account id, with a salt and a check value only", len(meta) == 1 and meta[0][0] == UID)
+        meta = db("SELECT uid, v FROM space")
+        check("the space is kept under the account id, as a linked copy (v2)", len(meta) == 1 and meta[0][0] == UID and meta[0][1] == 2, str(meta))
         close(A)
 
         # ── the computer joins ───────────────────────────────────────────────
         setup(B, "Tell me about Dharma. MARKER-BETA")
         js(B, "await store.kv.set('practices', [{id:'p2', title:'Evening walk'}]);")
-        settings(B)
-        B.click("#syncOn"); B.wait_for_selector("#syncPass")
-        check("second device finds the synced copy and asks for its passphrase only", "already has a synced copy" in B.text_content("#syncStatus") and B.is_hidden("#syncPass2"), B.text_content("#syncStatus"))
-        B.fill("#syncPass", "a wrong passphrase entirely"); B.click("#syncGo")
-        B.wait_for_function("document.querySelector('#syncMsg').textContent.includes('does not open')", timeout=15000)
-        check("a wrong passphrase is refused", True, B.text_content("#syncMsg"))
-        B.fill("#syncPass", PASS); B.check("#syncSetupKey"); B.click("#syncGo")
+        B.wait_for_selector("#syncAsk", timeout=15000)
+        check("the second device offers, above the conversation, to be let in", B.is_visible("#syncAskGo") and "another of your devices" in B.text_content("#syncAsk"))
+        B.click("#syncAskGo"); B.wait_for_selector("#syncBody .link-code", timeout=15000)
+        check("one tap waits to be let in, asking for no code and no passphrase", "already syncs" in B.text_content("#syncStatus") and B.locator("#syncBody input[type=password]").count() == 0, B.text_content("#syncBody .link-code"))
+        B.uncheck("#syncSetupKey")   # left unticked: a device with no key of its own takes the synced one anyway
+        # The person turns to the phone: it shows the request above the conversation, Settings closed.
+        A.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+        A.wait_for_selector("#syncBanner .link-request", timeout=15000)
+        check("the phone shows the computer waiting, without Settings being opened, with nothing to type", A.locator("#syncBanner .link-request").count() == 1 and A.is_hidden("#drawerSettings") and A.locator("#syncBanner .link-request input").count() == 0)
+        A.click("#syncBanner .link-request button:has-text('Let it in')")
+        A.wait_for_selector("#syncBanner .link-request .link-code", timeout=20000)
+        B.wait_for_function("/^\\d{3} \\d{3}$/.test(document.querySelector('#syncBody .link-code').textContent)", timeout=20000)
+        na, nb = A.text_content("#syncBanner .link-request .link-code").strip(), B.text_content("#syncBody .link-code").strip()
+        check("both devices show the same six-digit number", na == nb and len(na) == 7, f"{na} / {nb}")
+        check("nothing is sent before the tap that confirms it", B.locator("#syncNow").count() == 0 and not db("SELECT id FROM link WHERE box IS NOT NULL"))
+        A.click("#syncBanner .link-request button:has-text('Yes, let it in')")
         B.wait_for_selector("#syncNow", timeout=30000)
+        check("the tap lets it in, and the handover leaves nothing on the server", not db("SELECT id FROM link"))
+        B.wait_for_selector("#syncAsk", state="detached", timeout=10000)
+        check("the offer leaves the computer once it is in", B.locator("#syncAsk").count() == 0)
+        A.wait_for_selector("#syncBanner .link-request", state="detached", timeout=15000)
+        check("the request leaves the phone once answered", A.is_hidden("#syncBanner"))
         wait_synced(B)
         check("the computer now has both conversations", count(B) == 2, str(count(B)))
         k = js(B, "return await phone.secrets.get('openrouter');")
-        check("the OpenRouter key arrived, ticked on both", k == GOOD, str(k))
+        check("the OpenRouter key arrived on a device that had none, even unticked, and travels from it now", k == GOOD and js(B, "return (await (await import('./js/held.js')).syncer().conf()).key") is not None, str(k))
         pr = js(B, "return (await store.kv.get('practices')).map(p => p.id).sort();")
         check("practices merged by id on the computer", pr == ["p1", "p2"], str(pr))
         close(B)
@@ -159,6 +175,35 @@ def main():
         pr = js(A, "return (await store.kv.get('practices')).map(p => p.id).sort();")
         check("practices merged on the phone", pr == ["p1", "p2"], str(pr))
         close(A)
+
+        # ── the password opens the memory on a new device (October 20, 2026) ─
+        settings(A); A.wait_for_selector("#syncBody button:has-text('Use my password')", timeout=15000)
+        A.fill("#syncBody input[placeholder='Your harmonism.io password']", PASS); A.click("#syncBody button:has-text('Use my password')")
+        A.wait_for_function("document.querySelector('#syncBody').textContent.includes('Done: signing in on another device')", timeout=30000)
+        lock = db("SELECT box FROM unlock")
+        check("typed once on a synced device, the password locks the key with the copy (unreadable)", len(lock) == 1 and PASS not in lock[0][0], str(len(lock)))
+        close(A)
+        # The laptop's sign-in page (member/login.php) keeps the stretched password; then Lodestone opens.
+        C.goto(base); js(C, f"await unlock.stashPassword('t@example.org', {json.dumps(PASS)});")
+        setup(C, "A question on the laptop.")
+        settings(C); C.wait_for_selector("#syncNow", timeout=30000); wait_synced(C)
+        check("signed in with the password, a new device is in by itself: no code, no tap", C.is_hidden("#syncBanner") and count(C) >= 3, str(count(C)))
+        close(C)
+        # The tablet signed in without typing it here: it types the password once, in Lodestone.
+        setup(D, "A question on the tablet.")
+        D.wait_for_selector("#syncAsk", timeout=15000); D.click("#syncAskGo")
+        D.wait_for_selector("#syncBody button:has-text('Open my memory')", timeout=15000)
+        D.fill("#syncBody input[placeholder='Your harmonism.io password']", "not the password")
+        D.unroute("**/auth/v1/token**"); D.route("**/auth/v1/token**", lambda r: r.fulfill(status=400, content_type="application/json", body=json.dumps({"error_description": "Invalid login credentials"})))
+        D.click("#syncBody button:has-text('Open my memory')"); D.wait_for_timeout(1500)
+        check("a wrong password is refused by the sign-in service, and nothing opens", D.locator("#syncNow").count() == 0 and "do not match" in D.text_content("#syncBody"))
+        D.unroute("**/auth/v1/token**"); D.route("**/auth/v1/token**", signin)
+        D.fill("#syncBody input[placeholder='Your harmonism.io password']", PASS); D.click("#syncBody button:has-text('Open my memory')")
+        D.wait_for_selector("#syncNow", timeout=30000); wait_synced(D)
+        check("the right password opens it there and then", count(D) >= 4, str(count(D)))
+        check("no request is left waiting on the server", not db("SELECT id FROM link"))
+        close(D)
+        for pg in (A, B): settings(pg); pg.click("#syncNow"); pg.wait_for_timeout(300); wait_synced(pg); close(pg)
 
         # ── both devices add to the same conversation, then sync ─────────────
         tid = js(A, "return (await store.threads.list()).find(t => t.title.includes('Presence') || true).id;")
@@ -177,11 +222,12 @@ def main():
         check("the open conversation on the phone shows the computer's message", "Added on the computer" in shown)
 
         # ── a deletion travels ───────────────────────────────────────────────
+        n_threads = count(B)
         other = js(B, f"return (await store.threads.list()).map(t => t.id).find(i => i !== {json.dumps(tid)});")
         js(B, f"await store.threads.remove({json.dumps(other)});")
         settings(B); B.click("#syncNow"); B.wait_for_timeout(300); wait_synced(B); close(B)
         settings(A); A.click("#syncNow"); A.wait_for_timeout(300); wait_synced(A); close(A)
-        check("a conversation deleted on the computer is deleted on the phone", count(A) == 1 and count(B) == 1, f"{count(A)} / {count(B)}")
+        check("a conversation deleted on the computer is deleted on the phone", count(A) == count(B) and count(A) == n_threads - 1, f"{count(A)} / {count(B)}")
 
         # ── the key withdrawn ────────────────────────────────────────────────
         settings(A); A.uncheck("#syncKey"); A.wait_for_timeout(1500); wait_synced(A); close(A)
@@ -197,19 +243,33 @@ def main():
         A.reload(); A.wait_for_selector("#main:not([hidden])", timeout=30000); A.wait_for_timeout(2500)
         check("opening Lodestone syncs without a press", "After reload" in msgs(A), str(msgs(A)[-2:]))
 
-        # ── a new passphrase elsewhere stops the other device ────────────────
+        # ── the copy started again elsewhere stops the other device ──────────
         settings(B); B.click("#syncOff"); B.wait_for_selector("#syncOn")
         check("turning off on one device keeps the synced copy", len(db("SELECT uid FROM space")) == 1)
-        B.click("#syncOn"); B.wait_for_selector("#syncForgot"); B.click("#syncForgot"); B.wait_for_selector("#syncPass2")
-        B.fill("#syncPass", "a brand new passphrase here"); B.fill("#syncPass2", "a brand new passphrase here"); B.click("#syncGo")
+        B.reload(); B.wait_for_selector("#main:not([hidden])", timeout=30000); B.wait_for_timeout(1500); settings(B)
+        check("turned off by the person, it stays off after a reload, with no offer to be let in", B.is_visible("#syncOn") and B.is_hidden("#syncBanner"), B.text_content("#syncStatus"))
+        B.click("#syncOn"); B.wait_for_selector("#syncBody .link-code", timeout=15000)
+        B.click(".link-alt summary"); B.click(".link-alt button:has-text('Start the synced copy here')")
+        B.wait_for_selector("#syncGo"); B.click("#syncGo")
         B.wait_for_selector("#syncNow", timeout=30000); wait_synced(B); close(B)
         settings(A); A.click("#syncNow"); A.wait_for_timeout(600)
         A.wait_for_selector("#syncOn", timeout=15000)
-        check("the phone stops and asks for the new passphrase", "new passphrase" in A.text_content("#syncStatus"), A.text_content("#syncStatus"))
-        check("the phone's memory is untouched", count(A) == 1)
-        A.click("#syncOn"); A.wait_for_selector("#syncPass"); A.fill("#syncPass", "a brand new passphrase here"); A.click("#syncGo")
-        A.wait_for_selector("#syncNow", timeout=30000); st = wait_synced(A)
-        check("the phone rejoins under the new passphrase", "Synced" in st, st)
+        check("the phone stops and says the copy was started again", "started again" in A.text_content("#syncStatus"), A.text_content("#syncStatus"))
+        check("the phone's memory is untouched", count(A) == n_threads - 1)
+        # The phone holds the password's key (typed above), but the copy started again on the
+        # computer, which never had the password: the phone is let in by a tap.
+        A.click("#syncOn"); A.wait_for_selector("#syncBody .link-code", timeout=15000)
+        settings(B); B.wait_for_selector("#syncBody .link-request", timeout=15000); B.click("#syncBody .link-request button:has-text('Let it in')")
+        B.wait_for_selector("#syncBody .link-request .link-code", timeout=20000); B.click("#syncBody .link-request button:has-text('Yes, let it in')")
+        A.wait_for_selector("#syncNow", timeout=30000); st = wait_synced(A); close(B)
+        lock = db("SELECT epoch FROM unlock"); sp = db("SELECT epoch FROM space")
+        check("let in again, the phone locks the new copy under the password it holds", len(lock) == 1 and lock[0][0] == sp[0][0], f"{lock} {sp}")
+        check("the computer lets the phone back in", "Synced" in st, st)
+
+        # ── the recovery code ────────────────────────────────────────────────
+        settings(A); A.click("#syncBody button:has-text('Recovery code')"); A.wait_for_selector(".recovery code")
+        rc = A.text_content(".recovery code").strip()
+        check("the recovery code is the key, shown only when asked (52 characters)", len(rc.replace("-", "")) == 52, rc[:9] + "…")
 
         # ── erase ────────────────────────────────────────────────────────────
         A.click("#syncErase"); A.wait_for_selector("#syncOn", timeout=10000)

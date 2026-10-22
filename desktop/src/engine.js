@@ -11,6 +11,12 @@ const net = require("net");
 const path = require("path");
 
 const NUM_CTX = 32768;
+// The engine answers only Lodestone's own server, which runs in the app's main
+// process and sends this key (as Lode desktop 0.10.1 does with its engine):
+// a key made at each start and never written down, no /slots (which serves the
+// prompt back), and CORS to an origin that does not exist, so no web page in a
+// browser on this computer can read its answers.
+const NO_ORIGIN = "https://lodestone.invalid";
 const EXE = process.platform === "win32" ? "llama-server.exe" : "llama-server";
 
 function engineDir(packaged, resourcesPath) {
@@ -56,18 +62,24 @@ class Engine {
   get url() { return this.port ? `http://127.0.0.1:${this.port}` : null; }
   get running() { return !!(this.proc && this.proc.exitCode === null && this.port); }
 
-  /** Start on `modelPath`; resolves once the model is loaded and answering. */
-  async start(modelPath, { onStatus = () => {}, mmproj = null } = {}) {
+  /**
+   * Start on `modelPath`; resolves once the model is loaded and answering.
+   * `dir` names another engine build for this one model (the Prism engine a
+   * ternary model needs); without it the bundled engine runs.
+   */
+  async start(modelPath, { onStatus = () => {}, mmproj = null, dir = null, keyOnCommandLine = false } = {}) {
     await this.stop();
     if (this.pidFile) killStale(this.pidFile);
-    const bin = path.join(this.dir, EXE);
+    dir = dir || this.dir;
+    const bin = path.join(dir, EXE);
     if (!fs.existsSync(bin)) throw new Error(`The engine is missing from this installation (${bin}).`);
     if (process.platform !== "win32") { try { fs.chmodSync(bin, 0o755); } catch {} }
     // macOS marks everything in a downloaded app as quarantined; the app itself
     // was approved when it was first opened, and its own engine needs no second
     // approval. Fails harmlessly where the app sits on a read-only volume.
-    if (process.platform === "darwin") { try { execFileSync("/usr/bin/xattr", ["-dr", "com.apple.quarantine", this.dir]); } catch {} }
+    if (process.platform === "darwin") { try { execFileSync("/usr/bin/xattr", ["-dr", "com.apple.quarantine", dir]); } catch {} }
     const port = await freePort();
+    this.apiKey = require("crypto").randomBytes(18).toString("base64url");
     const args = [
       "-m", modelPath, "--host", "127.0.0.1", "--port", String(port),
       "-c", String(NUM_CTX),            // the whole backbone, retrieval and history
@@ -79,15 +91,24 @@ class Engine {
       "--reasoning-budget", "0",
       "--chat-template-kwargs", '{"enable_thinking":false}',
       "--no-webui",
+      "--no-slots",
+      "--cors-origins", NO_ORIGIN,
+      // The key goes in the environment, where another user of this computer cannot
+      // read it from the process list (1.13.1); on the command line only if an
+      // engine turns out not to read it there (checked below).
+      ...(keyOnCommandLine ? ["--api-key", this.apiKey] : []),
     ];
     // The vision projector, when it has been downloaded: images in the chat request are then seen.
     if (mmproj && fs.existsSync(mmproj)) args.push("--mmproj", mmproj);
-    const env = { ...process.env };
-    if (process.platform === "linux") env.LD_LIBRARY_PATH = [this.dir, env.LD_LIBRARY_PATH].filter(Boolean).join(":");
+    // The engine is given no one's secrets, nor settings that would change it behind these flags (1.12, after Lode).
+    const env = {};
+    for (const [k, v] of Object.entries(process.env)) if (!/(_API_KEY|_TOKEN|_SECRET|_PASSWORD)$|^LLAMA_ARG_|^OPENROUTER|^ANTHROPIC|^OPENAI/i.test(k)) env[k] = v;
+    if (!keyOnCommandLine) env.LLAMA_API_KEY = this.apiKey;
+    if (process.platform === "linux") env.LD_LIBRARY_PATH = [dir, env.LD_LIBRARY_PATH].filter(Boolean).join(":");
     this.tail = [];
     let log = null;
     try { log = fs.createWriteStream(this.logFile, { flags: "w" }); } catch {}
-    const proc = spawn(path.join(this.dir, EXE), args, { cwd: this.dir, env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+    const proc = spawn(bin, args, { cwd: dir, env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
     this.proc = proc; this.model = modelPath; this.mmproj = mmproj && fs.existsSync(mmproj) ? mmproj : null;
     if (this.pidFile && proc.pid) { try { fs.writeFileSync(this.pidFile, String(proc.pid)); } catch {} }
     const onData = d => {
@@ -102,13 +123,23 @@ class Engine {
     onStatus("Waking Lodestone…");
     const started = Date.now();
     for (;;) {
+      // A newer start took over (1.13.1): this one ends without touching the newer process.
+      if (this.proc !== proc) { try { proc.kill(); } catch {} throw new EngineError("Replaced by another start.", ""); }
       if (exited) {
-        this.proc = null;
+        if (this.proc === proc) this.proc = null;
         throw new EngineError(explain(this.tail), this.tail.slice(-12).join("\n"));
       }
       try {
-        const r = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(2000) });
-        if (r.ok) { this.port = port; return port; }
+        const r = await fetch(`http://127.0.0.1:${port}/health`, { headers: { Authorization: `Bearer ${this.apiKey}` }, signal: AbortSignal.timeout(2000) });
+        if (r.ok && this.proc === proc) {
+          // An engine that answers without the key did not take it from the environment: start again with it on the command line.
+          if (!keyOnCommandLine) {
+            // A request the server would refuse anyway (an empty body), sent without the key: 401 means the key holds.
+            const open = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", signal: AbortSignal.timeout(3000) }).catch(() => null);
+            if (open && open.status !== 401) return this.start(modelPath, { onStatus, mmproj, dir, keyOnCommandLine: true });
+          }
+          this.port = port; return port;
+        }
       } catch {}
       if (Date.now() - started > 15 * 60 * 1000) { await this.stop(); throw new EngineError("The model took too long to load.", this.tail.slice(-12).join("\n")); }
       await new Promise(r => setTimeout(r, 400));
@@ -151,4 +182,4 @@ function explain(tail) {
   return "The model stopped while loading.";
 }
 
-module.exports = { Engine, EngineError, engineDir, NUM_CTX };
+module.exports = { Engine, EngineError, engineDir, NUM_CTX, EXE };

@@ -39,6 +39,8 @@ export function wire(desktop = null, opts = {}) {
           try { tok = await hosted.token(force); } catch (e) { throw new SyncError("auth", String(e.message || e), 401); }
           return fetch(site() + "/lodestone-sync-api.php" + query, {
             method, cache: "no-store",
+            // A connection that hangs is given up after a minute, and tried on the next tick.
+            signal: AbortSignal.timeout ? AbortSignal.timeout(60000) : undefined,
             headers: { Authorization: `Bearer ${tok}`, ...(body != null ? { "Content-Type": "application/json" } : {}) },
             body: body != null ? JSON.stringify(body) : undefined,
           });
@@ -71,6 +73,8 @@ export function wire(desktop = null, opts = {}) {
         try {
           res = await lanFetch(p.base + "/munai-sync" + query, {
             method, cache: "no-store",
+            // A connection that hangs is given up after a minute, and tried on the next tick.
+            signal: AbortSignal.timeout ? AbortSignal.timeout(60000) : undefined,
             headers: { Authorization: `Bearer ${p.token}`, ...(body != null ? { "Content-Type": "application/json" } : {}) },
             body: body != null ? JSON.stringify(body) : undefined,
           });

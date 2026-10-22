@@ -208,6 +208,9 @@ async function chat(fetchFn, conf, key, o, signal) {
   }
   const { chat_template_kwargs, ...rest } = o;   // the bundled engine's switch, unknown elsewhere
   const body = { ...rest, model: c.model, stream: true };
+  // The page asks for the turn's usage (stream_options); OpenRouter adds its cost
+  // in dollars when asked this way, for the conversation's running total.
+  if (c.preset === "openrouter") body.usage = { include: true };
   // A recommended model on OpenRouter runs as hosted Lodestone runs it: reasoning off
   // where the provider allows it, a token floor where reasoning is mandatory, and
   // only providers that do not keep the conversation for training.

@@ -20,9 +20,10 @@ rsync -a --delete --delete-excluded \
   --exclude='/app/vendor/models/**/*.onnx' \
   --include='/desktop/engines/*.sha256' --exclude='/desktop/engines/*' \
   --exclude='/desktop/site-en/' --exclude='/desktop/build-res/' \
-  --exclude='/desktop/dist/' --exclude='/desktop/release/' \
+  --exclude='/desktop/dist/' --exclude='/desktop/release/' --exclude='/desktop/release-old/' \
+  --exclude='/.computer-zip/' \
   --exclude='/.site-packs/' --exclude='node_modules/' --exclude='__pycache__/' --exclude='*.pyc' \
-  --exclude='/mobile/keys/' --exclude='/mobile/release/' \
+  --exclude='/mobile/keys/' --exclude='/mobile/release/' --exclude='/desktop/keys/' \
   --exclude='/mobile/android/.gradle/' --exclude='/mobile/android/**/build/' \
   --exclude='/mobile/android/local.properties' \
   --exclude='*.local' --exclude='*.bak-*' --exclude='.DS_Store' \
@@ -41,7 +42,7 @@ check "secrets"               'sk-or-v1-[0-9a-f]{64}|sk-ant-api[0-9]{2}-[A-Za-z0
 if [ -f "$SRC/tools/hold-subject.local" ]; then
   check "held subjects" "$(tr -d '\n' < "$SRC/tools/hold-subject.local")" '-i --exclude=tokenizer.json'
 fi
-bad_files="$(find "$DEST" -path "$DEST/.git" -prune -o -type f \( -name '*.jks' -o -name '*.keystore' -o -name 'keystore.properties' -o -name '*.local' -o -size +50M \) -print)"
+bad_files="$(find "$DEST" -path "$DEST/.git" -prune -o -type f \( -name '*.jks' -o -name '*.keystore' -o -name '*.p12' -o -name 'lodestone-mac-signing.*' -o -name 'keystore.properties' -o -name '*.local' -o -size +50M \) -print)"
 if [ -n "$bad_files" ]; then echo "  ✘ files that must not be published:"; echo "$bad_files" | sed 's/^/    /'; fail=1; fi
 
 if [ "$fail" -ne 0 ]; then echo "==> refused: fix the source, then run again"; exit 1; fi

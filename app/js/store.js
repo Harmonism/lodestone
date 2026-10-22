@@ -193,7 +193,8 @@ export const threads = {
 
 export const messages = {
   forThread: threadId => tx("messages", "readonly", s => reqP(s.index("thread").getAll(threadId))).then(a => a.sort((x, y) => x.ts - y.ts || x.id - y.id)),
-  add: m => tx("messages", "readwrite", s => reqP(s.add({ ...m, ts: m.ts || Date.now() }))),
+  // The time is set on the caller's object too (1.13.1): the copy in memory and the stored one agree, and the summary's cut-off is a time.
+  add: m => { if (!m.ts) m.ts = Date.now(); return tx("messages", "readwrite", s => reqP(s.add({ ...m }))); },
   put: m => tx("messages", "readwrite", s => { s.put(m); }),
   del: id => tx("messages", "readwrite", s => { s.delete(id); }),
   since: ts => tx("messages", "readonly", s => reqP(s.index("ts").getAll(IDBKeyRange.lowerBound(ts)))),
@@ -202,13 +203,14 @@ export const messages = {
 
 export async function exportAll() {
   const [ths, msgs] = await Promise.all([threads.list(), messages.all()]);
-  const keys = ["profile", "wheel", "practices", "assessment", "settings"];
+  // The whole memory (1.13.1): what sync carries, not only the first five.
+  const keys = ["profile", "wheel", "practices", "assessment", "settings", "companion", "hp_code", "learned", "reading", "outreach", "lifebook"];
   const kvs = {};
   for (const k of keys) kvs[k] = await kv.get(k);
   return { format: "munai-offline-memory", version: 1, exported_at: new Date().toISOString(), kv: kvs, threads: ths, messages: msgs };
 }
 
-export async function importAll(data, { merge = true } = {}) {
+export async function importAll(data, { merge = true, mergeKv = null } = {}) {
   if (!data || data.format !== "munai-offline-memory") throw new Error("Not a Lodestone memory file.");
   if (!merge) await wipeMemory();
   for (const [k, v] of Object.entries(data.kv || {})) {
@@ -218,6 +220,10 @@ export async function importAll(data, { merge = true } = {}) {
       const cur = (await kv.get("practices", [])) || [];
       const ids = new Set(cur.map(p => p.id));
       await kv.set("practices", cur.concat(v.filter(p => !ids.has(p.id))));
+    } else if (merge && mergeKv) {
+      // Joined with what this device holds, as sync joins them (1.13.1): an import no longer replaces the notes or the Wheel.
+      const cur = await kv.get(k);
+      await kv.set(k, cur == null ? v : mergeKv(k, cur, v));
     } else {
       await kv.set(k, v);
     }
@@ -236,7 +242,7 @@ export async function importAll(data, { merge = true } = {}) {
 export async function wipeMemory() {
   await tx("messages", "readwrite", s => { s.clear(); });
   await tx("threads", "readwrite", s => { s.clear(); });
-  for (const k of ["profile", "wheel", "practices", "assessment"]) await kv.del(k);
+  for (const k of ["profile", "wheel", "practices", "assessment", "recall:index", "recall:forgotten", "sitting"]) await kv.del(k);
 }
 
 export async function wipeEverything() {
@@ -248,3 +254,4 @@ export async function wipeEverything() {
   for (const n of names) await new Promise(res => { const r = indexedDB.deleteDatabase(n); r.onsuccess = r.onerror = r.onblocked = () => res(); });
   if (self.caches) for (const k of await caches.keys()) await caches.delete(k);
 }
+

@@ -4,7 +4,13 @@
 // so the offline companion and the live one share one source of truth.
 
 const LANGS = ["en", "fr", "es", "ar"];
-const normalize = s => s.toLowerCase().replace(/\s+/gu, " ").trim();
+// One form for the message and the patterns alike (1.13.1): accents and Arabic
+// marks (harakat, hamza seats, tatweel) gone, the alif and ya forms folded,
+// typographic apostrophes (an iPhone's ’) made plain. Without it "I’m going to
+// kill myself", typed on a phone, matched none of the patterns.
+// Apostrophes first: NFKD makes "´" a space and an accent, and the accent goes.
+export const normalize = s => String(s || "").replace(/[’‘ʼ´`]/g, "'").normalize("NFKD").replace(/\p{M}/gu, "")
+  .replace(/\u0640/g, "").replace(/[ٱ]/g, "ا").replace(/ى/g, "ي").toLowerCase().replace(/\s+/gu, " ").trim();
 
 export function detectLang(text, preferred = "auto") {
   if (preferred !== "auto" && LANGS.includes(preferred)) return preferred;
@@ -12,7 +18,8 @@ export function detectLang(text, preferred = "auto") {
   const words = normalize(text).replace(/[’]/g, "'").split(/[^\p{L}']+/u);
   const FR = new Set("je j' tu vous il elle est suis sommes les des une un pas ne pour avec mon ma mes ton ta c'est qu' que qui être très veux peux dans sur mais aussi comment pourquoi quoi moi me".split(" "));
   const ES = new Set("yo tú usted él ella está estoy soy los las una por para con mi mis tu qué que quién muy pero cómo por qué quiero puedo también ya no".split(" "));
-  const EN = new Set("i you he she the is am are and with my your what how why this that it's i'm want can not".split(" "));
+  // "me" is French and English: with English's commonest words here too, "everyone would be better off without me" reads as English (1.13).
+  const EN = new Set("i you he she the is am are and with my your what how why this that it's i'm want can not me be would to of a an in on for we was were have has do don't off without just so but if all they them there feel been will could should".split(" "));
   let fr = 0, es = 0, en = 0;
   for (const w of words) {
     if (!w) continue;
@@ -31,7 +38,7 @@ export function detectLang(text, preferred = "auto") {
  *  detection is heuristic, so every language's patterns are checked and the reply follows the
  *  language of the pattern that matched. A missed crisis costs more than a wrong-language template. */
 export function detectCrisis(message, lang, library) {
-  if (!message || message.length > 5000) return null;
+  if (!message) return null;   // no upper bound (1.13.1): a long journal ending in a crisis is read to its end
   const n = normalize(message);
   const order = [lang, ...LANGS.filter(l => l !== lang)].filter(l => LANGS.includes(l));
   for (const [category, def] of Object.entries(library.patterns.categories || {})) {
@@ -63,9 +70,27 @@ export function buildCrisisResponse(category, country, lang, library) {
   return (cat[key] || cat.en).replace("%RESOURCE%", block);
 }
 
+/**
+ * The crisis line alone (1.13), for a care moment the second layer found
+ * (care.js): shown by the app beneath the model's answer, never written by it.
+ */
+export function crisisLine(country, lang, library) {
+  const key = LANGS.includes(lang) ? lang : "en";
+  const res = country ? (library.resources || {})[String(country).toUpperCase().trim()] : null;
+  const lead = {
+    en: "If you are thinking of ending your life or of harming yourself, please speak with someone now:",
+    fr: "Si vous pensez à mettre fin à vos jours ou à vous faire du mal, parlez-en à quelqu'un maintenant :",
+    es: "Si estás pensando en quitarte la vida o en hacerte daño, habla con alguien ahora:",
+    ar: "إذا كنت تفكر في إنهاء حياتك أو إيذاء نفسك، تحدث إلى أحد الآن:",
+  }[key];
+  const em = res ? ({ fr: "Urgences", es: "Emergencias", ar: "الطوارئ" }[key] || "Emergency") : null;
+  const line = res ? `📞 ${res.name}: ${res.hotline}${em ? ` · ${em}: ${res.emergency}` : ""}` : "📞 Befrienders Worldwide — https://www.befrienders.org (a helpline in your country)";
+  return `${lead}\n${line}`;
+}
+
 /** Port of detectWitnessMode(): acute activation markers; 2+ distinct = strong. All languages checked. */
 export function detectWitness(message, lang, patterns) {
-  if (!message || message.length > 5000) return null;
+  if (!message) return null;   // no upper bound (1.13.1): a long journal ending in a crisis is read to its end
   const n = normalize(message);
   const pats = LANGS.flatMap(l => patterns[l] || []);
   const markers = [...new Set(pats.filter(p => { const s = normalize(p); return s && n.includes(s); }))];

@@ -14,6 +14,15 @@ function levelOf(f, d) {
 
 export const isHPCode = text => /^HP::[A-Za-z0-9+/=]+$/.test(String(text || "").trim());
 
+/** The profile inside a code, as the assessment wrote it; null when it is not a readable v1/v2 code. */
+export function decodeHP(text) {
+  try {
+    const b64 = String(text || "").replace(/\s+/g, "").slice(4);
+    const p = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b64), c => c.charCodeAt(0))));
+    return p && [1, 2].includes(p.v) ? p : null;
+  } catch { return null; }
+}
+
 /** Returns { wheel, summary } or throws when the code is not a readable profile. */
 export function parseHP(text) {
   let p;
@@ -32,10 +41,19 @@ export function parseHP(text) {
     lines.push(`${k[0].toUpperCase() + k.slice(1)} F=${f}/10 D=${d}/10${f > d + 2 ? " (functional outpaces developmental)" : d > f + 2 ? " (growth edge)" : ""}`);
   }
   let summary = `Altitude ${p.alt ?? "?"}/10. Wheel: ${lines.join("; ")}.`;
-  if (!p.sk?.e && p.e) summary += `\nEnneagram: ${p.e.t}w${p.e.w} ${p.e.i} (health ${p.e.h}/5).`;
+  if (!p.sk?.e && p.e?.self) {
+    // Given by the practitioner, not measured: say what was given and what was not.
+    const missing = [!p.e.i && "instinctual stack", p.e.h == null && "health level"].filter(Boolean);
+    summary += `\nEnneagram: ${p.e.t}${p.e.w ? "w" + p.e.w : ""}, as they know it themselves${p.e.i ? `; instinctual stack ${p.e.i}` : ""}${p.e.h != null ? `; health ${p.e.h}/5` : ""}${missing.length ? ` (${missing.join(" and ")} not assessed — do not infer)` : ""}.`;
+  } else if (!p.sk?.e && p.e) summary += `\nEnneagram: ${p.e.t}w${p.e.w} ${p.e.i} (health ${p.e.h}/5).`;
   else summary += "\nEnneagram: not completed — do not infer type.";
   const DOSHA = { V: "Vata", P: "Pitta", K: "Kapha" }, WX = { Wd: "Wood", F: "Fire", E: "Earth", Mt: "Metal", Wt: "Water" };
-  if (!p.sk?.c && p.c) {
+  if (!p.sk?.c && p.c?.self) {
+    const d = p.c.d || {}, y = p.c.y;
+    summary += `\nConstitution: ${DOSHA[d.dominant] || d.dominant || "?"}${d.second ? `-${DOSHA[d.second] || d.second}` : ""}, ${WX[p.c.x] || p.c.x || "?"}${p.c.xs ? ` with ${WX[p.c.xs] || p.c.xs}` : ""}, as they know it themselves (proportions not assessed)`;
+    summary += y != null ? `, ${y < -0.5 ? "Yin-dominant" : y < 0 ? "slightly Yin" : y > 0.5 ? "Yang-dominant" : "slightly Yang"}` : "";
+    summary += p.c.jl ? `, Jing ${p.c.jl} (${p.c.j ?? "?"}/10).` : ". Yin-Yang and Jing not assessed — do not infer.";
+  } else if (!p.sk?.c && p.c) {
     const y = Number(p.c.y || 0);
     summary += `\nConstitution: ${DOSHA[p.c.d?.dominant] || p.c.d?.dominant || "?"} (${p.c.d?.V}%V/${p.c.d?.P}%P/${p.c.d?.K}%K), ${WX[p.c.x] || p.c.x || "?"}, ${y < -0.5 ? "Yin-dominant" : y < 0 ? "slightly Yin" : y > 0.5 ? "Yang-dominant" : "slightly Yang"}, Jing ${p.c.jl ?? "?"} (${p.c.j ?? "?"}/10).`;
   } else summary += "\nConstitution: not completed — do not infer.";

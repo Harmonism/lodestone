@@ -29,6 +29,7 @@ class Hosted {
     this.fetch = o.fetch;
     this.load = o.load;
     this.save = o.save;
+    this.onExpired = o.onExpired || (() => {});
     this.api = o.api || API;
     this.supabaseUrl = o.supabaseUrl || SUPABASE_URL;
     this.access = null;       // { token, exp }
@@ -48,6 +49,16 @@ class Hosted {
     try { j = await res.json(); } catch {}
     if (!res.ok || !j.access_token) {
       const why = j.error_description || j.msg || j.error || "";
+      // A saved sign-in the account no longer honours (expired, revoked, used
+      // elsewhere): forget it, so the app asks for the password again instead
+      // of failing every call as if harmonism.io were unreachable.
+      if (grant === "refresh_token" && res.status >= 400 && res.status < 500) {
+        const was = this.load()?.email || null;
+        this.access = null; this.cached = null; this.save(null);
+        if (was) this.onExpired(was);
+        const e = new Error("Your harmonism.io sign-in on this computer has expired. Sign in again.");
+        e.code = "auth"; throw e;
+      }
       if (/invalid login|invalid_grant|invalid credentials/i.test(why)) throw new Error(grant === "password" ? "That email and password do not match a harmonism.io account." : "Sign in to your harmonism.io account again.");
       if (/email not confirmed/i.test(why)) throw new Error("Confirm your email first: harmonism.io sent you a link when you signed up.");
       throw new Error(`harmonism.io could not sign you in${why ? `: ${why}` : "."}`);
@@ -69,10 +80,15 @@ class Hosted {
 
   async token(force = false) {
     if (!force && this.access && Date.now() < this.access.exp) return this.access.token;
-    const a = this.load();
-    if (!a?.refresh) throw new Error("Sign in to your harmonism.io account first.");
-    await this.auth("refresh_token", { refresh_token: a.refresh });
-    return this.access.token;
+    // One renewal at a time: a refresh token is single-use, and two calls
+    // renewing with the same one leave the second refused (and the sign-in lost).
+    if (!this.renewing) this.renewing = (async () => {
+      const a = this.load();
+      if (!a?.refresh) { const e = new Error("Sign in to your harmonism.io account first."); e.code = "auth"; throw e; }
+      await this.auth("refresh_token", { refresh_token: a.refresh });
+      return this.access.token;
+    })().finally(() => { this.renewing = null; });
+    return this.renewing;
   }
 
   /** Calls the endpoint with the access token, renewing it once if the server refuses it. */

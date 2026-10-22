@@ -6,8 +6,8 @@
 import * as webllm from "../vendor/web-llm.js";
 // The stream reader lives apart so a page that never runs a model on the
 // device (website Lodestone, held.js) need not load WebLLM to read a stream.
-import { readSSE, providerError, stripThink } from "./sse.js";
-export { readSSE, providerError };
+import { readSSE, providerError, stripThink, normUsage } from "./sse.js";
+export { readSSE, providerError, normUsage };
 
 // Openness grading follows the openness gradient: closed → open-weight → fully-open
 // (weights + training data + training code). Fully-open is the terminus.
@@ -24,7 +24,7 @@ export const MODELS = {
 
 export const TIERS = {
   standard: {
-    label: "This device", sub: "A computer with a real GPU and 8 GB or more to spare. About 6 GB, once. No installation.",
+    label: "This browser", sub: "Qwen3-8B, downloaded once into this browser (about 6 GB) and run on this computer's graphics card: then it works offline, and nothing you say leaves this device. Needs a real GPU and 8 GB to spare. For a larger model on your own computer, Lodestone Desktop runs Bonsai 2 27B Heretic.",
     engine: "webllm", models: ["Qwen3-8B", "OLMo-2-7B"], ctx: 8192,
     backbone: "light", rag: { k: 4, maxChars: 5200 }, maxTokens: 700,
   },
@@ -37,12 +37,12 @@ export const TIERS = {
   // "server" backbone: harmonism.io puts its own doctrinal backbone in place of
   // a placeholder, so the phone does not send 80 KB with every message.
   hosted: {
-    label: "My harmonism.io account", sub: "Ten messages a day in total across harmonism.io, Telegram and Lodestone's apps, on the open-weight models hosted Lodestone runs on. Needs the internet; each message goes to harmonism.io.",
+    label: "My harmonism.io account", sub: "Ten free messages a day in total across harmonism.io, Telegram and Lodestone's apps, with DeepSeek V4.1 Flash or another open-weight model tested against the doctrine. harmonism.io reads each message. For no daily limit, use your own OpenRouter key.",
     engine: "hosted", models: [], ctx: 32768,
     backbone: "server", rag: { k: 5, maxChars: 12000 }, maxTokens: 1200,
   },
   openrouter: {
-    label: "OpenRouter, with my own key", sub: "No daily limit; you pay OpenRouter for what you use. The recommended models are those hosted Lodestone runs on, tested against the doctrine. Each message goes to OpenRouter.",
+    label: "OpenRouter, with my own key", sub: "No daily limit; you pay OpenRouter for what you use. The same models hosted Lodestone runs on, tested against the doctrine, or any other OpenRouter lists. OpenRouter reads each message.",
     engine: "openrouter", models: [], ctx: 32768,
     backbone: "full", rag: { k: 5, maxChars: 12000 }, maxTokens: 1200,
   },
@@ -146,7 +146,7 @@ export class DeviceEngine {
       { appConfig, initProgressCallback: r => onProgress && onProgress(r.progress, r.text) },
     );
   }
-  async *stream(messages, { maxTokens, temperature = 0.7 } = {}) {
+  async *stream(messages, { maxTokens, temperature = 0.7, background = false } = {}) {
     // Qwen3's published non-thinking settings, plus a repetition guard: small quantized models loop.
     const req = {
       messages, stream: true, temperature, top_p: 0.8, max_tokens: maxTokens,
@@ -154,12 +154,13 @@ export class DeviceEngine {
       stream_options: { include_usage: true },
     };
     if (MODELS[this.modelKey].thinking) req.extra_body = { enable_thinking: false };
+    if (background) this.bgUsage = null; else this.lastUsage = null;
     const chunks = await this.engine.chat.completions.create(req);
     let raw = "";
     for await (const ch of chunks) {
       const d = ch.choices?.[0]?.delta?.content;
       if (d) { raw += d; yield stripThink(raw); }
-      if (ch.usage) this.lastUsage = ch.usage;
+      if (ch.usage) { if (background) this.bgUsage = ch.usage; else this.lastUsage = ch.usage; }
     }
   }
   interrupt() { try { this.engine?.interruptGenerate(); } catch {} }
@@ -185,13 +186,16 @@ export class ServerEngine {
   }
   async isCached() { return true; }
   async load() {}
-  async *stream(messages, { maxTokens, temperature = 0.7 } = {}) {
-    this.ctrl = new AbortController();
+  async *stream(messages, { maxTokens, temperature = 0.7, background = false } = {}) {
+    const ctrl = new AbortController(); if (background) this.bgUsage = null; else { this.ctrl = ctrl; this.lastUsage = null; }   // a background call (learning, a summary) is not what Stop stops (1.13.1)
+    // include_usage: the server reports the turn's tokens in a last chunk
+    // (llama.cpp, Ollama, LM Studio, vLLM; one that does not know it ignores it).
+    // Lodestone Desktop passes it on to a rented model, with OpenRouter's cost.
     const res = await (this.fetchImpl || fetch)(this.baseUrl + "/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(this.headers ? await this.headers() : {}) },
-      body: JSON.stringify({ model: this.model, messages, stream: true, temperature, top_p: 0.8, presence_penalty: 1.0, max_tokens: maxTokens }),
-      signal: this.ctrl.signal,
+      body: JSON.stringify({ model: this.model, messages, stream: true, temperature, top_p: 0.8, presence_penalty: 1.0, max_tokens: maxTokens, stream_options: { include_usage: true } }),
+      signal: ctrl.signal,
     });
     if (!res.ok) {
       // The desktop's own server says plainly what went wrong (a spent daily
@@ -200,7 +204,7 @@ export class ServerEngine {
       let msg = ""; try { const j = JSON.parse(t); msg = typeof j.error === "string" ? j.error : (j.error?.message || ""); } catch {}
       throw new Error(msg || `Model server answered ${res.status}: ${t.slice(0, 200)}`);
     }
-    yield* readSSE(res);
+    yield* readSSE(res, u => { if (background) this.bgUsage = u; else this.lastUsage = u; });
   }
   interrupt() { try { this.ctrl?.abort(); } catch {} }
   describe() { if (this.name) return `Lodestone Desktop · ${this.name}`; return `${this.model} · ${this.baseUrl.includes(location.host) || !this.baseUrl.startsWith("http") ? "your computer" : new URL(this.baseUrl).host}`; }

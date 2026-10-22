@@ -2,12 +2,12 @@
 // The corpus pack and model weights are cached by the app and by WebLLM / transformers.js
 // themselves; this worker only serves the shell and the vendored runtime files.
 // The prefix keeps the app's earlier name: the cache is found by it.
-const VERSION = "munai-offline-shell-v12";
+const VERSION = "munai-offline-shell-v43";   // v43: the rebuilt Obsidian Sprite
 const SHELL = [
   "./", "index.html", "styles.css", "manifest.webmanifest",
-  "icons/icon-192.png", "icons/icon-512.png",
+  "icons/lodestone-192.png", "icons/lodestone-512.png", "icons/lodestone-touch-180.png",
   "js/main.js", "js/store.js", "js/corpus.js", "js/retrieval.js", "js/embedder.js", "js/embed-worker.js",
-  "js/engine.js", "js/phone.js", "js/sync.js", "js/native.js", "js/held.js", "js/syncwire.js", "js/sse.js", "js/llm-worker.js", "js/prompt.js", "js/safety.js", "js/md.js", "js/attach.js", "js/hp.js", "js/asr-worker.js",
+  "js/engine.js", "js/phone.js", "js/sync.js", "js/unlock.js", "js/native.js", "js/held.js", "js/syncwire.js", "js/sse.js", "js/llm-worker.js", "js/prompt.js", "js/safety.js", "js/md.js", "js/attach.js", "js/privacygate.js", "js/care.js", "js/presence.js", "safety.html", "js/hp.js", "js/asr-worker.js", "js/voice.js", "js/learning.js", "js/lifebook.js", "js/speechweb.js", "js/wikilookup.js", "js/voicecloud.js", "js/canon.js", "js/canon-data.js", "js/outreach.js",
   "vendor/web-llm.js", "vendor/transformers.min.js",
 ];
 // Fetched on demand and cached on first use: the ONNX runtime and the vendored

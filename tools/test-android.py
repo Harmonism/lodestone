@@ -65,7 +65,7 @@ def main():
     st, h, b = req("OPTIONS", "/munai-sync", headers={"Origin": ORIGIN, "Access-Control-Request-Method": "POST", "Access-Control-Request-Private-Network": "true"})
     check("the app's origin may reach the sync route, private network included", st == 204 and h.get("Access-Control-Allow-Origin") == ORIGIN and h.get("Access-Control-Allow-Private-Network") == "true", str(st))
     st, h, b = req("OPTIONS", "/munai-sync", headers={"Origin": "https://evil.example", "Access-Control-Request-Method": "POST"})
-    check("another origin may not", st == 405 and "Access-Control-Allow-Origin" not in h, str(st))
+    check("another origin may not", st in (403, 405) and "Access-Control-Allow-Origin" not in h, str(st))
     st, h, b = req("GET", "/lodestone-app/", headers={"Origin": ORIGIN})
     check("the app's origin gets no CORS on the rest of the server", "Access-Control-Allow-Origin" not in h)
     st, h, b = req("GET", "/munai-sync?meta=1")
@@ -87,6 +87,7 @@ def main():
         errors = []
         def phone(launch=None, cap=True):
             ctx = br.new_context(**pixel)
+            ctx.add_init_script("try { localStorage.setItem('lodestone-signin-ask', 'never'); } catch {}")   # the sign-in card (1.11) is not what this tests
             if cap: ctx.add_init_script(CAP + (f"window.__launch = {json.dumps(launch)};" if launch else ""))
             pg = ctx.new_page()
             pg.on("pageerror", lambda e: errors.append(str(e)))

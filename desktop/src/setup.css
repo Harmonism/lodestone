@@ -51,6 +51,8 @@ input:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px 
 .tag { font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--accent-2); }
 .figs { font-size: 13.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .why { font-size: 14px; }
+.src { font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+.src .link { color: var(--link); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 details summary { cursor: pointer; color: var(--accent-2); }
 details[open] summary { margin-bottom: 10px; }
 .list { display: grid; gap: 8px; }
@@ -80,6 +82,8 @@ code { font: 14px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
 #welcome, #failed, #manage { display: grid; gap: 16px; }
 #welcome[hidden], #failed[hidden], #manage[hidden], #waking[hidden] { display: none !important; }
 .big-btn { font-size: 16.5px; padding: 12px 22px; }
+.sub-head { margin: 22px 0 10px; }
+#routeCard .row { flex-wrap: wrap; gap: 10px; }
 .row.between { justify-content: space-between; }
 .name .size { color: var(--muted); font-weight: 400; }
 .tag.warn { color: var(--danger); }

@@ -37,14 +37,22 @@ function figures(m) {
 
 function card(m, { selectable = false } = {}) {
   const tight = S.memGB < m.minMem - 1;
-  const tag = m.id === S.defaultId ? "Recommended for this computer"
+  const tag = m.id === S.defaultId ? `Recommended for this computer${m.weaker ? " · smaller and weaker" : ""}${m.untested ? " · not yet tested against the doctrine" : ""}`
     : tight ? `Needs ${m.minMem} GB of memory — this computer has ${Math.round(S.memGB)}`
+    : m.untested ? `Untested${m.weaker ? " · smaller and weaker" : ""} · for ${m.minMem} GB of memory or more`
     : m.custom ? `Your choice · about ${m.minMem} GB of memory` : `For ${m.minMem} GB of memory or more`;
+  // Where the weights come from. A link inside a card that is itself a button:
+  // the click opens the page in the browser and does not select the card.
+  const source = m.page ? el("span", { class: "src" }, "From ", el("span", {
+    class: "link", role: "link", title: m.page,
+    onclick: ev => { ev.preventDefault(); ev.stopPropagation(); window.open(m.page); },
+  }, m.repo), " on Hugging Face, where the files can also be downloaded by hand") : null;
   const kids = [
-    el("span", { class: "tag" + (tight ? " warn" : "") }, tag),
+    el("span", { class: "tag" + (tight || (m.untested && m.id !== S.defaultId) ? " warn" : "") }, tag),
     el("span", { class: "name" }, m.label, el("span", { class: "size" }, ` · ${gb(m.size)}`)),
     el("span", { class: "why" }, m.why),
     figures(m),
+    source,
   ];
   if (!selectable) return el("div", { class: "pick" }, kids);
   return el("button", { type: "button", class: "opt" + (tight ? " tight" : ""), "aria-pressed": String(m.id === chosen), onclick: () => { if (!busy) { chosen = m.id; renderWelcome(); } } }, kids);
@@ -86,7 +94,7 @@ function failed(r, id) {
 
 function renderWelcome() {
   const m = model(chosen);
-  $("#welcomeText").textContent = `Lodestone thinks with a language model that lives on this computer. It is one download of ${gb(m.size)}, chosen for this computer's ${Math.round(S.memGB)} GB of memory; after that, opening Lodestone takes seconds.`
+  $("#welcomeText").textContent = `A language model that lives on this computer: one download of ${gb(m.size)}, chosen for its ${Math.round(S.memGB)} GB of memory. After that Lodestone opens in seconds, works with no internet, and nothing you say leaves this computer.`
     + (S.memGB < S.minMem - 1 ? ` Lodestone needs ${S.minMem} GB of memory for its smallest model, and this computer has ${Math.round(S.memGB)}: it may answer very slowly or not start at all.` : "");
   $("#pick").replaceChildren(card(m));
   const list = $("#list"); list.innerHTML = "";
@@ -146,7 +154,7 @@ async function manageScreen() {
   $("#manageText").textContent = S.hosted?.active
     ? `Lodestone is thinking with ${hostedLabel(S.hosted.model)} through your harmonism.io account. Everything else stays on this computer.`
     : S.remote
-    ? `Lodestone is thinking with ${S.remote.model}, rented from ${S.remote.host} with your key. Everything else stays on this computer.`
+    ? `Lodestone is thinking with ${remoteLabel(S.remote.model)}, rented from ${S.remote.host} with your key. Everything else stays on this computer.`
     : S.upstream
     ? `Lodestone is using your own model server at ${S.upstream}.`
     : `Lodestone is thinking with ${model(current)?.label || "—"}. This computer has ${Math.round(S.memGB)} GB of memory and ${gb(S.freeBytes)} free on its disk.`;
@@ -187,6 +195,7 @@ function renderRemote() {
   const sel = $("#rPreset");
   if (!sel.options.length) for (const [k, p] of Object.entries(S.presets)) sel.append(el("option", { value: k }, p.label));
   const cur = S.remote;
+  if (!cur && S.presets.openrouter) sel.value = "openrouter";   // DeepSeek V4.1 Flash on OpenRouter first
   if (cur) { sel.value = cur.preset; $("#rUrl").value = cur.baseUrl; $("#rModel").value = cur.model; $("#rKey").placeholder = cur.hasKey ? "Saved — leave empty to keep it" : ""; }
   $("#remoteNow").hidden = !cur;
   if (cur) $("#remoteNow").textContent = `In use: ${cur.model} from ${cur.host}.`;
@@ -238,6 +247,7 @@ async function listRemoteModels() {
 // ─── harmonism.io account: hosted models, ten messages a day ─────────
 
 const hostedLabel = id => (S.hosted?.recommended || []).find(m => m.id === id)?.label || id;
+const remoteLabel = id => Object.values(S.presets || {}).flatMap(p => p.recommended || []).find(m => m.id === id)?.label || id;
 const left = st => st && st.cap > 0 && st.remaining != null ? `${st.remaining} of ${st.cap} messages left today` : st && st.cap === 0 ? "no daily limit on this account" : "";
 
 async function renderHosted() {
@@ -544,6 +554,11 @@ $("#hPassword").onkeydown = e => { if (e.key === "Enter") hostedSignIn(); };
 $("#hUse").onclick = hostedUse;
 $("#hSignOut").onclick = async () => { await D.hostedSignOut(); await refresh(); manageScreen(); };
 $("#welcomeHosted").onclick = async () => { await manageScreen(); $("#hostedBox").open = true; $("#hostedBox").scrollIntoView({ behavior: "smooth" }); };
-$("#welcomeRemote").onclick = async () => { await manageScreen(); $("#remoteBox").open = true; $("#remoteBox").scrollIntoView({ behavior: "smooth" }); };
+// Own key: OpenRouter, with DeepSeek V4.1 Flash filled in; the other providers stay in the list.
+$("#welcomeRemote").onclick = async () => {
+  await manageScreen();
+  if (!S.remote && S.presets.openrouter) { $("#rPreset").value = "openrouter"; presetChanged(true); }
+  $("#remoteBox").open = true; $("#remoteBox").scrollIntoView({ behavior: "smooth" }); $("#rKey").focus();
+};
 
 boot().catch(e => { show("#failed"); $("#failText").textContent = clean(e); });
