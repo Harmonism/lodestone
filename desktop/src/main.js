@@ -56,6 +56,7 @@ const { lookUp } = require("./weblookup");
 const remote = require("./remote");
 const { Hosted, BASE: HARMONISM } = require("./hosted");
 const speech = require("./speech");
+const whisperLocal = require("./whisperlocal");
 const { TelegramBridge } = require("./telegram");
 const { FolderIndex } = require("./folders");
 const { LifeBook } = require("./lifebook");
@@ -1084,21 +1085,49 @@ ipcMain.handle("bridge-reply", (e, id, ok, payload) => {
 
 // From Lodestone and the library
 
+// Speech on this computer (1.13.2): whisper.cpp on Metal with Whisper large v3
+// turbo, the engine and model Lode uses too (whisperlocal.js, the same file in
+// both apps; build-whisper.sh builds the engine). Where the engine is missing
+// (a build without it), Whisper small in the page, as before.
+const speechEngine = () => whisperLocal.findEngine(whisperLocal.engineCandidates({ resources: app.isPackaged ? process.resourcesPath : null, roots: [path.join(__dirname, "..")] }));
+const speechDir = () => whisperLocal.modelDir(app.getPath("appData"));
+const asrReady = () => (speechEngine() ? whisperLocal.ready(speechDir()) : speech.ready(asrRoot()));
+const asrInfo = () => ({ asr: asrReady(), asrNative: !!speechEngine(), asrMB: speechEngine() ? whisperLocal.MB : Math.round(speech.SIZE / 1e6), asrLabel: speechEngine() ? whisperLocal.LABEL : "Whisper small" });
+// Lodestone's vocabulary, as a sentence in the spoken language (app/js/asr-worker.js).
+const SPEECH_VOCAB = {
+  en: "I was reading Lodestone on Harmonism, a Harmonist reading of Ṛta, the Logos and Dharma, the Sushumna, Jing and Qi, and the Wisdom Canon.",
+  fr: "J'ai lu Lodestone sur l'harmonisme, une lecture harmoniste du Ṛta, du Logos et du Dharma, de la Sushumna, du Jing et du Qi, et du Canon de la sagesse.",
+  es: "Leía Lodestone sobre el harmonismo, una lectura harmonista del Ṛta, del Logos y del Dharma, de la Sushumna, del Jing y del Qi, y del Canon de la sabiduría.",
+  pt: "Eu lia Lodestone sobre o harmonismo, uma leitura harmonista do Ṛta, do Logos e do Dharma, da Sushumna, do Jing e do Qi, e do Cânone da sabedoria.",
+  de: "Ich las Lodestone über den Harmonismus, eine harmonistische Lesart von Ṛta, Logos und Dharma, der Sushumna, von Jing und Qi und dem Kanon der Weisheit.",
+};
+handle("asr-native", async (e, samples, language) => {
+  const engine = speechEngine();
+  if (!engine) return { ok: false, message: "The speech engine is not in this build." };
+  if (!whisperLocal.ready(speechDir())) return { ok: false, message: "The speech model is not downloaded yet." };
+  try {
+    const audio = samples instanceof Float32Array ? samples : new Float32Array(samples?.buffer || samples || []);
+    const r = await whisperLocal.transcribe({ engine, dir: speechDir(), audio, language: language || "", vocabulary: SPEECH_VOCAB });
+    return { ok: true, text: r.text, language: r.language };
+  } catch (err) { return { ok: false, message: String(err.message || err) }; }
+}, { app: true });
+
 handle("info", async () => {
   const version = app.getVersion();
-  if (cfg.remote) { const c = remote.normalize(cfg.remote); return { label: `${c.model} · ${remoteWhere()}`, version, remote: { host: remoteWhere(), model: c.model }, vision: visionState(), asr: speech.ready(asrRoot()) }; }
-  if (cfg.upstream) return { label: `Your model server (${cfg.upstream})`, version };
+  if (cfg.remote) { const c = remote.normalize(cfg.remote); return { label: `${c.model} · ${remoteWhere()}`, version, remote: { host: remoteWhere(), model: c.model }, vision: visionState(), ...asrInfo() }; }
+  if (cfg.upstream) return { label: `Your model server (${cfg.upstream})`, version, ...asrInfo() };
   const m = chosenModel();
-  return { label: m.label, id: m.id, version, vision: visionState(), asr: speech.ready(asrRoot()) };
+  return { label: m.label, id: m.id, version, vision: visionState(), ...asrInfo() };
 }, { app: true });
 
 // Attachments (Lodestone's page): the speech model and a model's vision projector,
 // each downloaded once, hash-checked, when the practitioner first needs it.
 handle("asr-download", async e => {
-  if (speech.ready(asrRoot())) return { ok: true };
+  if (asrReady()) return { ok: true };
   if (dlCtrl) return { ok: false, message: "Another download is running." };
   dlCtrl = new AbortController();
   try {
+    if (speechEngine()) { await whisperLocal.download(speechDir(), { fetch: (u, init) => net.fetch(u, init), signal: dlCtrl.signal, onProgress: p => send(e, "progress", { ...p, what: "speech" }) }); return { ok: true }; }
     await speech.download(asrRoot(), { fetch: (u, init) => net.fetch(u, init), downloadModel, signal: dlCtrl.signal, onProgress: p => send(e, "progress", { ...p, what: "speech" }) });
     return { ok: true };
   } catch (err) { return { ok: false, message: err.message }; }

@@ -28,7 +28,7 @@ lodestone/
 │   ├── index.html · styles.css · manifest.webmanifest · sw.js
 │   ├── js/                   controller, retrieval, safety gates, prompt assembly, engines
 │   ├── vendor/               web-llm 0.2.85, transformers.js 4.3.0, onnxruntime-web wasm
-│   ├── icons/                the Obsidian Sprite, extracted from ObsidianSprite.astro
+│   ├── icons/                the Lodestone sprite, extracted from LodestoneSprite.astro
 │   └── corpus/               BUILD OUTPUT: corpus.json, runtime.json, embeddings.*, exclusions.txt
 ├── doctrine/
 │   └── backbone-light.md     compressed Tier-1 backbone for 4–8k-context models (see Doctrine)
@@ -169,7 +169,7 @@ Wired into `harmonia-astro/post-build.sh` (block *Lodestone web app*). Every ful
 
 **Two host constraints the app is built around, both found by deploying into them:**
 
-1. **No `.svg` is served.** The root `.htaccess` carries `RewriteRule ^(.*)\.svg$ $1.png [L]` — "Hostinger blocks SVG via ModSecurity" — so every `.svg` request is rewritten to `.png`. The Obsidian Sprite is therefore **inlined into `index.html`** as a `<symbol>` rather than fetched, and the app ships no `.svg` at all. Do not add one; it will 404 in production while working perfectly in local testing. (The same rewrite is why `/favicon.svg` 404s site-wide — unrelated to this app, but worth fixing separately.)
+1. **No `.svg` is served.** The root `.htaccess` carries `RewriteRule ^(.*)\.svg$ $1.png [L]` — "Hostinger blocks SVG via ModSecurity" — so every `.svg` request is rewritten to `.png`. The Lodestone sprite is therefore **inlined into `index.html`** as a `<symbol>` rather than fetched, and the app ships no `.svg` at all. Do not add one; it will 404 in production while working perfectly in local testing. (The same rewrite is why `/favicon.svg` 404s site-wide — unrelated to this app, but worth fixing separately.)
 2. **`.mjs` must be typed as JavaScript.** LiteSpeed serves `.mjs` as `text/plain`, and a browser refuses to execute a module with that type. onnxruntime's loader is an `.mjs`, so the entire semantic-retrieval layer fails on that alone — the app falls back to keyword retrieval and reports it. The folder's `.htaccess` sets `AddType text/javascript .mjs`.
 
 **The service worker caches each file independently.** `cache.addAll()` is atomic, so one missing file would reject the whole install and leave the app without offline support while it looks healthy online. Files are cached one at a time, failures are logged and skipped, and only `index.html` failing aborts the install. Settings shows whether the app is actually offline-ready rather than leaving it to be discovered in airplane mode.

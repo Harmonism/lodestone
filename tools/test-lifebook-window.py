@@ -50,6 +50,7 @@ def main():
     try:
         with sync_playwright() as p:
             b = p.chromium.launch(); page = b.new_page(); errors = []
+            page.add_init_script("try { localStorage.setItem('lodestone-signin-ask', 'never'); } catch (e) {}")   # the sign-in prompt makes the page inert
             page.on("pageerror", lambda e: errors.append(str(e)))
             page.add_init_script(FAKE)
             page.goto("http://127.0.0.1:8796/")

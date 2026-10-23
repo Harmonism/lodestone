@@ -2,7 +2,7 @@
 // The corpus pack and model weights are cached by the app and by WebLLM / transformers.js
 // themselves; this worker only serves the shell and the vendored runtime files.
 // The prefix keeps the app's earlier name: the cache is found by it.
-const VERSION = "munai-offline-shell-v46";   // v46: dictation's guard by alignment; v45: the sprite's dark sheen, dictation in three layers
+const VERSION = "munai-offline-shell-v49";   // v49: dark skin is the mid tone; v48: icons mid-tone sprite on white; v47: light sprite bottom facet evened; v46: dictation's guard by alignment, hold fn to dictate; v45: the sprite's dark sheen, dictation in three layers
 const SHELL = [
   "./", "index.html", "styles.css", "manifest.webmanifest",
   "icons/lodestone-192.png", "icons/lodestone-512.png", "icons/lodestone-touch-180.png",

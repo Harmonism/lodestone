@@ -11,7 +11,7 @@ import { detectLang, detectCrisis, buildCrisisResponse, detectWitness, witnessBl
 import { careCheck, indirectCare } from "./care.js";
 import * as presence from "./presence.js";
 import { render } from "./md.js";
-import { readAttachment, filesBlock, kindOf, speechLanguage, transcribeClip, setSpeechMode, sizeLabel } from "./attach.js";
+import { readAttachment, filesBlock, kindOf, speechLanguage, transcribeClip, setSpeechMode, setNativeSpeech, sizeLabel } from "./attach.js";
 import { scanMessage, leaveOutMessage, redact, leaveOut, scanText } from "./privacygate.js";
 import * as speechWeb from "./speechweb.js";
 import { CloudSpeaker, providerOf, PROVIDER_LABEL, transcribe as cloudTranscribe, FAMILIES, ROUTE_LABEL, chooseRoute, keyKind, testVoiceKey, orFamilyFor, onVoiceSubstitute, clearPolicyBlocks } from "./voicecloud.js";
@@ -95,6 +95,14 @@ const DESKTOP = window.lodestoneDesktop || window.munaiDesktop || null;   // mun
 // Where attachments and dictation are read: "this computer" in Lodestone Desktop, "this device" in the web app and on the phone.
 const HERE = DESKTOP ? "this computer" : "this device";
 if (!DESKTOP) setSpeechMode("web");
+// On the desktop with its speech engine (whisper.cpp on the Mac's GPU, 1.13.2), recordings are written out there.
+else DESKTOP.info?.().then(i => {
+  if (i?.asrNative && DESKTOP.asrNative) setNativeSpeech(async (audio, language) => {
+    const r = await DESKTOP.asrNative(audio, language);
+    if (!r?.ok) throw new Error(r?.message || "The speech engine did not answer.");
+    return r.text;
+  });
+}).catch(() => {});
 const desktopServer = () => ({ baseUrl: new URL("v1", location.href).href, model: "lodestone", ctx: 32768 });
 const desktopConfigured = () => S.settings.tier === "server" && S.settings.server?.model === "lodestone"
   && S.settings.server?.baseUrl === desktopServer().baseUrl;
@@ -245,7 +253,17 @@ async function handleAppLink(link) {
   if (!confirm(`Pair this phone with ${r.name || "Lodestone Desktop"} at ${r.base}?`)) return;
   try {
     const p = await pairWith(r.base, r.code);
-    if (!$("#setup").hidden) { S.preferComputer = true; await showSetup(); toast(`Paired with ${p.name}.`, 4000); }
+    // The link that opened the app arrives before setup is shown: the choice of the computer
+    // is kept for it, not only applied to a setup already open (1.13.2).
+    if (!(S.mainStarted && !$("#main").hidden)) {
+      // A setup still being drawn (the link that opened the app arrives during it) takes the
+      // computer from S.preferComputer; one already on screen has its computer choice pressed.
+      // Not drawn again: a second showSetup racing the first could finish first and be undone.
+      S.preferComputer = true;
+      const pick = $('#tierChoices .choice[data-tier="server"]');
+      if (pick && !$("#setup").hidden) { S.preferComputer = false; pick.click(); await S.redrawPair?.(); }
+      toast(`Paired with ${p.name}.`, 4000);
+    }
     else toast(`Paired with ${p.name}. Choose it in the model menu under the message box.`, 6000);
     if (!$("#drawerSettings").hidden) renderSync();
   } catch (e) { toast(String(e.message || e), 7000); }
@@ -315,7 +333,7 @@ async function showSetup() {
     if ((t.engine === "hosted" || t.engine === "openrouter") && !phoneOk) continue;   // needs https (WebCrypto)
     const disabled = needsGpu && !S.gpu.ok;
     const def = t.models[0] ? MODELS[t.models[0]] : null;
-    const b = el("button", { class: "choice", type: "button", "aria-pressed": String(key === chosen), disabled },
+    const b = el("button", { class: "choice", type: "button", "data-tier": key, "aria-pressed": String(key === chosen), disabled },
       el("span", { class: "tag" }, TAGS[key] || `default model: ${t.models[0]} · ${def.openness}`),
       el("strong", {}, t.label),
       el("span", { class: "sub" }, t.sub),
@@ -595,6 +613,7 @@ function makeEngine() {
 async function startMain() {
   $("#setup").hidden = true; $("#main").hidden = false;
   S.mainStarted = true;
+  refreshVoiceKey().then(() => setMic()).catch(() => {});
   S.profile = (await store.kv.get("profile")) || {};
   S.wheel = (await store.kv.get("wheel")) || {};
   S.practices = (await store.kv.get("practices")) || [];
@@ -4597,7 +4616,7 @@ async function addFiles(list) {
     try {
       if (!S.pending.includes(item)) continue;   // removed while the ones before it were read
       let info = DESKTOP ? await DESKTOP.info().catch(() => ({})) : await webAttachInfo();
-      if (item.kind === "audio" && !DESKTOP) {
+      if (item.kind === "audio" && (!DESKTOP || (await refreshVoiceKey(), dictViaProvider()))) {
         say("Waiting for the speech model…");
         const route = await chooseSpeechRoute("To read recordings");
         if (!route) throw new Error("Not transcribed.");
@@ -4609,7 +4628,7 @@ async function addFiles(list) {
           item.data = { name: item.name, kind: "audio", text, note: `recording, written out by ${PROVIDER_LABEL[p]}` };
         }
       } else if (item.kind === "audio" && !info.asr) {
-        if (!confirm("To read recordings and videos, Lodestone needs its speech model (about 250 MB). It is downloaded once and runs on this computer: the recording goes nowhere. Download it now?")) throw new Error("Not transcribed.");
+        if (!confirm(`To read recordings and videos, Lodestone needs its speech model (${info.asrLabel || "Whisper"}, about ${info.asrMB || 250} MB). It is downloaded once and runs on this computer: the recording goes nowhere. Download it now?`)) throw new Error("Not transcribed.");
         const off = DESKTOP.onProgress?.(p => { if (p.what === "speech" && p.total) say(`Downloading the speech model… ${Math.round(p.done / p.total * 100)}%`); });
         const r = await DESKTOP.asrDownload(); off?.();
         if (!r.ok) throw new Error(r.message || "The speech model could not be downloaded.");
@@ -4666,12 +4685,17 @@ async function droppedFiles(dt) {
 }
 
 // ─── Voice through a provider ─────────────────────────────────────────
-// Only where the conversation already goes to a provider (OpenRouter under the
-// practitioner's key, or harmonism.io's hosted models), and only when chosen:
-// the device's speech model and voices stay the private default.
-const voiceProvider = () => (DESKTOP ? null : providerOf(S.engine));
-async function voiceCtx(p) { return p === "openrouter" ? { key: await secrets.get("openrouter") } : { call: (u, i) => hosted.call(u, i) }; }
-const dictViaProvider = () => !!voiceProvider() && S.settings.dictSource === "provider";
+// Recordings are written out through OpenRouter whenever an OpenRouter key is
+// saved, on the desktop too, whatever model the conversation uses (1.13.2:
+// Whisper small on the computer was too slow); else through the conversation's
+// own provider (harmonism.io's hosted models). Whisper on the device is chosen
+// in Settings → Dictation ("On this device"), or used where no provider is.
+const voiceProvider = () => (S.orVoiceKey || providerOf(S.engine) === "openrouter" ? "openrouter" : DESKTOP ? null : providerOf(S.engine));
+const orKeyNow = async () => (DESKTOP ? await DESKTOP.syncKeyGet?.().catch(() => null) : null) || await secrets.get("openrouter").catch(() => null);
+/** Whether an OpenRouter key is saved, for voiceProvider(); asked again before each recording. */
+async function refreshVoiceKey() { S.orVoiceKey = !!(await orKeyNow()); return S.orVoiceKey; }
+async function voiceCtx(p) { return p === "openrouter" ? { key: await orKeyNow() } : { call: (u, i) => hosted.call(u, i) }; }
+const dictViaProvider = () => !!voiceProvider() && S.settings.dictSource !== "device";
 const speakViaProvider = () => !!voicePlanCache;
 
 // ─── Natural voices ─────────────────────────────────────────────────
@@ -4732,8 +4756,9 @@ const dictCode = () => { const l = S.settings.dictLang && S.settings.dictLang !=
  * model is here), or null (not now). Asked once when both are possible.
  */
 async function chooseSpeechRoute(why, dictating = false) {
+  await refreshVoiceKey();
   const p = voiceProvider();
-  if (p && S.settings.dictSource === "provider") return "provider";
+  if (p && S.settings.dictSource !== "device") return "provider";
   if (S.settings.dictSource !== "provider" && await speechWeb.speechReady()) return "device";
   if (p && !S.settings.dictSource) {
     const viaP = confirm(`${why}: write it out through ${PROVIDER_LABEL[p]}?\n\nOK — the recording is sent to ${PROVIDER_LABEL[p]}${p === "account" ? " and the transcription service it uses" : ""}, which writes it out. Nothing to download.\nCancel — download the speech model once (about ${speechWeb.MB} MB); your voice then stays on this device.\n\nSettings → Dictation changes this at any time.`);
@@ -4792,8 +4817,9 @@ function setMic() {
   b.classList.toggle("recording", !!D.rec);
   b.classList.toggle("working", D.working);
   b.setAttribute("aria-pressed", D.rec ? "true" : "false");
-  const label = D.working ? `Transcribing on ${HERE}…` : D.rec ? "Stop and write it in" : "Dictate";
-  b.title = D.rec || D.working ? label : `${label}${DESKTOP ? " (⇧⌘D)" : ""}: transcribed on ${HERE}`;
+  const via = dictViaProvider() ? PROVIDER_LABEL[voiceProvider()] : null;
+  const label = D.working ? (via ? `Writing it out through ${via}…` : `Transcribing on ${HERE}…`) : D.rec ? "Stop and write it in" : "Dictate";
+  b.title = D.rec || D.working ? label : `${label}${DESKTOP ? " (⇧⌘D, or hold fn)" : ""}: ${via ? `written out through ${via}` : `transcribed on ${HERE}`}`;
   b.setAttribute("aria-label", label);
 }
 
@@ -4928,11 +4954,12 @@ function talkEnd(why = "") {
 }
 
 /** The speech model is downloaded once, on first use, with the practitioner's leave. */
-async function ensureSpeechModel() {
+async function ensureSpeechModel(local = false) {
   if (!DESKTOP) return (await chooseSpeechRoute("To dictate", true)) !== null;
+  if (!local && (await refreshVoiceKey(), dictViaProvider())) return true;
   const info = await DESKTOP.info().catch(() => ({}));
   if (info.asr) return true;
-  if (!confirm("To dictate, Lodestone needs its speech model (Whisper, about 250 MB). It is downloaded once and runs on this computer: your voice goes nowhere. Download it now?")) return false;
+  if (!confirm(`To dictate, Lodestone needs its speech model (${info.asrLabel || "Whisper"}, about ${info.asrMB || 250} MB). It is downloaded once and runs on this computer: your voice goes nowhere. Download it now?`)) return false;
   D.working = true; setMic();
   const off = DESKTOP.onProgress?.(p => { if (p.what === "speech" && p.total) toast(`Downloading the speech model… ${Math.round(p.done / p.total * 100)}%`, 4000); });
   try {
@@ -5092,16 +5119,17 @@ async function renderDictation() {
   if (!$("#setDictKv")) return;
   const info = DESKTOP ? await DESKTOP.info().catch(() => ({})) : { asr: await speechWeb.speechReady() };
   const kv = $("#setDictKv");
-  kv.replaceChildren(el("div", {}, el("b", {}, info.asr ? "Ready" : "Not downloaded yet"), info.asr ? ` · Whisper small, on ${HERE}` : ` · downloaded once, on first use (about ${speechWeb.MB} MB)`));
+  kv.replaceChildren(el("div", {}, el("b", {}, info.asr ? "Ready" : "Not downloaded yet"), info.asr ? ` · ${info.asrLabel || "Whisper small"}, on ${HERE}${info.asrNative ? "'s GPU" : ""}` : ` · downloaded once, on first use (about ${info.asrMB || speechWeb.MB} MB)`));
   if (!DESKTOP && !canRecord()) kv.append(el("div", { class: "fine" }, "This browser cannot record or keep the speech model here."));
   // Through the provider, where the route has one.
-  const p = voiceProvider(), src = S.settings.dictSource === "provider" && p ? "provider" : "device";
+  await refreshVoiceKey();
+  const p = voiceProvider(), src = S.settings.dictSource !== "device" && p ? "provider" : "device";
   $("#setDictSource").hidden = $("#setDictSourceHint").hidden = !p;
   if (p) {
     [...$("#setDictSource").children].forEach(b => { b.setAttribute("aria-pressed", String(b.dataset.v === src)); if (b.dataset.v === "provider") b.textContent = `Through ${PROVIDER_LABEL[p]}`; });
     $("#setDictSourceHint").textContent = src === "provider"
       ? `Your recordings go to ${PROVIDER_LABEL[p]}${p === "account" ? " and the transcription service it uses (fifteen minutes a day)" : ", charged to your key"}, which writes them out. Nothing to download.`
-      : `Whisper writes them out on this device; your voice goes nowhere. Downloaded once (about ${speechWeb.MB} MB).`;
+      : `Whisper writes them out on this device; your voice goes nowhere. Downloaded once (about ${info.asrMB || speechWeb.MB} MB).`;
   }
   $("#setDictDownload").hidden = !!info.asr;
   $("#setDictLang").value = S.settings.dictLang || "auto";
@@ -5162,6 +5190,33 @@ function bindChrome() {
     else if (e.key === "Escape" && T.on && !document.querySelector(".signin-ask")) { e.preventDefault(); e.stopImmediatePropagation(); talkEnd(); }
     else if (e.key === "Escape" && document.querySelector(".row-menu")) { e.stopImmediatePropagation(); closeThreadMenu(); }
   }, true);
+  // Hold fn to dictate (a Mac, in Lodestone Desktop or a browser that reports
+  // the key): held a fifth of a second with no other key, it starts listening; released, it writes the words in, as a click on the
+  // microphone would. fn used with another key (fn+←, fn+Delete) is left alone.
+  // macOS acts on fn itself unless System Settings → Keyboard → "Press 🌐 key to"
+  // is set to Do Nothing.
+  const FN = { timer: null, held: false, mine: false };
+  const isFn = e => e.key === "Fn" || e.code === "Fn";
+  const fnUp = () => {
+    FN.held = false;
+    if (FN.timer) { clearTimeout(FN.timer); FN.timer = null; return; }
+    if (FN.mine && D.rec) { FN.mine = false; micStop(); }   // otherwise the microphone is still opening: stopped below once it has
+  };
+  document.addEventListener("keydown", e => {
+    if (!isFn(e)) { if (FN.timer) { clearTimeout(FN.timer); FN.timer = null; } return; }
+    if (e.repeat || FN.held) return;
+    FN.held = true;
+    if (!(canRecord() && !D.rec && !D.working && !D.starting && !T.on)) return;
+    FN.timer = setTimeout(async () => {
+      FN.timer = null;
+      if (!FN.held) return;
+      FN.mine = true;
+      await micToggle();
+      if (!FN.held && FN.mine) { FN.mine = false; if (D.rec) micStop(); }   // released while the microphone opened
+    }, 200);
+  }, true);
+  document.addEventListener("keyup", e => { if (isFn(e)) fnUp(); }, true);
+  window.addEventListener("blur", () => { if (FN.held) fnUp(); });
   // Conversations: search, the row menu, usage and costs
   let tq; $("#threadSearch").addEventListener("input", e => { clearTimeout(tq); tq = setTimeout(() => { threadQuery = e.target.value; renderThreadList(); }, 160); });
   document.addEventListener("click", e => { if (!e.target.closest(".row-menu")) closeThreadMenu(); });
@@ -5211,7 +5266,7 @@ function bindChrome() {
     const line = { fr: "Parle depuis là où tu te tiens. La Roue commence par la Présence.", es: "Habla desde donde estás. La Rueda empieza por la Presencia.", ar: "تكلّم من حيث تقف. تبدأ العجلة بالحضور.", pt: "Fala a partir de onde estás. A Roda começa pela Presença.", de: "Sprich von dort, wo du stehst. Das Rad beginnt mit der Präsenz." }[lang] || "Speak from where you are. The Wheel begins with Presence.";
     if (await startSpeaking("try", lang)) speaker.feed(line, true);
   };
-  $("#setDictDownload").onclick = () => ensureSpeechModel();
+  $("#setDictDownload").onclick = () => ensureSpeechModel(true);
   $("#webBtn").onclick = () => {
     if (!S.webNext) {
       let told = false; try { told = localStorage.getItem("munai-web-consent") === "1"; } catch {}

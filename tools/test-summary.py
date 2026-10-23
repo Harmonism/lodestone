@@ -21,7 +21,7 @@ def main():
     def check(n, ok, d=""): res.append(ok); print(("PASS " if ok else "FAIL ") + n + (f" — {d}" if d else ""), flush=True)
     with sync_playwright() as p:
         b = p.chromium.launch(); iphone = {k: v for k, v in p.devices["iPhone 13"].items() if k != "default_browser_type"}
-        page = b.new_context(**iphone).new_page(); errors = []
+        c0 = b.new_context(**iphone); c0.add_init_script(tp.NO_SIGNIN_ASK); page = c0.new_page(); errors = []
         page.on("pageerror", lambda e: errors.append(str(e)))
         def orouter(route):
             req = route.request

@@ -21,12 +21,12 @@
   --pillar-relationships: #E97A8F; --pillar-learning: #6B5BB5; --pillar-nature: #4A9D5A; --pillar-recreation: #E89B7E;
   color-scheme: dark;
 }
-/* The Obsidian Sprite's light skin: clear amethyst crystal, plum border. */
+/* The Lodestone sprite's light skin: clear amethyst crystal, plum border. */
 [data-theme="light"] {
   --sp-f1:#E4DAF2;
   --sp-f2:#CDBFE3;
   --sp-f3:#B9A8D6;
-  --sp-f4:#A893C9;
+  --sp-f4:#D2C5E8;
   --sp-f5:#BFAFDA;
   --sp-f6:#D6CAEB;
   --sp-f7:#EEE7F8;

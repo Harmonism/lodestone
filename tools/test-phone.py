@@ -22,6 +22,7 @@ PORT, PHP_PORT = 8799, 8798
 LOG = {"hosted": [], "openrouter": [], "supabase": []}
 SB_KEY = "sb-zccplzknsbpdczfnwkwz-auth-token"
 GOOD = "sk-or-v1-goodkeygoodkeygoodkey00"
+NO_SIGNIN_ASK = "try { localStorage.setItem('lodestone-signin-ask', 'never'); } catch (e) {}"   # the sign-in prompt (askSignIn) as "Don't ask again here": it makes the page inert
 
 
 def hp_code(presence=7.0):
@@ -78,7 +79,7 @@ def main():
     with sync_playwright() as p:
         b = p.chromium.launch()
         iphone = {k: v for k, v in p.devices["iPhone 13"].items() if k != "default_browser_type"}
-        ctx = b.new_context(**iphone)
+        ctx = b.new_context(**iphone); ctx.add_init_script(NO_SIGNIN_ASK)
         page = ctx.new_page()
         errors = []
         page.on("pageerror", lambda e: errors.append(str(e) + " @ " + (e.stack or "")[:400]))
@@ -213,7 +214,7 @@ def main():
         ctx.close()
 
         if php:
-            c2 = b.new_context(**iphone)
+            c2 = b.new_context(**iphone); c2.add_init_script(NO_SIGNIN_ASK)
             pg = c2.new_page()
             pg.on("dialog", lambda d: d.accept())
             ph = f"http://127.0.0.1:{PHP_PORT}"
@@ -231,7 +232,7 @@ def main():
                 check("the assessment leaves an HP code and goes to Lodestone", False, str(e)[:300])
             c2.close()
 
-        ctx3 = b.new_context(viewport={"width": 1280, "height": 800})
+        ctx3 = b.new_context(viewport={"width": 1280, "height": 800}); ctx3.add_init_script(NO_SIGNIN_ASK)
         pg = ctx3.new_page()
         pg.goto(base + "/lodestone-app/")
         pg.wait_for_function("document.querySelectorAll('#tierChoices .choice').length > 0")

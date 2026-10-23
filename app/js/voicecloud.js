@@ -18,7 +18,7 @@ import { speakable } from "./voice.js";
 const OPENROUTER = "https://openrouter.ai/api/v1";
 const XAI_TTS = "https://api.x.ai/v1/tts";
 const OPENAI = "https://api.openai.com/v1";
-const OR_STT = "openai/whisper-1";
+const OR_STT = "openai/whisper-large-v3-turbo";   // quick and cheap; large v3 where the account keeps to zero retention
 const headers = key => ({ Authorization: `Bearer ${key}`, "HTTP-Referer": "https://harmonism.io/lodestone", "X-Title": "Lodestone" });
 
 /**

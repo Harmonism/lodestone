@@ -637,7 +637,13 @@ export function setSpeechMode(m) { speechMode = m === "web" ? "web" : "local"; }
 const LANG_NAMES = { en: "english", fr: "french", es: "spanish", ar: "arabic", pt: "portuguese", de: "german", zh: "chinese", ja: "japanese", hi: "hindi", ru: "russian", it: "italian", nl: "dutch", tr: "turkish", fa: "persian", ur: "urdu" };
 export const speechLanguage = code => LANG_NAMES[String(code || "").slice(0, 2).toLowerCase()] || null;
 
+// Lodestone Desktop with its speech engine (whisper.cpp on the Mac's GPU): the
+// samples go to it, through the app, and the page's Whisper is not loaded.
+let nativeSpeech = null;
+export function setNativeSpeech(fn) { nativeSpeech = typeof fn === "function" ? fn : null; }
+
 function transcribe(audio, language) {
+  if (nativeSpeech) return nativeSpeech(audio, language);
   if (!worker) {
     worker = new Worker(new URL("./asr-worker.js", import.meta.url), { type: "module" });
     worker.onmessage = e => { const w = waiting.get(e.data.id); if (!w) return; waiting.delete(e.data.id); e.data.error ? w.reject(new Error(e.data.error)) : w.resolve(e.data.text); };

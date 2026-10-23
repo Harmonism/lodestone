@@ -65,7 +65,7 @@ def main():
     with sync_playwright() as p:
         b = p.chromium.launch(args=["--ignore-certificate-errors", "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", f"--use-file-for-fake-audio-capture={WAV}"])
         iphone = {k: v for k, v in p.devices["iPhone 13"].items() if k != "default_browser_type"}
-        ctx = b.new_context(**iphone); ctx.grant_permissions(["microphone"], origin=f"http://localhost:{tp.PORT}")
+        ctx = b.new_context(**iphone); ctx.add_init_script(tp.NO_SIGNIN_ASK); ctx.grant_permissions(["microphone"], origin=f"http://localhost:{tp.PORT}")
         ctx.add_init_script("try { localStorage.setItem('lodestone-signin-ask', 'never'); } catch {}")   # the sign-in card (1.11) is not what this tests
         page = ctx.new_page(); errors = []
         page.on("pageerror", lambda e: errors.append(str(e)))
@@ -176,6 +176,9 @@ def main():
         wk = page.evaluate("(async () => (await import('./js/wikilookup.js')).wikiLookup('What is ferritin?', 'en'))()")
         check("Wikipedia, for the routes without a provider, reads from the phone", wk and wk[0]["title"] == "Ferritin (Wikipedia)" and "stores iron" in wk[0]["text"])
         # Dictation: the first press downloads the speech model, checked; the second records and transcribes
+        # Dictation goes through OpenRouter by default (1.13.2): this part is about Whisper in the browser.
+        page.click("#btnSettings"); page.wait_for_timeout(600)
+        page.click("#setDictSource button[data-v=device]"); page.wait_for_timeout(300); page.keyboard.press("Escape"); page.wait_for_timeout(400)
         page.click("#micBtn")
         ready = lambda: page.evaluate("(async () => (await import('./js/speechweb.js')).speechReady())()")
         t_dl = time.time()

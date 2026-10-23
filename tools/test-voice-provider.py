@@ -38,7 +38,7 @@ def main():
     with sync_playwright() as p:
         b = p.chromium.launch(args=["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", f"--use-file-for-fake-audio-capture={WAV}", "--autoplay-policy=no-user-gesture-required"])
         iphone = {k: v for k, v in p.devices["iPhone 13"].items() if k != "default_browser_type"}
-        ctx = b.new_context(**iphone); ctx.grant_permissions(["microphone"], origin=f"http://localhost:{tp.PORT}")
+        ctx = b.new_context(**iphone); ctx.add_init_script(tp.NO_SIGNIN_ASK); ctx.grant_permissions(["microphone"], origin=f"http://localhost:{tp.PORT}")
         page = ctx.new_page(); errors = []
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.on("dialog", lambda d: d.accept())
@@ -48,7 +48,7 @@ def main():
             u = req.url
             if u.endswith("/audio/transcriptions"):
                 pd = req.post_data_buffer or b""
-                LOG["stt"].append({"model": b'openai/whisper-1' in pd, "file": b'filename="recording.' in pd, "auth": req.headers.get("authorization")})
+                LOG["stt"].append({"model": b'openai/whisper-large-v3-turbo' in pd, "file": b'filename="recording.' in pd, "auth": req.headers.get("authorization")})
                 return route.fulfill(status=200, content_type="application/json", headers={"Access-Control-Allow-Origin": "*"}, body=json.dumps({"text": "I sleep badly since the move."}))
             if u.endswith("/audio/speech"):
                 LOG["tts"].append(json.loads(req.post_data or "{}"))

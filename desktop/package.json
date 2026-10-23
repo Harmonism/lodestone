@@ -1,7 +1,7 @@
 {
   "name": "munai-offline-desktop",
   "productName": "Lodestone",
-  "version": "1.13.1",
+  "version": "1.13.2",
   "description": "Lodestone, the Harmonist companion, and the harmonism.io library, on your own computer.",
   "homepage": "https://harmonism.io/lodestone-desktop",
   "author": {
@@ -30,7 +30,7 @@
   "build": {
     "appId": "io.harmonism.munai-offline",
     "productName": "Lodestone",
-    "copyright": "CC0 \u2014 Harmonia",
+    "copyright": "CC0 — Harmonia",
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -83,6 +83,15 @@
         {
           "from": "engines/darwin-${arch}",
           "to": "engine"
+        },
+        {
+          "from": "engines/whisper-darwin-${arch}",
+          "to": "whisper",
+          "filter": [
+            "whisper-cli",
+            "LICENSE",
+            "VERSION"
+          ]
         }
       ]
     },

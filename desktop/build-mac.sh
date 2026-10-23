@@ -27,6 +27,10 @@ command -v npm >/dev/null || { echo "Node.js is needed first: https://nodejs.org
 [ -f site-en/index.html ] || { echo "No English library in site-en/ — unpack the latest en.tar.gz from ../.site-packs/ into it first."; exit 1; }
 
 npm install --no-audit --no-fund
+# Speech on this computer: whisper.cpp with Metal, for both architectures (build-whisper.sh, pinned).
+# Without it, the app falls back to Whisper small in the page.
+./build-whisper.sh arm64 x86_64 || echo "whisper.cpp was not built: this build transcribes with Whisper small in the page."
+mkdir -p engines/whisper-darwin-arm64 engines/whisper-darwin-x64
 node pack-library.js   # the English library as one archive (see pack-library.js)
 
 if security find-identity -v -p codesigning 2>/dev/null | grep -q "Developer ID Application"; then

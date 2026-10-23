@@ -87,6 +87,7 @@ if (location.protocol === "file:" && /\/(launcher|phone)\.html$/.test(location.p
     webLookup: question => call("web-lookup", question),
     // Attachments: the speech model and the current model's vision, downloaded on first use
     asrDownload: () => call("asr-download"),
+    asrNative: (samples, language) => call("asr-native", samples, language),
     convertFile: (name, bytes) => call("convert-file", name, bytes),
     visionDownload: () => call("vision-download"),
     onProgress: fn => on("progress", fn),
