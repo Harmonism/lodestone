@@ -26,6 +26,13 @@
 // the notes, the Wheel and the profile keep this device's version when both
 // changed. Deleting a conversation deletes it everywhere; nothing else is
 // ever deleted by sync.
+//
+// Which devices sync (October 23, 2026): each device keeps a record of itself
+// in the synced copy ("d:<id>"), sealed like the rest: its name, its kind, the
+// Lodestone it runs, when it was let in and when it last synced. harmonism.io
+// sees one more record and nothing of what it says. A device removed from
+// another finds a mark on its own record at its next sync, stops syncing and
+// says so; what it holds stays on it.
 
 import * as store from "./store.js";
 import * as unlock from "./unlock.js";
@@ -39,10 +46,33 @@ const ITER = 600000;
 // lifebook: Lodestone Desktop's copy of the life book's notes, read on other devices, and the changes kept there for the desktop to write.
 const SYNCED_KV = ["profile", "wheel", "practices", "assessment", "companion", "hp_code", "learned", "reading", "outreach", "lifebook"];
 const KEYS = "sync:keys", STATE = "sync:state", CONF = "sync:conf";
+// Kept with the memory, as the other "sync:" keys are: one device per memory per browser.
+const DEVICES = "sync:devices", ME = "sync:device";
+const SEEN_EVERY = 5 * 60 * 1000;   // how often a device's own record is written again only to say it synced
 const te = new TextEncoder(), td = new TextDecoder();
 
 export class SyncError extends Error {
   constructor(code, message, status = 0) { super(message); this.code = code; this.status = status; }
+}
+
+// ─── this device, named ─────────────────────────────────────────────────────
+
+/** What this device is, as a person would name it: { kind, name }. `desktop`: Lodestone Desktop's window. */
+export function deviceGuess(desktop = false) {
+  const nav = globalThis.navigator || {};
+  const ua = nav.userAgent || "";
+  const ipad = /iPad/.test(ua) || (nav.platform === "MacIntel" && nav.maxTouchPoints > 1);
+  const os = /iPhone|iPod/.test(ua) ? "iPhone" : ipad ? "iPad" : /Android/.test(ua) ? "Android" : /CrOS/.test(ua) ? "Chromebook"
+    : /Mac/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows" : /Linux/.test(ua) ? "Linux" : null;
+  const on = os ? ` on ${os}` : "";
+  if (desktop) return { kind: "desktop", name: `Lodestone Desktop${on || " on a computer"}` };
+  if (globalThis.Capacitor?.isNativePlatform?.()) return { kind: "app", name: `Lodestone app${on}` };
+  let standalone = nav.standalone === true;
+  try { standalone ||= !!globalThis.matchMedia?.("(display-mode: standalone)").matches; } catch {}
+  if (standalone && (os === "iPhone" || os === "iPad")) return { kind: "home", name: `Home Screen app${on}` };
+  const browser = nav.brave ? "Brave" : /Edg[A-Z]?\//.test(ua) ? "Edge" : /OPR\/|Opera/.test(ua) ? "Opera" : /Firefox|FxiOS/.test(ua) ? "Firefox"
+    : /CriOS|Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "A browser";
+  return { kind: standalone ? "installed" : "browser", name: `${browser}${on}` };
 }
 
 // ─── bytes ───────────────────────────────────────────────────────────────────
@@ -245,6 +275,7 @@ export async function readLocal(lid, secret) {
   }
   if (kind === "k") { const v = await store.kv.get(name); return v == null ? null : v; }
   if (kind === "s") { const v = secret ? await secret.get(name) : null; return v || null; }
+  if (kind === "d") { const v = ((await store.kv.get(DEVICES)) || {})[name]; return v || null; }
   return null;
 }
 
@@ -286,6 +317,7 @@ export async function writeLocal(lid, body, secret, before = null) {
   }
   if (kind === "k") await store.kv.set(name, body);
   if (kind === "s") await secret?.set(name, body);
+  if (kind === "d" && body && typeof body === "object") { const all = (await store.kv.get(DEVICES)) || {}; all[name] = body; await store.kv.set(DEVICES, all); }
   return moved;
 }
 
@@ -337,10 +369,16 @@ export function mergeLifeBook(a, b) {
  * device's rows and adds the other's that it lacks (same id, or same content);
  * the main clients row fills only its empty columns.
  */
+// A memory carried in on purpose (from Lodestone on Telegram: the clients row's
+// carried_at, set by migrate-telegram-to-held.php) is newer knowledge than what a
+// device held: its profile and its Wheel stand over the older ones, and its notes
+// all stay, beside the device's own (October 24, 2026).
+const CARRIED_COLUMNS = ["profile_summary", "situation_capsule", "wheel_position", "display_name", "carried_at"];
 export function mergeState(mine, theirs) {
   if (!theirs?.tables) return mine || null;
   if (!mine?.tables) return theirs;
   const out = { ...mine, v: Math.max(mine.v || 0, theirs.v || 0), at: Math.max(mine.at || 0, theirs.at || 0), tables: { ...mine.tables } };
+  const carried = Number(theirs.tables.clients?.[0]?.carried_at || 0) > Number(mine.tables.clients?.[0]?.carried_at || 0);
   for (const [t, rows] of Object.entries(theirs.tables)) {
     const have = out.tables[t] || [];
     if (!Array.isArray(rows) || !rows.length) continue;
@@ -348,7 +386,14 @@ export function mergeState(mine, theirs) {
     if (t === "clients") {
       const a = { ...have[0] }, b = rows[0] || {};
       for (const [k, v] of Object.entries(b)) if ((a[k] == null || a[k] === "" || a[k] === 0) && v != null && v !== "") a[k] = v;
+      if (carried) for (const k of CARRIED_COLUMNS) if (b[k] != null && b[k] !== "") a[k] = b[k];
       out.tables[t] = [a, ...have.slice(1)];
+      continue;
+    }
+    if (t === "wheel_profile" && carried) {
+      const byPillar = new Map(have.map(r => [r.pillar, r]));
+      for (const r of rows) byPillar.set(r.pillar, r);
+      out.tables[t] = [...byPillar.values()];
       continue;
     }
     const sig = r => { const { id, client_id, ...rest } = r || {}; return JSON.stringify(rest); };
@@ -357,14 +402,29 @@ export function mergeState(mine, theirs) {
     const wheel = t === "wheel_profile" ? new Set(have.map(r => r.pillar)) : null;
     const add = rows.filter(r => wheel ? !wheel.has(r.pillar) : !sigs.has(sig(r)));
     // profile_notes is one row per category: the newer one stands.
+    // Notes carried in (confidence "migrated") are many to a category: all kept, each once.
     if (t === "profile_notes") {
-      const byCat = new Map(have.map(r => [r.category, r]));
-      for (const r of rows) { const h = byCat.get(r.category); if (!h || Number(r.updated_at || 0) > Number(h.updated_at || 0)) byCat.set(r.category, r); }
-      out.tables[t] = [...byCat.values()];
+      const isCarried = r => r?.confidence === "migrated" || r?.confidence === "telegram";
+      const byCat = new Map(have.filter(r => !isCarried(r)).map(r => [r.category, r]));
+      for (const r of rows.filter(r => !isCarried(r))) { const h = byCat.get(r.category); if (!h || Number(r.updated_at || 0) > Number(h.updated_at || 0)) byCat.set(r.category, r); }
+      const kept = new Map();
+      for (const r of [...(carried ? [] : have.filter(isCarried)), ...rows.filter(isCarried), ...(carried ? have.filter(isCarried) : [])]) { const k = `${r.category}\u0000${r.observation}`; if (!kept.has(k)) kept.set(k, r); }
+      out.tables[t] = [...byCat.values(), ...kept.values()];
       continue;
     }
     out.tables[t] = [...have, ...add.map(r => (r?.id != null && ids.has(r.id)) ? { ...r, id: undefined } : r)];
   }
+  return out;
+}
+
+/** One device's record from two devices: a removal holds; the later name holds; the latest sync is kept. */
+export function mergeDevice(a, b) {
+  const named = (a.namedAt || 0) >= (b.namedAt || 0) ? a : b;
+  const gone = a.removed ? a : b.removed ? b : null;
+  const out = { ...b, ...a, name: named.name, namedAt: named.namedAt || 0, seen: Math.max(a.seen || 0, b.seen || 0),
+    since: Math.min(a.since || Infinity, b.since || Infinity) };
+  if (!Number.isFinite(out.since)) delete out.since;
+  if (gone) { out.removed = gone.removed; out.removedBy = gone.removedBy || null; } else { delete out.removed; delete out.removedBy; }
   return out;
 }
 
@@ -387,6 +447,7 @@ export function merge(lid, mine, theirs) {
     const summary = {}; if (mine.thread.summaryAt || theirs.thread.summaryAt) for (const k of ["summary", "summaryThrough", "summaryThroughTs", "summaryAt"]) summary[k] = summed[k];
     return { thread: { ...theirs.thread, ...mine.thread, ...summary, title: named.title, titled: named.titled || 0, pinned: pinned.pinned || 0, pinSet: pinned.pinSet || 0, updated: Math.max(mine.thread.updated || 0, theirs.thread.updated || 0) }, messages };
   }
+  if (lid.startsWith("d:") && mine && theirs) return mergeDevice(mine, theirs);
   if (lid === "k:reading" && mine && theirs) return mergeReading(mine, theirs);
   // Website Lodestone's memory (held.js): two devices' learning joins, nothing is dropped.
   if (lid === "k:companion" && mine && theirs) {
@@ -428,8 +489,8 @@ export function merge(lid, mine, theirs) {
  * secret:    { get(name), set(name, value) } for the OpenRouter key, or null
  */
 export class Sync {
-  constructor({ transport, secret = null, onChange = () => {}, canRun = () => true }) {
-    this.t = transport; this.secret = secret; this.onChange = onChange; this.canRun = canRun;
+  constructor({ transport, secret = null, onChange = () => {}, canRun = () => true, device = () => deviceGuess() }) {
+    this.t = transport; this.secret = secret; this.onChange = onChange; this.canRun = canRun; this.device = device;
     this.running = null; this.keys = null;
   }
 
@@ -742,7 +803,70 @@ export class Sync {
     this.keys = keys; this.noLegacy = null;
     await store.kv.set(KEYS, keys);
     await store.kv.set(STATE, { epoch: meta.epoch, seq: 0, recs: {}, fresh: true });
+    // Each copy joined, a device is new to it: the records of the devices of an earlier copy are not carried in.
+    // The name the person gave this device stays with it.
+    const prev = ((await store.kv.get(DEVICES)) || {})[(await store.kv.get(ME))?.id] || (await store.kv.get(ME));
+    await store.kv.del(DEVICES);
+    await store.kv.set(ME, { id: b64u(crypto.getRandomValues(new Uint8Array(12))), ...(prev?.namedAt ? { name: prev.name, namedAt: prev.namedAt } : {}) });
     await this.setConf({ on: true, auto: true, key: !!key, since: Date.now(), last: null, error: null, account: await this.accountEmail() });
+  }
+
+  // ─── the devices ──────────────────────────────────────────────────────────
+
+  async me() {
+    let me = await store.kv.get(ME);
+    if (!me?.id) { me = { id: b64u(crypto.getRandomValues(new Uint8Array(12))) }; await store.kv.set(ME, me); }
+    return me;
+  }
+
+  /** This device's own record, written again when what it says changed, or every few minutes to say it synced. */
+  async touchDevice() {
+    const me = await this.me();
+    const all = (await store.kv.get(DEVICES)) || {};
+    const was = all[me.id];
+    if (was?.removed) return;
+    let g = {}; try { g = (await this.device()) || {}; } catch {}
+    const now = Date.now();
+    const named = was?.namedAt ? was : me.namedAt ? me : null;
+    const next = { id: me.id, kind: g.kind || was?.kind || "browser", name: named ? named.name : (g.name || was?.name || "A device"),
+      namedAt: named?.namedAt || 0, version: g.version ?? was?.version ?? null, since: was?.since || (await this.conf()).since || now, seen: now };
+    if (was && was.kind === next.kind && was.name === next.name && was.version === next.version && now - (was.seen || 0) < SEEN_EVERY) return;
+    all[me.id] = next;
+    await store.kv.set(DEVICES, all);
+  }
+
+  /** The devices that sync this memory, this one first: [{ id, name, kind, version, since, seen, here }]. */
+  async devices() {
+    const me = await this.me();
+    const all = (await store.kv.get(DEVICES)) || {};
+    return Object.values(all).filter(d => d?.id && !d.removed).map(d => ({ ...d, here: d.id === me.id }))
+      .sort((a, b) => (b.here - a.here) || (b.seen || 0) - (a.seen || 0));
+  }
+
+  /** A sync that begins after this call, so a change just made is in it. */
+  async syncAfter() { if (this.running) await this.running.catch(() => {}); return this.now(); }
+
+  /** Renames this device, on every device. */
+  async renameDevice(name) {
+    name = String(name || "").replace(/\s+/g, " ").trim().slice(0, 60);
+    if (!name) throw new SyncError("name", "Give this device a name.");
+    await this.touchDevice();
+    const me = await this.me(), all = (await store.kv.get(DEVICES)) || {};
+    const namedAt = Date.now();
+    all[me.id] = { ...all[me.id], name, namedAt };
+    await store.kv.set(DEVICES, all);
+    await store.kv.set(ME, { ...me, name, namedAt });
+    return this.syncAfter();
+  }
+
+  /** Removes another device: at its next sync it stops syncing and says so. What it holds stays on it. */
+  async removeDevice(id) {
+    const me = await this.me(), all = (await store.kv.get(DEVICES)) || {};
+    if (id === me.id) throw new SyncError("self", "To stop syncing on this device, turn sync off here.");
+    if (!all[id]) throw new SyncError("gone", "That device is no longer listed.");
+    all[id] = { ...all[id], removed: Date.now(), removedBy: all[me.id]?.name || null };
+    await store.kv.set(DEVICES, all);
+    return this.syncAfter();
   }
 
   /** The harmonism.io account this device syncs as; null through a computer, which has no account. */
@@ -829,7 +953,7 @@ export class Sync {
       const message = String(e.message || e);
       // The copy was erased, or started again, elsewhere:
       // this device stops and says so rather than writing under the old keys.
-      if (code === "gone" || code === "epoch" || code === "no_space") await this.off({ auto: code === "epoch" });
+      if (code === "gone" || code === "epoch" || code === "no_space" || code === "removed") await this.off({ auto: code === "epoch" });
       await this.setConf({ error: { code, message, at: Date.now() } });
       return { ok: false, code, message };
     }
@@ -838,6 +962,7 @@ export class Sync {
   async locals(keys, conf) {
     const ids = (await store.threads.list()).map(t => "t:" + t.id);
     for (const k of SYNCED_KV) ids.push("k:" + k);
+    for (const id of Object.keys((await store.kv.get(DEVICES)) || {})) ids.push("d:" + id);
     if (conf.key && this.secret) ids.push("s:openrouter");
     const out = new Map();
     for (const lid of ids) {
@@ -865,6 +990,7 @@ export class Sync {
 
     const changed = new Set();
     const keyRid = await ridOf(keys, "s:openrouter");
+    await this.touchDevice();
     let local = await this.locals(keys, conf);
 
     // A record from the server, pulled or handed back as a conflict.
@@ -914,6 +1040,10 @@ export class Sync {
       await store.kv.set(STATE, st);
       if (!r.more) break;
     }
+
+    // Removed from another device: this one stops before it writes anything.
+    const self = ((await store.kv.get(DEVICES)) || {})[(await this.me()).id];
+    if (self?.removed) throw new SyncError("removed", `This device was removed from your synced memory${self.removedBy ? ` on ${self.removedBy}` : ""}. Its memory here is kept; turn sync on again to let it back in.`);
 
     // Push, taking in whatever another device wrote meanwhile
     for (let round = 0; round < 4; round++) {

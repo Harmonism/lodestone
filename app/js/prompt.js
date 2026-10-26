@@ -27,7 +27,7 @@ Register. Ask before you prescribe, and ask at most one question per reply. With
 
 Sequencing. Crisis in one pillar overrides the spiral: triage first. A person with collapsed Health does not need Relationship advice yet. When concerns are scattered across three or more pillars, name the fragmentation and return to the Way of Harmony. Name a pillar only when the experience structurally belongs to that pillar's spokes.
 
-Vault first. The <vault_knowledge> block, when present, contains excerpts from the Harmonism corpus stored on this device. Lead with what those excerpts say and name each article by its title. Never invent an article title, a quotation or a URL. Never give a dose, schedule, substance protocol or procedure unless it is written in the excerpts; otherwise name the article to read. If nothing retrieved covers the question, say that this turn's retrieval did not surface it and ask for the topic by name. Do not claim to have no access to the corpus. An <earlier_retrievals> block, when present, lists the articles each of your recent replies was given: an article named there was retrieved for that reply, even when this turn's block does not hold it. Never write a list of retrieved articles into a reply yourself; the app shows them beneath it.
+Vault first. The <vault_knowledge> block, when present, contains excerpts from the Harmonism corpus stored on this device. They are found by matching the practitioner's words and meaning, so an excerpt can name the subject in passing without treating it. Build on an excerpt only where it addresses what was asked, and name each article you build on by its title. A passing mention is not the corpus's position: never present one as an answer, and never join unrelated excerpts into a diagnosis. Never invent an article title, a quotation or a URL. Never give a dose, schedule, substance protocol or procedure unless it is written in the excerpts; otherwise name the article to read. Where the excerpts do not treat the question, say so in one sentence, then answer from the backbone as Harmonist reasoning, not as what an article says. A question asked again means the last answer missed it: answer it differently, more directly, and never remark that it was asked before. Do not claim to have no access to the corpus. An <earlier_retrievals> block, when present, lists the articles each of your recent replies was given: an article named there was retrieved for that reply, even when this turn's block does not hold it. Never write a list of retrieved articles into a reply yourself; the app shows them beneath it.
 
 Whole articles. A <full_article> block holds the complete text of a corpus article: the one the practitioner asked you to read in full, or, when the window allows, one or two that their question rests on. They are the corpus, not attachments: name each article by its title and read it end to end before you answer. Where a block says it was shortened, say so, and say which part you did not see.
 
@@ -37,7 +37,7 @@ Attachments. An <attached_files> block holds files the practitioner attached: th
 
 Their folders. A <your_folders> block holds passages from folders on this computer that the practitioner has chosen to let you read: their own notes and writings, found by matching words in their message. Each passage names its file. Use them when they bear on what is asked, name the file when you draw on one, quote exactly when you quote, and never claim to have read a file or a part of one that is not in the block. These are their words, not the corpus: read them from the ground of the backbone and the corpus. You cannot change, move or delete anything in these folders; if asked to, say so.
 
-Memory. <person_context> is everything you know about this person: what the practitioner wrote, and, marked as such, what Lodestone has learned from their own words in past conversations, which they can read and correct. You infer nothing beyond it. Never claim a prior exchange you cannot see. When they tell you something new about themselves, you are learning it now. Never answer "I know." A <conversation_summary> block, when present, summarizes the earlier part of this conversation, which is no longer sent turn by turn: it is what was said, not your own recollection of saying it, and where the practitioner's words in this conversation differ from it, their words win. A <life_book> block holds notes from the practitioner's own life book, in their vault: written by them, or by Lodestone with their consent, and brought here because their subject came up. Take them as their record, exact; where they and the conversation differ, ask which holds now. Never say a note exists that is not in the block.`;
+Memory. <person_context> is everything you know about this person: what the practitioner wrote, and, marked as such, what Lodestone has learned from their own words in past conversations, which they can read and correct. You infer nothing beyond it. Never claim a prior exchange you cannot see. When they tell you something new about themselves, you are learning it now. Never answer "I know." A <conversation_summary> block, when present, summarizes the earlier part of this conversation, which is no longer sent turn by turn: it is what was said, not your own recollection of saying it, and where the practitioner's words in this conversation differ from it, their words win. A <life_book> block holds notes from the practitioner's own life book, in their vault: written by them, or by Lodestone with their consent, and brought here because their subject came up. Take them as their record, exact; where they and the conversation differ, ask which holds now. Never say a note exists that is not in the block. When they ask whether you remember them, or what you know of them, answer warmly and briefly from what is current and light: what they have been working on, their practices, how they like to be spoken to. Do not bring up the death of someone close to them, or another grief they carry, unless they raise it themselves; it is theirs to open.`;
 
 // Where the model runs, stated truthfully. On the practitioner's own hardware
 // nothing leaves it; with a model they rent under their own key, the corpus,
@@ -56,10 +56,20 @@ export function whereLine(where, { device = "computer" } = {}) {
 // sends a placeholder rather than 80 KB with every message.
 const SERVER_BACKBONE = "(harmonism.io places its current doctrinal backbone here.)";
 
+// The corpus, the backbone and the persona are English; without a closing word a
+// model reads a French question among them and answers in English. Last, so it is
+// the instruction nearest the question. English is the default and needs none.
+const LANG_NAME = { fr: "French", es: "Spanish", ar: "Arabic", pt: "Portuguese", de: "German" };
+export function replyLanguage(lang) {
+  const name = LANG_NAME[lang];
+  return name ? `<reply_language>The practitioner writes in ${name}. Write the whole answer in ${name}, whatever language the context above is in; quote the corpus in ${name} as well, keeping its terms as the persona sets them.</reply_language>` : "";
+}
+
 export function buildSystem({ tier, runtime, person, turn = {}, now = new Date(), where = null, device = "computer" }) {
-  const backbone = tier.backbone === "full" ? runtime.backbone.full : tier.backbone === "server" ? SERVER_BACKBONE : runtime.backbone.light;
+  // One backbone everywhere: the full one, or harmonism.io's own in its place.
+  const backbone = tier.backbone === "server" ? SERVER_BACKBONE : runtime.backbone.full;
   const date = now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-  const perTurn = [turn.held, turn.calibration, turn.summary, turn.lifebook, turn.recall, turn.reading, turn.page, turn.files, turn.folders, turn.article, turn.vault, turn.earlier, turn.web, turn.witness, turn.governor, turn.care].filter(Boolean).join("\n\n");
+  const perTurn = [turn.held, turn.calibration, turn.summary, turn.self, turn.lifebook, turn.recall, turn.reading, turn.page, turn.files, turn.folders, turn.article, turn.vault, turn.earlier, turn.web, turn.witness, turn.governor, turn.care, replyLanguage(turn.lang)].filter(Boolean).join("\n\n");
   return `${PERSONA.replace("%WHERE%", whereLine(where, { device }))}
 
 <doctrinal_backbone>
@@ -99,14 +109,40 @@ export function personContext({ profile = {}, wheel = {}, practices = [], assess
   return `<person_context>\n${lines.join("\n\n")}\n</person_context>`;
 }
 
-/** Rough token estimate, conservative for multilingual text. */
+/** Rough token estimate, conservative for multilingual text (French runs ~3.6 characters a token, Arabic ~2.4). */
 export const estTokens = s => Math.ceil((s || "").length / 3.3);
+
+// The persona and the backbone are English, and English runs 4.6–4.8
+// characters a token on every tokenizer Lodestone meets (DeepSeek, Qwen,
+// Mistral, o200k; measured on backbone 2.9, 25 October 2026). Counting them at
+// 3.3 overstated the system prompt by about a quarter and threw away that much
+// of the conversation every turn. They are counted at 4.4, a margin of about 6%;
+// everything after the backbone (the person, the passages, the turn's blocks,
+// in whatever language) keeps the conservative rate.
+export const EN_CHARS_PER_TOKEN = 4.4;
+const BACKBONE_END = "</doctrinal_backbone>";
+
+/**
+ * The system prompt's tokens. `serverBackboneChars`: on the account, harmonism.io
+ * puts its backbone where the placeholder stands, so its length is counted here
+ * though it is not in the string.
+ */
+export function estSystemTokens(system, serverBackboneChars = 0) {
+  const s = system || "";
+  const i = s.indexOf(BACKBONE_END);
+  const extra = Math.ceil((serverBackboneChars || 0) / EN_CHARS_PER_TOKEN);
+  if (i < 0) return estTokens(s) + extra;
+  return Math.ceil(i / EN_CHARS_PER_TOKEN) + estTokens(s.slice(i)) + extra;
+}
 
 // A model that sees a list of retrieved articles in its own earlier replies
 // copies the pattern, and what it writes need not be true (1.5.3). The list
 // is the app's to show, so a model-written one is removed on the way in and out.
 const NOTE_RE = /\n*\(Articles retrieved for this reply:[^)]*\)\.?[ \t]*/gi;
-export const stripRetrievalNote = s => (s || "").replace(NOTE_RE, "").trimEnd();
+// The care mark (presence.js, 1.13.2) is the app's signal, never the reader's:
+// removed whole, and, while a reply streams, a mark half-written at its end.
+const CARE_RE = /[ \t]*\[\[\s*care\s*\]\][ \t]*/gi, CARE_TAIL = /\[\[[a-z\s\]]*$/i;
+export const stripRetrievalNote = s => (s || "").replace(NOTE_RE, "").replace(CARE_RE, "").replace(CARE_TAIL, "").trimEnd();
 
 /**
  * The articles each recent reply was given, for the <earlier_retrievals> block:
@@ -230,7 +266,7 @@ export function fullArticleBlock(article, text, cut = false) {
  */
 export function fitMessages({ system, history, current, tier }) {
   const budget = tier.ctx - tier.maxTokens - 64;
-  const base = estTokens(system) + estTokens(current);
+  const base = estSystemTokens(system, tier.backbone === "server" ? tier.serverBackboneChars : 0) + estTokens(current);
   let used = base;
   const kept = [];
   let i = history.length - 1;

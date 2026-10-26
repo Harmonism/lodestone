@@ -6,7 +6,7 @@
 // gate, witness mode, the memory and the practices live on this computer and
 // run here; the assembled turn goes to harmonism.io/lodestone-desktop-api.php,
 // which sends it to the hosted model with the server's own doctrinal backbone
-// and stores nothing of it. A free account has ten messages a day in total
+// and stores nothing of it. A free account has ten messages a day the first month, then five, in total
 // across harmonism.io, Telegram and this app; the server counts them.
 //
 // Sign-in is the website's own (Supabase, email and password). The refresh

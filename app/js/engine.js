@@ -1,36 +1,34 @@
 // engine.js — where Lodestone thinks.
-//   standard: WebLLM on this computer's GPU (WebGPU). Weights download once, then offline.
-//   server: any OpenAI-compatible endpoint the practitioner runs (Ollama, LM Studio, llama.cpp, vLLM).
-// No telemetry, no third-party inference.
+//   server: any OpenAI-compatible endpoint the practitioner runs (Lodestone Desktop, Ollama, LM Studio, llama.cpp, vLLM).
+//   hosted / openrouter: a rented model tested against the doctrine (phone.js).
+//   reader: no model; the passages themselves.
+// No telemetry.
+//
+// Thinking inside the browser (WebLLM, Qwen3-8B and OLMo-2-7B) was withdrawn on
+// 25 October 2026: no model a browser can hold carries the full doctrinal
+// backbone with room left for the conversation, and the compressed backbone it
+// ran on was retired with it. One backbone, everywhere Lodestone speaks.
 
-import * as webllm from "../vendor/web-llm.js";
 // The stream reader lives apart so a page that never runs a model on the
-// device (website Lodestone, held.js) need not load WebLLM to read a stream.
+// device (website Lodestone, held.js) need not load an engine to read a stream.
 import { readSSE, providerError, stripThink, normUsage } from "./sse.js";
 export { readSSE, providerError, normUsage };
 
-// Openness grading follows the openness gradient: closed → open-weight → fully-open
-// (weights + training data + training code). Fully-open is the terminus.
-// Only models that answer well enough to be trusted with the voice are listed.
-// Everything below the 7–8B class was removed on 24 Sep 2026: a 1B model in
-// Lodestone's register produces confident answers that misrepresent the system, and
-// a wrong answer in that voice is a worse outcome than no answer. There is no
-// smaller fallback on purpose — a computer that cannot hold these is told to
-// run the model outside the browser instead, where it can hold much more.
-export const MODELS = {
-  "Qwen3-8B":  { id: "Qwen3-8B-q4f16_1-MLC", f32: "Qwen3-8B-q4f32_1-MLC", gb: 5.7, openness: "open-weight", note: "Multilingual; the strongest that runs inside a browser", thinking: true },
-  "OLMo-2-7B": { id: "OLMo-2-1124-7B-Instruct-q4f16_1-MLC", f32: "OLMo-2-1124-7B-Instruct-q4f32_1-MLC", gb: 6.5, openness: "fully-open", note: "Fully open (AI2): weights, data and training code. English-centred" },
-};
+// No model runs inside the browser any more (see the head of this file). The
+// table stays, empty, for the code that still asks it.
+export const MODELS = {};
+
+// The window each route gives Lodestone. A rented model tested against the
+// doctrine takes 65,536 tokens: the backbone, the turn's passages and a long
+// conversation, at a fraction of a cent a turn. A model the practitioner runs
+// keeps 32,768 unless they set more: its memory, not its price, is the limit.
+// main.js (windowFor) lowers a rented model that was not tested to 32,768.
+export const RENTED_CTX = 65536, OWNED_CTX = 32768;
 
 export const TIERS = {
-  standard: {
-    label: "This browser", sub: "Qwen3-8B, downloaded once into this browser (about 6 GB) and run on this computer's graphics card: then it works offline, and nothing you say leaves this device. Needs a real GPU and 8 GB to spare. For a larger model on your own computer, Lodestone Desktop runs Bonsai 2 27B Heretic.",
-    engine: "webllm", models: ["Qwen3-8B", "OLMo-2-7B"], ctx: 8192,
-    backbone: "light", rag: { k: 4, maxChars: 5200 }, maxTokens: 700,
-  },
   server: {
     label: "My computer's model server", sub: "Lodestone Desktop, Ollama, LM Studio or llama.cpp on a machine you own. Larger models, the full doctrinal backbone, and nothing leaves your own network.",
-    engine: "openai", models: [], ctx: 32768,
+    engine: "openai", models: [], ctx: OWNED_CTX,
     backbone: "full", rag: { k: 5, maxChars: 12000 }, maxTokens: 1200,
   },
   // The two routes for a phone with no computer behind it (phone.js).
@@ -38,19 +36,19 @@ export const TIERS = {
   // a placeholder, so the phone does not send 80 KB with every message.
   hosted: {
     label: "My harmonism.io account", sub: "Ten free messages a day in total across harmonism.io, Telegram and Lodestone's apps, with DeepSeek V4.1 Flash or another open-weight model tested against the doctrine. harmonism.io reads each message. For no daily limit, use your own OpenRouter key.",
-    engine: "hosted", models: [], ctx: 32768,
+    engine: "hosted", models: [], ctx: RENTED_CTX,
     backbone: "server", rag: { k: 5, maxChars: 12000 }, maxTokens: 1200,
   },
   openrouter: {
     label: "OpenRouter, with my own key", sub: "No daily limit; you pay OpenRouter for what you use. The same models hosted Lodestone runs on, tested against the doctrine, or any other OpenRouter lists. OpenRouter reads each message.",
-    engine: "openrouter", models: [], ctx: 32768,
+    engine: "openrouter", models: [], ctx: RENTED_CTX,
     backbone: "full", rag: { k: 5, maxChars: 12000 }, maxTokens: 1200,
   },
   // No model at all (TODO, corpus-only tier): the crisis gate and retrieval
   // still run, and a question is answered with the passages that bear on it.
   reader: {
     label: "No model: read and search", sub: "The whole corpus on this device, with no network and no model. A question brings back the passages that bear on it, and every article opens offline.",
-    engine: "none", models: [], ctx: 32768,
+    engine: "none", models: [], ctx: OWNED_CTX,
     backbone: "full", rag: { k: 6, maxChars: 9000 }, maxTokens: 0,
   },
 };
@@ -63,12 +61,10 @@ export const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) ||
 export const isHandheld = () => isIOS() || /Android|Mobile/i.test(navigator.userAgent) ||
   Math.min(screen.width, screen.height) < 700;
 
-// On-device inference is not offered on phones and tablets. It is not a memory
-// question — Llama-3.2-1B does fit — it is that a model that small answers as
-// Lodestone badly enough to misrepresent the system it is speaking for, which is
-// worse than not answering. A handheld reaches a model the practitioner owns on
-// a computer instead (tools/serve.py --lan), which also carries the full
-// backbone rather than the compressed one.
+// A computer rather than a phone or tablet. (The name is older than the
+// withdrawal of in-browser thinking; what it tells the setup screen is still
+// true: a handheld reaches a computer the practitioner owns, the account, or
+// their own key.)
 export const localInferenceAvailable = () => !isHandheld();
 
 /** The model a tier should start with on this device. */
@@ -120,51 +116,16 @@ export class ReaderEngine {
   describe() { return "no model · reading the corpus"; }
 }
 
-// ─── WebLLM (on-device) ───────────────────────────────────────────────────────
+// ─── In-browser thinking: withdrawn ──────────────────────────────────────────
 
+/** Kept so an old setting fails with a sentence, not a crash. */
 export class DeviceEngine {
-  constructor(tier, modelKey, f16) {
-    let ctx = tier.ctx;
-    const maxCtx = MODELS[modelKey].maxCtx;
-    if (maxCtx) ctx = Math.min(ctx, maxCtx);
-    this.tier = ctx === tier.ctx ? tier : { ...tier, ctx }; this.modelKey = modelKey; this.modelId = resolveModelId(modelKey, f16);
-    this.engine = null; this.kind = "device";
-  }
-  async isCached() {
-    try { return await webllm.hasModelInCache(this.modelId); } catch { return false; }
-  }
-  async load(onProgress) {
-    const appConfig = {
-      ...webllm.prebuiltAppConfig,
-      useIndexedDBCache: false,
-      model_list: webllm.prebuiltAppConfig.model_list.map(m =>
-        m.model_id === this.modelId ? { ...m, overrides: { ...(m.overrides || {}), context_window_size: this.tier.ctx } } : m),
-    };
-    this.engine = await webllm.CreateWebWorkerMLCEngine(
-      new Worker(new URL("./llm-worker.js", import.meta.url), { type: "module" }),
-      this.modelId,
-      { appConfig, initProgressCallback: r => onProgress && onProgress(r.progress, r.text) },
-    );
-  }
-  async *stream(messages, { maxTokens, temperature = 0.7, background = false } = {}) {
-    // Qwen3's published non-thinking settings, plus a repetition guard: small quantized models loop.
-    const req = {
-      messages, stream: true, temperature, top_p: 0.8, max_tokens: maxTokens,
-      presence_penalty: 1.0, repetition_penalty: 1.1,
-      stream_options: { include_usage: true },
-    };
-    if (MODELS[this.modelKey].thinking) req.extra_body = { enable_thinking: false };
-    if (background) this.bgUsage = null; else this.lastUsage = null;
-    const chunks = await this.engine.chat.completions.create(req);
-    let raw = "";
-    for await (const ch of chunks) {
-      const d = ch.choices?.[0]?.delta?.content;
-      if (d) { raw += d; yield stripThink(raw); }
-      if (ch.usage) { if (background) this.bgUsage = ch.usage; else this.lastUsage = ch.usage; }
-    }
-  }
-  interrupt() { try { this.engine?.interruptGenerate(); } catch {} }
-  describe() { return `${this.modelKey} · on this device`; }
+  constructor(tier) { this.tier = tier; this.kind = "device"; }
+  async isCached() { return false; }
+  async load() { throw new Error("Lodestone no longer thinks inside the browser. Settings → Change where Lodestone thinks."); }
+  async *stream() { throw new Error("Lodestone no longer thinks inside the browser."); }
+  interrupt() {}
+  describe() { return "withdrawn"; }
 }
 
 // ─── OpenAI-compatible server (owned hardware) ────────────────────────────────

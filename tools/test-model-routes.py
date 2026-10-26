@@ -1,10 +1,10 @@
 """Where Lodestone thinks, in the web app on a computer, against test-phone.py's mocks:
-  setup begins on the harmonism.io account with DeepSeek V4.1 Flash, OpenRouter next, the
-  browser's own model offered after the computer and never preselected, Bonsai named for the desktop;
+  setup begins on the harmonism.io account with DeepSeek V4.1 Flash, OpenRouter next, and no
+  model inside the browser (withdrawn 25 Oct 2026: none holds the whole backbone);
   signed in, the account's model is chosen in setup and the chip names it, not its id;
   reopening setup says where Lodestone thinks now;
   the menu: a key pasted there is tested and DeepSeek V4.1 Flash begins on OpenRouter; another
-  model id can be typed; this browser's models are listed, and choosing one asks first.
+  model id can be typed; no in-browser model is listed.
 
 Usage: python3 tools/test-model-routes.py      (needs playwright, as test-phone.py)"""
 import importlib.util, json, os, sys, threading, time
@@ -41,14 +41,12 @@ def main():
         labels = page.eval_on_selector_all("#tierChoices .choice strong", "ns => ns.map(n => n.textContent)")
         pressed = page.eval_on_selector_all("#tierChoices .choice[aria-pressed=true] strong", "ns => ns.map(n => n.textContent)")
         check("a computer's browser: the account first and chosen, OpenRouter next", labels[:2] == ["My harmonism.io account", "OpenRouter, with my own key"] and pressed == ["My harmonism.io account"], f"{labels} {pressed}")
-        check("this browser's model offered after the computer, never chosen for the practitioner", "This browser" in labels and labels.index("This browser") > labels.index("My computer's model server"))
-        br = page.text_content("#tierChoices .choice:has(strong:has-text('This browser'))")
-        check("its card says what it downloads, that it stays on the device, and points to Bonsai on the desktop", "6 GB" in br and "nothing you say leaves this device" in br and "Bonsai 2 27B Heretic" in br)
+        check("no model inside the browser is offered", "This browser" not in labels, str(labels))
         check("the account and OpenRouter cards name the tested models, DeepSeek V4.1 Flash the default",
               all("DeepSeek V4.1 Flash (default)" in page.text_content(f"#tierChoices .choice:has(strong:has-text('{t}')) .models") for t in ["harmonism.io account", "OpenRouter"]))
         check("first run: no line about where Lodestone thinks now", page.is_hidden("#setupNow"))
         page.wait_for_selector("#hModelRow:not([hidden])", timeout=10000)
-        check("signed in: the account's model is chosen in setup, DeepSeek V4.1 Flash first", page.input_value("#hModel") == "deepseek/deepseek-v4.1-flash" and page.eval_on_selector_all("#hModel option", "o => o.length") == 2)
+        check("signed in: the account's model is chosen in setup, DeepSeek V4.1 Flash first", page.input_value("#hModel") == "deepseek/deepseek-v4.1-flash-1017" and page.eval_on_selector_all("#hModel option", "o => o.length") == 2)
         page.select_option("#hModel", "z-ai/glm-5.3-flash")
         page.uncheck("#optSemantic"); page.click("#beginSetup"); page.wait_for_selector("#main:not([hidden])", timeout=60000)
         page.wait_for_selector("#modelRow:not([hidden])", timeout=20000); page.wait_for_timeout(600)
@@ -59,8 +57,8 @@ def main():
         # The menu: no key yet; one pasted there
         page.click("#modelChip"); page.wait_for_timeout(500)
         groups = page.eval_on_selector_all("#modelMenu .model-group", "ns => ns.map(n => n.textContent)")
-        check("menu order: account, OpenRouter, this browser, no model; each says who reads",
-              [g.split(" —")[0] for g in groups] == ["Your harmonism.io account", "OpenRouter, your key", "In this browser", "No model"] and "harmonism.io reads each turn" in groups[0] and "nothing leaves this device" in groups[2], str(groups))
+        check("menu order: account, OpenRouter, no model; each says who reads; no in-browser model",
+              [g.split(" —")[0] for g in groups] == ["Your harmonism.io account", "OpenRouter, your key", "No model"] and "harmonism.io reads each turn" in groups[0], str(groups))
         check("the account's current model is marked", "GLM-5.3 Flash" in page.text_content("#modelMenu .model-item.active"))
         page.fill("#menuOrKey", "sk-or-v1-badkeybadkeybadkeybad00"); page.click("#modelMenu .model-other button")
         page.wait_for_function("!/Asking OpenRouter/.test(document.querySelector('#modelMenu').textContent)", timeout=10000)
@@ -70,14 +68,10 @@ def main():
         check("a good key pasted in the menu: kept, and DeepSeek V4.1 Flash begins on OpenRouter", page.evaluate("(async () => !!(await (await import('./js/phone.js')).secrets.get('openrouter')))()"))
         page.fill("#input", "And the Wheel?"); page.click("#sendBtn")
         page.wait_for_function("[...document.querySelectorAll('.msg.assistant .body')].some(b => b.textContent.includes('OpenRouter answer'))", timeout=20000)
-        check("the turn goes to OpenRouter under that key", LOG["openrouter"][-1]["body"]["model"] == "deepseek/deepseek-v4.1-flash" and LOG["openrouter"][-1]["auth"] == "Bearer " + tp.GOOD)
+        check("the turn goes to OpenRouter under that key", LOG["openrouter"][-1]["body"]["model"] == "deepseek/deepseek-v4.1-flash-1017" and LOG["openrouter"][-1]["auth"] == "Bearer " + tp.GOOD)
         page.click("#modelChip"); page.wait_for_timeout(500)
         page.fill("#modelMenu .model-other input", "mistralai/mistral-medium-3"); page.press("#modelMenu .model-other input", "Enter"); page.wait_for_timeout(800)
         check("another model id typed in the menu is used", "mistralai/mistral-medium-3" in page.text_content("#modelChipLabel"), page.text_content("#modelChipLabel"))
-        # This browser's model: asks first (dismissed here), nothing changes
-        page.click("#modelChip"); page.wait_for_timeout(500)
-        page.click("#modelMenu .model-item:has-text('Qwen3-8B')"); page.wait_for_timeout(500)
-        check("choosing this browser's model asks first, saying what it downloads", dialogs and "downloads about 6 GB" in dialogs[-1] and "mistral" in page.text_content("#modelChipLabel"), dialogs[-1][:120] if dialogs else "")
         # Reopening setup says where Lodestone thinks now
         page.click("#modelChip"); page.wait_for_timeout(400); page.click("#modelMenu .model-manage"); page.wait_for_selector("#setup:not([hidden])")
         page.wait_for_timeout(500)

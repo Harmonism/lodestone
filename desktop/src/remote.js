@@ -21,15 +21,32 @@
 // through the doctrinal-fidelity suite on the current backbone. Kept in step by
 // hand with the server's llm-models.php: the app checks nothing by itself, so the list ships with it.
 //   reasoning "none" asks the provider to answer without deliberating;
+//   "low" / "medium" / "high" ask for that much deliberation;
 //   ""  leaves reasoning on, for models whose providers make it mandatory,
 //       with minTokens as the floor so the reasoning does not eat the answer.
 const RECOMMENDED = [
-  { id: "deepseek/deepseek-v4.1-flash", label: "DeepSeek V4.1 Flash", maker: "DeepSeek", licence: "MIT", reasoning: "none", minTokens: 0, note: "The default on harmonism.io" },
+  { id: "deepseek/deepseek-v4.1-flash-1017", label: "DeepSeek V4.1 Flash", maker: "DeepSeek", licence: "MIT", reasoning: "medium", minTokens: 4000, note: "The default on harmonism.io" },
   { id: "z-ai/glm-5.3-flash", label: "GLM-5.3 Flash", maker: "Zhipu", licence: "MIT", reasoning: "", minTokens: 8000, note: "Reasons before every answer" },
   { id: "qwen/qwen3.5-397b-a17b", label: "Qwen 3.5 397B", maker: "Alibaba", licence: "Apache 2.0", reasoning: "none", minTokens: 0, note: "" },
   { id: "nvidia/nemotron-3-ultra-550b-a55b", label: "Nemotron 3 Ultra", maker: "NVIDIA", licence: "OpenMDW 1.1", reasoning: "none", minTokens: 0, note: "" },
 ];
-const recommendedFor = id => RECOMMENDED.find(m => m.id === id) || null;
+// Ids that left the tested list for a successor. A saved choice of one is
+// moved at launch (main.js); until then, and for any copy that escaped the move,
+// it runs as its successor, so it never loses the reasoning cap and token floor.
+const RETIRED = { "deepseek/deepseek-v4.1-flash": "deepseek/deepseek-v4.1-flash-1017" };
+const current = id => RETIRED[String(id || "").trim()] || id;
+const recommendedFor = id => RECOMMENDED.find(m => m.id === current(id)) || null;
+
+// Frontier models offered under the practitioner's own key, and not recommended:
+// the strongest models for most things, but not the ones for doctrinal fidelity.
+// Never offered on the harmonism.io account. The same list as app/js/phone.js.
+const OFFERED = [
+  { id: "anthropic/claude-opus-5.5", label: "Claude Opus 5.5", maker: "Anthropic", licence: "closed weights", reasoning: "medium", minTokens: 4000, note: "Not recommended · doctrinal fidelity" },
+  { id: "openai/gpt-6-astra", label: "GPT-6 Astra", maker: "OpenAI", licence: "closed weights", reasoning: "medium", minTokens: 4000, note: "Not recommended · doctrinal fidelity" },
+];
+const offeredFor = id => OFFERED.find(m => m.id === String(id || "").trim()) || null;
+// How a turn is run: a recommended model's settings, else an offered one's.
+const profileFor = id => recommendedFor(id) || offeredFor(id);
 const BUNDLED_RECOMMENDED = RECOMMENDED.map(m => ({ ...m }));
 /** A newer list from harmonism.io's model catalog, changed in place. */
 function setRecommended(list) { if (Array.isArray(list) && list.length) RECOMMENDED.splice(0, RECOMMENDED.length, ...list); }
@@ -39,8 +56,8 @@ const PRESETS = {
   // Not offered in the provider list: it has its own sign-in box.
   harmonism: {
     label: "harmonism.io account", kind: "hosted", baseUrl: "https://harmonism.io",
-    model: "deepseek/deepseek-v4.1-flash", keyHint: "", keyUrl: "", hidden: true,
-    note: "Ten messages a day in total across harmonism.io, Telegram and this app, on the models hosted Lodestone runs on.",
+    model: "deepseek/deepseek-v4.1-flash-1017", keyHint: "", keyUrl: "", hidden: true,
+    note: "Ten messages a day for the first month, then five, in total across harmonism.io, Telegram and this app, on the models hosted Lodestone runs on.",
     recommended: RECOMMENDED,
   },
   anthropic: {
@@ -55,9 +72,10 @@ const PRESETS = {
   },
   openrouter: {
     label: "OpenRouter", kind: "openai", baseUrl: "https://openrouter.ai/api/v1",
-    model: "deepseek/deepseek-v4.1-flash", keyHint: "sk-or-…", keyUrl: "https://openrouter.ai/settings/keys",
-    note: "One key for many providers, open-weight and frontier. Each provider keeps its own terms. Any model it lists can be used; the recommended ones are those hosted Lodestone runs on, tested against the doctrine.",
+    model: "deepseek/deepseek-v4.1-flash-1017", keyHint: "sk-or-…", keyUrl: "https://openrouter.ai/settings/keys",
+    note: "One key for many providers, open-weight and frontier. Each provider keeps its own terms. Any model it lists can be used; the recommended ones are those hosted Lodestone runs on, tested against the doctrine. Claude Opus 5.5 and GPT-6 Astra are offered too, not recommended for doctrinal fidelity.",
     recommended: RECOMMENDED,
+    offered: OFFERED,
   },
   huggingface: {
     label: "Hugging Face", kind: "openai", baseUrl: "https://router.huggingface.co/v1",
@@ -207,16 +225,17 @@ async function chat(fetchFn, conf, key, o, signal) {
     return new Response(translateStream(res.body), { status: 200, headers: { "Content-Type": "text/event-stream" } });
   }
   const { chat_template_kwargs, ...rest } = o;   // the bundled engine's switch, unknown elsewhere
-  const body = { ...rest, model: c.model, stream: true };
+  const body = { ...rest, model: c.preset === "openrouter" ? current(c.model) : c.model, stream: true };
   // The page asks for the turn's usage (stream_options); OpenRouter adds its cost
   // in dollars when asked this way, for the conversation's running total.
   if (c.preset === "openrouter") body.usage = { include: true };
   // A recommended model on OpenRouter runs as hosted Lodestone runs it: reasoning off
   // where the provider allows it, a token floor where reasoning is mandatory, and
   // only providers that do not keep the conversation for training.
-  const r = c.preset === "openrouter" ? recommendedFor(c.model) : null;
+  const r = c.preset === "openrouter" ? profileFor(c.model) : null;
   if (r) {
     if (r.reasoning === "none") body.reasoning = { effort: "none", exclude: true };
+    else if (/^(low|medium|high)$/.test(r.reasoning)) body.reasoning = { effort: r.reasoning, exclude: true };
     else body.reasoning = { exclude: true };
     if (r.minTokens && (body.max_tokens || 0) < r.minTokens) body.max_tokens = r.minTokens;
     body.provider = { data_collection: "deny" };
@@ -251,10 +270,11 @@ const CLOSED_ID = /^(anthropic\/|x-ai\/|claude|grok|o\d)|^(openai\/)?(gpt-(?!oss
 /** How Lodestone regards a rented model: tested with the doctrine, or not; closed weights, or not. */
 function assess(preset, id) {
   id = String(id || "").trim();
-  const tested = (preset === "openrouter" || preset === "harmonism") && RECOMMENDED.some(m => m.id === id);
+  const tested = (preset === "openrouter" || preset === "harmonism") && !!recommendedFor(id);
   const closed = preset === "anthropic" || CLOSED_ID.test(id);
-  const note = tested ? "tested with Lodestone" : closed ? "closed weights · not tested against the doctrine" : "not tested against the doctrine";
-  return { tested, closed, note };
+  const offered = !tested && preset === "openrouter" && !!offeredFor(id);
+  const note = tested ? "tested with Lodestone" : offered ? "not recommended · doctrinal fidelity" : closed ? "closed weights · not tested against the doctrine" : "not tested against the doctrine";
+  return { tested, closed, offered, note };
 }
 
-module.exports = { assess, setHosted, PRESETS, RECOMMENDED, BUNDLED_RECOMMENDED, setRecommended, normalize, hostOf, listModels, chat, test, anthropicBody };
+module.exports = { RETIRED, assess, setHosted, PRESETS, RECOMMENDED, OFFERED, BUNDLED_RECOMMENDED, setRecommended, normalize, hostOf, listModels, chat, test, anthropicBody };

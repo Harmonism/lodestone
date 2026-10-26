@@ -2,6 +2,8 @@
 import { indirectCare, careCheck } from "../app/js/care.js";
 import { scanText } from "../app/js/privacygate.js";
 import { normalize } from "../app/js/safety.js";
+import { hasCareMark, careBlock } from "../app/js/presence.js";
+import { stripRetrievalNote } from "../app/js/prompt.js";
 let pass = 0, fail = 0;
 const ok = (c, name) => { c ? pass++ : fail++; console.log(`${c ? "ok  " : "FAIL"} ${name}`); };
 const lvl = t => indirectCare(t)?.level || null;
@@ -11,8 +13,17 @@ ok(lvl("j'ai envie de mourir de rire") === "ask", "'envie de mourir de rire' ask
 ok(lvl("my brother is suicidal") === "ask", "someone else's 'suicidal' asks");
 ok(lvl("I could kill myself laughing") === "ask", "'kill myself laughing' asks");
 for (const t of ["I want to kill myself", "I'm suicidal", "I´m suicidal", "i've been cutting myself", "I want to die", "Je veux mourir", "أريد أن أموت", "I don’t want to live anymore"]) ok(lvl(t) === "refer", `plain: ${t}`);
-ok((await careCheck("I could kill myself laughing", null))?.level === "refer", "no meaning layer: an indirect phrase refers");
-ok((await careCheck("I could kill myself laughing", async () => { throw new Error("x"); }))?.level === "refer", "meaning layer failed: an indirect phrase refers");
+// 1.13.2: only a plain phrase puts the crisis line under an answer by itself; an indirect one, or the meaning layer, asks the model, whose mark decides.
+ok((await careCheck("I could kill myself laughing", null))?.level === "ask", "no meaning layer: an indirect phrase asks");
+ok((await careCheck("I could kill myself laughing", async () => { throw new Error("x"); }))?.level === "ask", "meaning layer failed: an indirect phrase asks");
+ok((await careCheck("I want to kill myself", null))?.level === "refer", "a plain phrase refers without the meaning layer");
+ok(lvl("the team is better off without me on this project") === "ask", "'better off without me' asks, the model reads it");
+ok((await careCheck("I already know them", async () => { const v = new Float32Array(384); v.fill(1); return v; }))?.level !== "refer", "the meaning layer never refers by itself");
+for (const t of ["I already know them", "nothing much", "we're at a restaurant", "I'm done", "I'm over it"]) ok(indirectCare(t) === null, `no phrase: ${t}`);
+ok(hasCareMark("Please speak to someone.\n[[care]]") && hasCareMark("[[ Care ]]") && !hasCareMark("care"), "the care mark is found");
+ok(stripRetrievalNote("Please speak to someone.\n[[care]]") === "Please speak to someone.", "the care mark never reaches the reader");
+ok(stripRetrievalNote("Please speak to someone.\n[[ca") === "Please speak to someone.", "a care mark half-streamed is not shown");
+ok(careBlock({ level: "ask" }).includes("[[care]]") && !careBlock({ level: "refer" }).includes("[[care]]"), "the mark is asked for only where the app does not show the line itself");
 ok(normalize("I don´t") === "i don't", "normalize: ´ is an apostrophe, not a space and an accent");
 for (const t of ["my password was changed yesterday", "Secret: the meeting", "passwordless login"]) ok(!scanText(t).length, `prose, not a secret: ${t}`);
 for (const t of ["password: hunter2!", "DB_PASSWORD=s3cr3t", "my password is Tr0ub4dor"]) ok(scanText(t).length === 1, `a secret: ${t}`);

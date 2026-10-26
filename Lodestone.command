@@ -101,22 +101,22 @@ if ! curl -fsS --max-time 2 http://127.0.0.1:11434/api/version >/dev/null 2>&1; 
 fi
 
 # ── 4. The model ─────────────────────────────────────────────────────────────
-# Chosen by this computer's memory, from "Uncensored AI Models — A Ranking by the
-# Hand That Remains" read in Lodestone's own mode: thinking off, a 32,000-token window
-# so the whole doctrinal backbone fits. Each has had its refusals removed.
-# Nothing below the 8B class is offered: a confident wrong answer in Lodestone's
-# voice is worse than no answer at all.
+# Chosen by this computer's memory, the same choice Lodestone Desktop makes: only
+# models that hold the whole doctrinal backbone with the conversation beside it,
+# in Lodestone's own mode (thinking off, a 32,000-token window). Under 16 GB of
+# memory no such model fits, and this folder does not offer a smaller one: a
+# confident wrong answer in Lodestone's voice is worse than no answer at all.
 #
 # model.txt overrides the choice: put any name Ollama can pull in it.
-G4="hf.co/mradermacher/gemma-4-26B-A4B-it-uncensored-heretic-GGUF"
-G3="hf.co/mradermacher/gemma-3-12b-it-norm-preserved-biprojected-abliterated-GGUF:Q4_K_M"
-Q35="hf.co/mradermacher/Qwen3.5-9B-heretic-v2-GGUF:Q4_K_M"
+Q35B="hf.co/unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M"
+G4="hf.co/mradermacher/gemma-4-26B-A4B-it-uncensored-heretic-GGUF:Q4_K_M"
+M14="hf.co/mistralai/Ministral-3-14B-Instruct-2512-GGUF:Q4_K_M"
 
 MEM_GB=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 8589934592) / 1073741824 ))
-if   [ "$MEM_GB" -ge 64 ]; then AUTO="$G4:Q8_0";   ABOUT="Gemma 4 26B, uncensored · 27 GB"
-elif [ "$MEM_GB" -ge 30 ]; then AUTO="$G4:Q4_K_M"; ABOUT="Gemma 4 26B, uncensored · 17 GB"
-elif [ "$MEM_GB" -ge 15 ]; then AUTO="$G3";        ABOUT="Gemma 3 12B, uncensored · 7 GB"
-else                            AUTO="$Q35";       ABOUT="Qwen3.5 9B, uncensored · 6 GB"
+if   [ "$MEM_GB" -ge 46 ]; then AUTO="$Q35B"; ABOUT="Qwen 3.5 35B · 22 GB"
+elif [ "$MEM_GB" -ge 30 ]; then AUTO="$G4";   ABOUT="Gemma 4 26B, uncensored · 17 GB"
+elif [ "$MEM_GB" -ge 15 ]; then AUTO="$M14";  ABOUT="Ministral 3 14B · 8 GB"
+else                            AUTO=""
 fi
 
 MODEL=""
@@ -124,12 +124,24 @@ MODEL=""
 case "$MODEL" in
   # The previous launcher wrote its own pick here. Those were vendor weights
   # that refuse on contested ground; they are replaced unless chosen again.
-  ""|qwen3:32b|qwen3:14b|qwen3:8b)
-    [ -n "$MODEL" ] && dim "  Replacing the earlier default ($MODEL) with a stronger model for this computer."
+  ""|qwen3:32b|qwen3:14b|qwen3:8b|*gemma-3-12b*|*Qwen3.5-9B*|*gemma-4-26B*:Q8_0)
+    [ -n "$MODEL" ] && dim "  Replacing the earlier default ($MODEL) with a model that holds Lodestone's doctrine."
     MODEL="$AUTO"
-    printf '%s\n' "$MODEL" > model.txt ;;
+    [ -n "$MODEL" ] && printf '%s\n' "$MODEL" > model.txt ;;
   *) ABOUT="$MODEL (from model.txt)" ;;
 esac
+
+if [ -z "$MODEL" ]; then
+  blank
+  bold "This computer has ${MEM_GB} GB of memory, and Lodestone needs 16 GB to think on it."
+  plain "No model small enough to fit here holds Lodestone's doctrine. Open"
+  plain "https://harmonism.io/lodestone-app/ instead: it keeps your memory on this"
+  plain "computer and thinks through a free harmonism.io account or your own"
+  plain "OpenRouter key. To try a model of your own choosing anyway, put its name"
+  plain "in model.txt and double-click Lodestone again."
+  open "https://harmonism.io/lodestone-app/" 2>/dev/null
+  stop 1
+fi
 
 INSTALLED="$("$OLLAMA" list 2>/dev/null | awk 'NR>1 {print tolower($1)}')"
 LOWER="$(printf '%s' "$MODEL" | tr '[:upper:]' '[:lower:]')"
@@ -185,7 +197,8 @@ if [ "$STATUS" -eq 3 ]; then
   blank
   bold "This model does not work with the Ollama on this computer."
   plain "Updating Ollama from ollama.com fixes this in most cases. Otherwise,"
-  plain "put another model's name in model.txt — gemma3:12b is a safe choice —"
+  plain "put another model's name in model.txt (the models Lodestone Desktop offers"
+  plain "are listed at harmonism.io/lodestone-desktop)"
   plain "and double-click Lodestone again."
   open "https://ollama.com/download" 2>/dev/null
   stop 1

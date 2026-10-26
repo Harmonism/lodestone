@@ -132,6 +132,19 @@ const VOCAB = {
 const CODES = { english: "en", french: "fr", spanish: "es", arabic: "ar", portuguese: "pt", german: "de", chinese: "zh", japanese: "ja", hindi: "hi", russian: "ru", italian: "it", dutch: "nl", turkish: "tr", persian: "fa", urdu: "ur" };
 const promptIds = {};
 
+// With no language set, Whisper names it: one decoder step after <|startoftranscript|>,
+// the likeliest language token. transformers.js does not do this itself; given no
+// language it assumes English, and French speech then comes back translated.
+async function hearLanguage(audio) {
+  const gc = asr.model.generation_config;
+  const { input_features } = await asr.processor(audio);
+  const out = await asr.model({ input_features, decoder_input_ids: new Tensor("int64", BigInt64Array.from([BigInt(gc.decoder_start_token_id)]), [1, 1]) });
+  const [, steps, V] = out.logits.dims, at = (steps - 1) * V, d = out.logits.data;
+  let best = null, top = -Infinity;
+  for (const [t, id] of Object.entries(gc.lang_to_id || {})) if (d[at + id] > top) { top = d[at + id]; best = t.slice(2, -2); }
+  return best;
+}
+
 async function whisperPiece(audio, language) {
   const code = CODES[language] || (language && language.length === 2 ? language : null);
   const gc = asr.model.generation_config, tok = asr.tokenizer;
@@ -163,7 +176,9 @@ self.onmessage = async e => {
     }
     if (!asr) asr = await pipeline("automatic-speech-recognition", "Xenova/whisper-small", { dtype: "q8", device: "wasm" });
     const texts = [];
-    for (const p of pieces) { const t = await whisperPiece(p, language); if (t) texts.push(t); }
+    let heard = language;
+    if (!heard) try { heard = await hearLanguage(pieces[0]); } catch (err) { console.warn("[asr] language not named:", err); }
+    for (const p of pieces) { const t = await whisperPiece(p, heard); if (t) texts.push(t); }
     self.postMessage({ id, text: texts.join(" ").trim(), voiced: pieces.reduce((n, p) => n + p.length, 0) / RATE });
   } catch (err) {
     self.postMessage({ id, error: String(err?.message || err) });

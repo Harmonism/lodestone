@@ -22,7 +22,7 @@ export function normUsage(u) {
 /** `onUsage`, if given, receives the provider's usage block when the stream carries one. */
 export async function* readSSE(res, onUsage = null) {
   const reader = res.body.getReader(); const dec = new TextDecoder();
-  let buf = "", raw = "";
+  let buf = "", raw = "", finished = false, reason = "";
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -32,15 +32,24 @@ export async function* readSSE(res, onUsage = null) {
       const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
       if (!line.startsWith("data:")) continue;
       const payload = line.slice(5).trim();
-      if (payload === "[DONE]") { reader.cancel().catch(() => {}); return; }
+      if (payload === "[DONE]") { reader.cancel().catch(() => {}); break; }
       let j;
       try { j = JSON.parse(payload); } catch { continue; }
       if (j.error) throw new Error(j.error.message || "The provider stopped.");
       if (j.usage && onUsage) { try { onUsage(j.usage); } catch {} }
+      if (j.choices?.[0]?.finish_reason) { finished = true; reason = j.choices[0].finish_reason; }
       const d = j.choices?.[0]?.delta?.content;
       if (d) { raw += d; yield stripThink(raw); }
     }
   }
+  // The stream closed with no end marker and no text: the connection was cut (a
+  // phone that locked or left the page, a dropped network, a server time limit),
+  // not an empty answer. Said as an error, so the turn offers Retry instead of "…".
+  if (!finished && !stripThink(raw).trim()) throw new Error("The connection closed before Lodestone answered. Try again.");
+  // The model reached its token limit before writing a word: it spent the turn
+  // deliberating (a reasoning model without a cap). Said as an error, so the turn
+  // offers Retry instead of "…".
+  if (reason === "length" && !stripThink(raw).trim()) throw new Error("The model used its whole allowance thinking and wrote no answer. Try again, or choose another model.");
 }
 
 /** A provider's refusal, in plain words (the same wording as the desktop's remote.js). */

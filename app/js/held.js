@@ -29,11 +29,12 @@
 import * as store from "./store.js";
 import { Sync, mergeState } from "./sync.js";
 import { wire } from "./syncwire.js";
-import { hosted } from "./phone.js";
+import { hosted, secrets } from "./phone.js";
 import { isHPCode, parseHP } from "./hp.js";
 
 export const COMPANION = "companion";        // kv: { state, blocks, at }
 export const WEB_THREAD = "web-harmonism";   // the website's own conversation
+export const TG_THREAD = "telegram-carried"; // Lodestone on Telegram, carried in (October 24, 2026)
 const RECENT = 160;
 const HP_PENDING = "munai-hp-pending";
 const ANON_IMPORT = "munai-held-import";
@@ -189,6 +190,7 @@ export async function apply(evt) {
 /** The latest messages of the whole memory, oldest first, under their timestamps (the server's ids). */
 export async function recent(limit = RECENT) {
   const c = await load();
+  const fromApps = await learnFromApps();
   const cons = Number(c?.state?.tables?.clients?.[0]?.last_consolidation_id || 0);
   // Since the last consolidation (an id that is a timestamp in newer memories), and at least the last weeks.
   const since = cons > 1e12 ? Math.min(cons, Date.now() - 14 * 864e5) : Date.now() - 365 * 864e5;
@@ -196,6 +198,10 @@ export async function recent(limit = RECENT) {
   const out = []; let last = 0;
   for (const m of msgs) {
     if (m.meta?.crisis) continue;
+    // Answered on this computer, or by no model: it stays here (October 23, 2026).
+    if (m.meta?.here) continue;
+    // Switched off on this device: only the website's and the extension's own conversations go.
+    if (!fromApps && !m.meta?.source) continue;
     const id = Math.max(Number(m.ts) || Date.now(), last + 1); last = id;
     // The page a turn was about (the website, the extension): the reading trail.
     out.push({ id, role: m.role, content: String(m.content || "").slice(0, 12000), page_title: m.meta?.page || "" });
@@ -271,12 +277,17 @@ export async function prepare() {
   return { state: c?.state || null, recent: await recent(), ...(hp ? { hp_code: hp } : {}), ...(fresh ? { hp_fresh: true } : {}) };
 }
 
-export async function record({ threadId = WEB_THREAD, title = "On harmonism.io", user, assistant, page = {}, source = "website" }) {
+/** Whether this device's app conversations (not the website's own) go to harmonism.io to update what Lodestone has learned. On unless switched off here. */
+const LEARN_APPS = "held:learnFromApps";
+export async function learnFromApps() { await bind(); return (await store.kv.get(LEARN_APPS)) !== false; }
+export async function setLearnFromApps(on) { await bind(); await store.kv.set(LEARN_APPS, !!on); }
+
+export async function record({ threadId = WEB_THREAD, title = "On harmonism.io", user, assistant, page = {}, source = "website", crisis = null }) {
   await bind();
   const now = Date.now();
   let t = await store.threads.get(threadId);
   if (!t) t = { id: threadId, title, created: now, updated: now, source };
-  const meta = { source, ...(page.title ? { page: String(page.title).slice(0, 200) } : {}), ...(page.url ? { url: String(page.url).slice(0, 500) } : {}) };
+  const meta = { source, ...(crisis ? { crisis: String(crisis) } : {}), ...(page.title ? { page: String(page.title).slice(0, 200) } : {}), ...(page.url ? { url: String(page.url).slice(0, 500) } : {}) };
   if (user) await store.messages.add({ threadId, role: "user", content: user, ts: now, meta });
   if (assistant) await store.messages.add({ threadId, role: "assistant", content: assistant, ts: now + 1, meta: { ...meta, model: "harmonism.io" } });
   t.updated = now + 1;
@@ -343,6 +354,101 @@ export async function freshen() {
 
 // ─── a turn ──────────────────────────────────────────────────────────────────
 
+// ─── the practitioner's own key (October 24, 2026) ──────────────────────────
+// Where this browser's Lodestone thinks with an OpenRouter key of the
+// practitioner's own, the Sprite and the extension use it too: harmonism.io
+// builds the turn as always and hands back the request (companion-api.php,
+// byok), and it goes from here to OpenRouter under the key, which never reaches
+// harmonism.io. Nothing is drawn from the daily allowance.
+const OR_URL = "https://openrouter.ai/api/v1/chat/completions";
+
+/** The key to answer with, or null: saved here, and chosen as where Lodestone thinks (the extension, which has no such choice, needs the permission to reach OpenRouter). */
+export async function byokKey() {
+  try {
+    if (globalThis.chrome?.permissions?.contains && !(await chrome.permissions.contains({ origins: ["https://openrouter.ai/*"] }))) return null;
+    const st = await store.kv.get("settings").catch(() => null);
+    if (st?.tier && st.tier !== "openrouter") return null;
+    const k = await secrets.get("openrouter");
+    return typeof k === "string" && k.trim() ? k.trim() : null;
+  } catch { return null; }
+}
+export const byokReady = async () => !!(await byokKey());
+
+const sseOf = o => new TextEncoder().encode("data: " + JSON.stringify(o) + "\n\n");
+const textEvt = t => sseOf({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: t } });
+
+/** Sends the request harmonism.io built to OpenRouter under the key, as the stream the Sprite reads. */
+async function streamOpenRouter(req, key, ctrl) {
+  let r;
+  try {
+    r = await fetch(OR_URL, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key, "HTTP-Referer": "https://harmonism.io", "X-Title": "Lodestone" }, body: JSON.stringify(req) });
+  } catch { ctrl.enqueue(textEvt("OpenRouter could not be reached. Check the connection and ask again.")); return false; }
+  if (!r.ok || !r.body) {
+    let msg = ""; try { msg = (await r.json())?.error?.message || ""; } catch {}
+    ctrl.enqueue(textEvt(`Your OpenRouter key could not answer${msg ? ` (${msg})` : ""}. Check it in Lodestone's Settings → Model, or choose your harmonism.io account there.`));
+    return false;
+  }
+  const rd = r.body.getReader(), dec = new TextDecoder();
+  let buf = "", any = false;
+  for (;;) {
+    const { done, value } = await rd.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.split("\n"); buf = lines.pop() || "";
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      const d = line.slice(6).trim();
+      if (d === "[DONE]") continue;
+      let j; try { j = JSON.parse(d); } catch { continue; }
+      if (j.error) { ctrl.enqueue(textEvt(`\n\nOpenRouter stopped: ${j.error.message || "an error"}.`)); return any; }
+      const t = j.choices?.[0]?.delta?.content;
+      if (t) { any = true; ctrl.enqueue(textEvt(t)); }
+    }
+  }
+  return any;
+}
+
+/** The server's stream with its handed-back request answered under the key. */
+function byokResponse(res, key) {
+  const enc = new TextEncoder(), dec = new TextDecoder();
+  const body = new ReadableStream({
+    async start(ctrl) {
+      let req = null, buf = "";
+      try {
+        const rd = res.body.getReader();
+        for (;;) {
+          const { done, value } = await rd.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          let i;
+          while ((i = buf.indexOf("\n\n")) >= 0) {
+            const block = buf.slice(0, i + 2); buf = buf.slice(i + 2);
+            const line = block.split("\n").find(l => l.startsWith("data: "));
+            let evt = null; if (line) { try { evt = JSON.parse(line.slice(6)); } catch {} }
+            if (evt?.type === "lodestone_byok") { req = evt.request; continue; }
+            ctrl.enqueue(enc.encode(block));
+          }
+        }
+        if (buf) ctrl.enqueue(enc.encode(buf));
+        if (req) { await streamOpenRouter(req, key, ctrl); ctrl.enqueue(sseOf({ type: "message_stop" })); }
+      } catch { ctrl.enqueue(textEvt("The answer was cut off. Ask again.")); }
+      ctrl.close();
+    },
+  });
+  return new Response(body, { status: res.status, statusText: res.statusText, headers: res.headers });
+}
+
+/** The learning jobs the server runs after its own turns, asked for after about ten answered under the key. */
+async function learnSoon() {
+  try {
+    const n = ((await store.kv.get("held:byokLearn")) || 0) + 1;
+    await store.kv.set("held:byokLearn", n);
+    if (n < 10) return;
+    await heldCall("lodestone-learn.php", { withRecent: true });
+    await store.kv.set("held:byokLearn", 0);
+  } catch {}
+}
+
 /**
  * fetch() for companion-api.php. ctx: { source: "website" | "dashboard" | "extension",
  * threadId, title, page: { title, url } }.
@@ -350,9 +456,16 @@ export async function freshen() {
 export async function heldFetch(url, init = {}, ctx = {}) {
   let body;
   try { body = JSON.parse(init.body); } catch { return fetch(url, init); }
-  if (!body || body.anonymous || !available()) return fetch(url, init);
+  const key = body ? await byokKey() : null;
+  // Without a memory to carry (signed out, or a browser that cannot hold one), an own-key turn still goes under the key.
+  const plain = async () => {
+    if (!key) return fetch(url, init);
+    const r = await fetch(url, { ...init, body: JSON.stringify({ ...body, byok: true }) });
+    return r.ok && (r.headers.get("content-type") || "").includes("event-stream") && r.body ? byokResponse(r, key) : r;
+  };
+  if (!body || body.anonymous || !available()) return plain();
   let tok;
-  try { if (!(await signedIn())) return fetch(url, init); tok = await auth(); } catch { return fetch(url, init); }
+  try { if (!(await signedIn())) return plain(); tok = await auth(); } catch { return plain(); }
   await bind();
   await autoSync();
   try { await migrate(); } catch (e) { console.warn("[held] migration later:", e?.message || e); }
@@ -360,17 +473,19 @@ export async function heldFetch(url, init = {}, ctx = {}) {
   await takePending();
   const lastUser = [...(body.messages || [])].reverse().find(m => m.role === "user")?.content || "";
   body.held = await prepare();
+  if (key) body.byok = true;
   delete body.clientId; delete body.email;
   const headers = { ...(init.headers || {}), "Content-Type": "application/json", Authorization: "Bearer " + tok };
-  const res = await fetch(url, { ...init, headers, body: JSON.stringify(body) });
-  const ct = res.headers.get("content-type") || "";
-  if (!res.ok || !ct.includes("event-stream") || !res.body) return res;
+  const res0 = await fetch(url, { ...init, headers, body: JSON.stringify(body) });
+  const ct = res0.headers.get("content-type") || "";
+  if (!res0.ok || !ct.includes("event-stream") || !res0.body) return res0;
+  const res = key ? byokResponse(res0, key) : res0;
   const [mine, theirs] = res.body.tee();
-  watch(theirs, { lastUser, ctx }).catch(e => console.warn("[held] turn not kept:", e?.message || e));
+  watch(theirs, { lastUser, ctx, byok: !!key }).catch(e => console.warn("[held] turn not kept:", e?.message || e));
   return new Response(mine, { status: res.status, statusText: res.statusText, headers: res.headers });
 }
 
-async function watch(stream, { lastUser, ctx }) {
+async function watch(stream, { lastUser, ctx, byok = false }) {
   const reader = stream.getReader();
   const dec = new TextDecoder();
   let buf = "", text = "", stateEvt = null;
@@ -390,8 +505,9 @@ async function watch(stream, { lastUser, ctx }) {
   if (stateEvt) await apply(stateEvt);
   if (stateEvt?.flags?.reset) { await clearThread(ctx.threadId || WEB_THREAD); await syncSoon(); return; }
   if (text) {
-    await record({ threadId: ctx.threadId || WEB_THREAD, title: ctx.title || "On harmonism.io", user: lastUser, assistant: text.replace(/\n\n_— response continues; say "go on" to continue —_$/, ""), page: ctx.page || {}, source: ctx.source || "website" });
+    await record({ threadId: ctx.threadId || WEB_THREAD, title: ctx.title || "On harmonism.io", user: lastUser, assistant: text.replace(/\n\n_— response continues; say "go on" to continue —_$/, ""), page: ctx.page || {}, source: ctx.source || "website", crisis: stateEvt?.flags?.crisis || null });
     if (stateEvt) await store.kv.del("hp_fresh");
+    if (byok && !stateEvt?.flags?.crisis) await learnSoon();
   }
   await syncSoon();
 }
@@ -435,6 +551,9 @@ export function migrate() {
 async function runMigrate() {
   await bind();
   let m = await store.kv.get("held:migrated");
+  // Once a move is confirmed (or came back empty), the server is asked again every ten minutes:
+  // a second carry (migrate-telegram-to-held.php --again) arrives the same way as the first.
+  if (m && m.confirmed && Date.now() - (m.at || 0) > 600000) m = null;
   if (!m) {
     const tok = await auth();
     const res = await fetch(`${base}/member/memory-export.php`, { headers: { Authorization: "Bearer " + tok }, cache: "no-store" });
@@ -446,23 +565,31 @@ async function runMigrate() {
       const have = await load();
       await store.kv.set(COMPANION, { state: mergeState(have?.state, j.state), blocks: have?.blocks || {}, at: Date.now() });
       const msgs = j.messages || [];
-      if (msgs.length) {
-        let t = await store.threads.get(WEB_THREAD);
-        const first = Number(msgs[0].timestamp) * 1000 || Date.now();
-        if (!t) t = { id: WEB_THREAD, title: "On harmonism.io", created: first, updated: first, source: "website" };
-        const have = new Set((await store.messages.forThread(WEB_THREAD)).map(x => `${x.ts}-${x.role}`));
+      // Messages carried from Lodestone on Telegram keep a conversation of their own.
+      const groups = [
+        { id: WEB_THREAD, title: "On harmonism.io", source: "website", list: msgs.filter(x => x.page_title !== "Lodestone on Telegram") },
+        { id: TG_THREAD, title: "Lodestone on Telegram", source: "telegram", list: msgs.filter(x => x.page_title === "Lodestone on Telegram") },
+      ];
+      for (const g of groups) {
+        if (!g.list.length) continue;
+        let t = await store.threads.get(g.id);
+        const first = Number(g.list[0].timestamp) * 1000 || Date.now();
+        if (!t) t = { id: g.id, title: g.title, created: first, updated: first, source: g.source };
+        const have = new Set((await store.messages.forThread(g.id)).map(x => `${x.ts}-${x.role}`));
         let i = 0;
-        for (const x of msgs) {
+        for (const x of g.list) {
           // A stable time for each message, the same on every device that takes it in.
           const ts = Number(x.timestamp) * 1000 + (i++ % 1000);
           if (have.has(`${ts}-${x.role}`)) continue;
-          await store.messages.add({ threadId: WEB_THREAD, role: x.role, content: x.content, ts, meta: { source: "website", imported: true, ...(x.page_title ? { page: x.page_title } : {}) } });
+          const page = g.source === "website" && x.page_title ? { page: x.page_title } : {};
+          await store.messages.add({ threadId: g.id, role: x.role, content: x.content, ts, meta: { source: g.source, imported: true, ...page } });
           t.updated = Math.max(t.updated, ts);
         }
         await store.threads.put(t);
       }
     }
-    m = { at: Date.now(), clients: j.clients || [], confirmed: !!j.empty || !(j.clients || []).length };
+    const empty = !!j.empty || !(j.clients || []).length;
+    m = { at: Date.now(), clients: j.clients || [], confirmed: empty, empty };
     await store.kv.set("held:migrated", m);
   }
   await takeAnonymous();

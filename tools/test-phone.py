@@ -45,7 +45,7 @@ class H(SimpleHTTPRequestHandler):
             if self.headers.get("Authorization") not in ("Bearer ACCESS1", "Bearer ACCESS2"):
                 return self._json(401, {"error": {"code": "auth", "message": "Sign in to your harmonism.io account again."}})
             return self._json(200, {"email": "t@example.org", "status": "free", "cap": 10, "remaining": 7, "reset_at": 0,
-                                    "models": [{"id": "deepseek/deepseek-v4.1-flash", "label": "DeepSeek V4.1 Flash", "maker": "DeepSeek", "licence": "MIT", "default": True},
+                                    "models": [{"id": "deepseek/deepseek-v4.1-flash-1017", "label": "DeepSeek V4.1 Flash", "maker": "DeepSeek", "licence": "MIT", "default": True},
                                                {"id": "z-ai/glm-5.3-flash", "label": "GLM-5.3 Flash", "maker": "Zhipu", "licence": "MIT", "default": False}]})
         return super().do_GET()
 
@@ -140,9 +140,9 @@ def main():
         page.wait_for_function("[...document.querySelectorAll('.msg.assistant .body')].some(b => b.textContent.includes('OpenRouter answer'))", timeout=20000)
         o = LOG["openrouter"][-1]
         check("OpenRouter turn: own key, recommended model run as hosted, full backbone",
-              o["body"]["model"] == "deepseek/deepseek-v4.1-flash" and o["body"].get("provider") == {"data_collection": "deny"} and len(o["body"]["messages"][0]["content"]) > 40000)
+              o["body"]["model"] == "deepseek/deepseek-v4.1-flash-1017" and o["body"].get("provider") == {"data_collection": "deny"} and len(o["body"]["messages"][0]["content"]) > 40000)
         page.wait_for_timeout(400)
-        check("model menu shown on the phone", page.is_visible("#modelRow") and "openrouter.ai" in page.text_content("#modelChipLabel"), page.text_content("#modelChipLabel"))
+        check("model menu shown on the phone, the model named alone (1.14.1)", page.is_visible("#modelRow") and page.text_content("#modelChipLabel").strip() == "DeepSeek V4.1 Flash", page.text_content("#modelChipLabel"))
         page.click("#modelChip"); page.wait_for_timeout(400)
         groups = page.eval_on_selector_all("#modelMenu .model-group", "ns => ns.map(n => n.textContent)")
         check("menu: the account (signed out: one step to sign in), OpenRouter's models and no model, each saying who reads", groups[0].startswith("Your harmonism.io account — harmonism.io reads each turn") and "Sign in for ten free messages a day" in page.text_content("#modelMenu") and any(g.startswith("OpenRouter, your key — OpenRouter reads") for g in groups) and any("No model" in g for g in groups), str(groups))
@@ -160,8 +160,16 @@ def main():
         page.click("#setupBack"); page.wait_for_selector("#main:not([hidden])", timeout=10000); page.wait_for_timeout(400)
         page.fill("#input", "Back again?"); page.click("#sendBtn")
         page.wait_for_function("[...document.querySelectorAll('.msg.assistant .body')].filter(b => b.textContent.includes('OpenRouter answer')).length >= 3", timeout=20000)
-        check("Back restores the saved route untouched", LOG["openrouter"][-1]["body"]["model"] == "z-ai/glm-5.3-flash" and "openrouter.ai" in page.text_content("#modelChipLabel"), page.text_content("#modelChipLabel"))
+        check("Back restores the saved route untouched", LOG["openrouter"][-1]["body"]["model"] == "z-ai/glm-5.3-flash" and page.text_content("#modelChipLabel").strip() == "GLM-5.3 Flash", page.text_content("#modelChipLabel"))
 
+        # 1.14.1: a question about Lodestone itself carries the manual and this install's state;
+        # an answer's common actions are icons, and Retry is gone.
+        page.fill("#input", "Comment changer de modèle ?"); page.click("#sendBtn")
+        page.wait_for_function("[...document.querySelectorAll('.msg.assistant .body')].filter(b => b.textContent.includes('OpenRouter answer')).length >= 4", timeout=20000)
+        sysmsg = LOG["openrouter"][-1]["body"]["messages"][0]["content"]
+        check("a question about Lodestone carries <lodestone_self> with this install's state", "<lodestone_self>" in sysmsg and "Thinking with: GLM-5.3 Flash" in sysmsg, sysmsg[sysmsg.find("This install, now:"):][:200])
+        check("an answer's copy, listen and save are icons, and there is no Retry", page.locator(".msg.assistant .act-icon[aria-label='Copy this answer']").count() >= 1
+              and page.locator(".msg.assistant .act-icon[aria-label='Save this answer as a Markdown file']").count() >= 1 and page.locator(".msg.assistant button:has-text('Retry')").count() == 0)
         page.click("#btnMe"); page.wait_for_timeout(500)
         check("Your path offers the assessment and, signed out, the account", page.get_attribute("#hpBtns a:nth-child(1)", "href") == "/assessment.php?return=lodestone"
               and "account" in page.text_content("#hpStatus"), page.text_content("#hpStatus"))
@@ -238,7 +246,7 @@ def main():
         pg.wait_for_function("document.querySelectorAll('#tierChoices .choice').length > 0")
         l2 = pg.eval_on_selector_all("#tierChoices .choice strong", "ns => ns.map(n => n.textContent)")
         p2 = pg.eval_on_selector_all("#tierChoices .choice[aria-pressed=true] strong", "ns => ns.map(n => n.textContent)")
-        check("a computer's browser also begins on the account, with this browser's model offered after the computer", l2[:2] == ["My harmonism.io account", "OpenRouter, with my own key"] and "This browser" in l2 and l2.index("This browser") > l2.index("My computer's model server") and p2 == ["My harmonism.io account"], f"{l2} {p2}")
+        check("a computer's browser also begins on the account, and no model inside the browser is offered", l2[:2] == ["My harmonism.io account", "OpenRouter, with my own key"] and "This browser" not in l2 and p2 == ["My harmonism.io account"], f"{l2} {p2}")
         ctx3.close(); b.close()
     srv.shutdown()
     if php: php.terminate()

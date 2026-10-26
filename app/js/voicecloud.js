@@ -167,10 +167,14 @@ export async function synthesize(route, text, { family = "grok", gender = "femal
     for (const f of [want, ...OR_TTS_ORDER.filter(x => x !== want)]) {
       const F = FAMILIES[f];
       if (blocked.has(F.or) && f !== OR_TTS_ORDER[OR_TTS_ORDER.length - 1]) continue;
-      const res = await fetch(OPENROUTER + "/audio/speech", {
-        method: "POST", headers: { ...headers(ctx.key), "Content-Type": "application/json" },
-        body: JSON.stringify({ model: F.or, input: text, voice: gender === "male" ? F.male : F.female, response_format: "mp3" }),
-      });
+      // OpenRouter's speech request has no language field; Grok's reads English unless
+      // told, so the language goes to xAI through provider.options (only the matched
+      // provider's options are forwarded). Gemini and ElevenLabs hear it from the text.
+      const body = { model: F.or, input: text, voice: gender === "male" ? F.male : F.female, response_format: "mp3" };
+      const xlang = XAI_LANGS.includes(lang) ? lang : null;
+      const send = b => fetch(OPENROUTER + "/audio/speech", { method: "POST", headers: { ...headers(ctx.key), "Content-Type": "application/json" }, body: JSON.stringify(b) });
+      let res = await send(f === "grok" && xlang ? { ...body, provider: { options: { xai: { language: xlang } } } } : body);
+      if (res.status === 400 && f === "grok" && xlang) res = await send(body);   // options refused: read without them
       if (res.ok) { if (f !== want) onSubstitute(want, f); return res.blob(); }
       const err = await failed(res, "OpenRouter");
       if (!POLICY.test(err.message)) throw err;
@@ -243,7 +247,7 @@ export class CloudSpeaker {
   }
   start({ provider, ctx, family = "grok", gender = "female", lang = "en", rate = 1, key = null } = {}) {
     this.stop();
-    Object.assign(this, { provider, ctx, family, gender, lang, rate, key, said: 0, queue: [], done: false, playing: false, active: true, gen: (this.gen || 0) + 1, first: true });
+    Object.assign(this, { provider, ctx, family, gender, lang, rate, key, said: 0, queue: [], done: false, playing: false, paused: false, active: true, gen: (this.gen || 0) + 1, first: true });
     if (!this.audio) this.audio = new Audio();
     this.onState(true, key);
   }
@@ -267,7 +271,7 @@ export class CloudSpeaker {
     }
   }
   async play() {
-    if (this.playing || !this.active || !this.queue.length) return;
+    if (this.playing || this.paused || !this.active || !this.queue.length) return;
     this.playing = true;
     const gen = this.gen;
     const item = this.queue[0];
@@ -289,13 +293,24 @@ export class CloudSpeaker {
     }
     if (gen !== this.gen) return;
     this.playing = false;
+    if (this.paused) return;   // resume() picks up from here
     if (this.queue.length) this.play();
     else if (this.done) this.finish();
   }
-  finish() { if (!this.active) return; this.active = false; const k = this.key; this.key = null; this.onState(false, k); }
+  finish() { if (!this.active) return; this.active = false; this.paused = false; const k = this.key; this.key = null; this.onState(false, k); }
+  /** Holds the sentence being read where it is (the next ones keep arriving); resume() goes on. */
+  pause() { if (!this.active || this.paused) return; this.paused = true; try { this.audio?.pause(); } catch {} this.onState(true, this.key); }
+  resume() {
+    if (!this.active || !this.paused) return;
+    this.paused = false;
+    if (this.playing) { const p = this.audio?.play(); if (p?.catch) p.catch(() => {}); }
+    else if (this.queue.length) this.play();
+    else if (this.done) this.finish();
+    this.onState(true, this.key);
+  }
   stop() {
     const was = this.active, k = this.key;
-    this.active = false; this.key = null; this.queue = []; this.playing = false; this.gen = (this.gen || 0) + 1;
+    this.active = false; this.paused = false; this.key = null; this.queue = []; this.playing = false; this.gen = (this.gen || 0) + 1;
     try { this.audio?.pause(); } catch {}
     try { this.stopWait?.(); } catch {}
     if (was) this.onState(false, k);

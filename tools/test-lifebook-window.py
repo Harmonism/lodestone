@@ -87,7 +87,10 @@ def main():
             # Manual keep from a message: card first, then Edit, then Keep appends to Life/Notes.md (created)
             page.locator(".msg.user .actions button:has-text('Keep in my life book')").first.click(); page.wait_for_timeout(500)
             check("Keep in my life book opens a card, writes nothing", page.locator(".checkin.lifebook").count() == 1 and not os.path.exists(os.path.join(VAULT, "Lodestone/Life/Notes.md")))
-            page.click(".checkin.lifebook button:has-text('Edit')"); page.fill(".checkin.lifebook .lb-path", "People/Self.md"); page.fill(".checkin.lifebook .lb-edit", "I want to support my mother through cycle 3.")
+            # 1.14.1: the note is chosen in the card's "In" menu; "Another note…" takes any path.
+            check("the card offers the Wheel's pillars", page.locator(".checkin.lifebook .lb-where option[value='Wheel/Health.md']").count() == 1)
+            page.select_option(".checkin.lifebook .lb-where", "__other"); page.fill(".checkin.lifebook .lb-path", "People/Self.md")
+            page.click(".checkin.lifebook button:has-text('Edit the text')"); page.fill(".checkin.lifebook .lb-edit", "I want to support my mother through cycle 3.")
             page.click(".checkin.lifebook button:has-text('Keep')"); page.wait_for_timeout(800)
             selfn = os.path.join(VAULT, "Lodestone/People/Self.md")
             check("an edited card is kept where the practitioner chose", os.path.exists(selfn) and "support my mother through cycle 3" in open(selfn).read())

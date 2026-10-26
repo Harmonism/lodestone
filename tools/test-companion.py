@@ -55,7 +55,10 @@ def main():
             if req.method == "OPTIONS": return route.fulfill(status=204, headers={"Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "*"})
             body = json.loads(req.post_data or "{}"); calls.append(body)
             sysm = body.get("messages", [{}])[0].get("content", "")
-            words = ["ready"] if body.get("max_tokens") == 10 else [LONG] if "weekly review" in str(sysm) else ["An answer."]
+            last = str(body.get("messages", [{}])[-1].get("content", ""))
+            # 1.13.2: on a suspected moment the model reads it, and marks it when it is real (here, the two sentences that are)
+            real = '<care_check level="ask">' in sysm and ("better off without me" in last or "waiting for it to be over" in last)
+            words = ["ready"] if body.get("max_tokens") == 10 else [LONG] if "weekly review" in str(sysm) else ["Are you thinking of ending your life? Please tell someone now.\n[[care]]"] if real else ["An answer."]
             route.fulfill(status=200, content_type="text/event-stream", headers={"Access-Control-Allow-Origin": "*"}, body=tp.sse(words))
         page.route("https://openrouter.ai/**", orouter)
         def huggingface(route):
@@ -86,13 +89,19 @@ def main():
         # ── the care layer
         body = send("Honestly, everyone would be better off without me.")
         sysm = body["messages"][0]["content"]
-        check("an indirect phrase: the model is told to ask about safety", '<care_check level="refer">' in sysm)
+        check("an indirect phrase: the model is told to read it, and to mark it if real", '<care_check level="ask">' in sysm and "[[care]]" in sysm)
         page.wait_for_selector(".msg.notice.care", timeout=5000)
         care = page.text_content(".msg.notice.care")
-        check("and the app itself shows the crisis line beneath the answer", "befrienders" in care.lower() or "📞" in care, care[:160])
-        check("Retry and Edit still reach the exchange, past the notice", page.locator(".msg.assistant:not(.notice) button.last-only:has-text('Retry')").count() == 1 and page.locator(".msg.user button.last-only:has-text('Edit')").count() == 1)
+        check("the model marked it: the app shows the crisis line beneath the answer", "befrienders" in care.lower() or "📞" in care, care[:160])
+        check("the mark itself is never shown", "[[care" not in page.text_content("#chat"))
+        check("Edit still reaches the exchange, past the notice (Retry retired, 1.14.1)", page.locator(".msg.user button.last-only:has-text('Edit')").count() == 1)
         body = send("I've stopped seeing a future for myself at all, I'm just waiting for it to be over.")
         check("a sentence no phrase catches: recognised by its meaning", "<care_check" in body["messages"][0]["content"])
+        # 1.13.2: a short reply at a dinner read 0.98 once, and the line was shown under a plain answer
+        new_thread(); notices = page.evaluate("document.querySelectorAll('.msg.notice.care').length")
+        send("Friends of my wife, we are at a resto. What should I talk about?")
+        body = send("I already know them")
+        check("'I already know them' at a dinner: no care check, no crisis line", "<care_check" not in body["messages"][0]["content"] and page.evaluate("document.querySelectorAll('.msg.notice.care').length") == notices)
         body = send("I'm tired of my job and want to quit, how do I find my dharma?")
         check("an ordinary sentence is left alone", "<care_check" not in body["messages"][0]["content"])
         check("the care line is never sent to the model", "befrienders" not in json.dumps(body["messages"][1:]).lower())

@@ -1,6 +1,6 @@
 // test-prompt.mjs — the summary record and its trigger (prompt.js), without a browser.
 //   node tools/test-prompt.mjs
-import { renderSummary, fitMessages, summaryPlan, summaryRequest } from "../app/js/prompt.js";
+import { renderSummary, fitMessages, summaryPlan, summaryRequest, estTokens, estSystemTokens, EN_CHARS_PER_TOKEN } from "../app/js/prompt.js";
 let pass=0, fail=0; const ok=(c,w)=>{ if(c) pass++; else { fail++; console.log("FAIL",w); } };
 // renderSummary
 const j = '```json\n{"working_on":["sleep, after the move"],"about_them":["mother in chemo, cycle 3 on Nov 2","takes 400 mg magnesium"],"their_words":["I wake at 3 every night"],"commitments":[{"what":"no screens after 21:00","since":"Oct 12"}],"open":["whether to fast"],"drew_on":["Wheel of Health"],"extra":["x"]}\n```';
@@ -36,4 +36,17 @@ ok(summaryPlan(small, null).length === 28, "no fit info: old behaviour");
 const req = summaryRequest({ previous: "Working on: x", turns: [{role:"user",content:"y".repeat(5000)}], maxChars: 400 });
 ok(req[1].content.includes("Previous record:") && !req[1].content.includes("y".repeat(401)), "maxChars cuts turns");
 ok(/"their_words"/.test(req[0].content), "structured system prompt");
+// The English persona and backbone are counted at their measured rate, the rest conservatively
+const bb = "w".repeat(68000), sys = `persona\n<doctrinal_backbone>\n${bb}\n</doctrinal_backbone>\n<person_context>\n${"p".repeat(3300)}\n</person_context>`;
+const head = sys.indexOf("</doctrinal_backbone>");
+ok(estSystemTokens(sys) === Math.ceil(head / EN_CHARS_PER_TOKEN) + estTokens(sys.slice(head)), "system counted in two parts");
+ok(estSystemTokens(sys) < estTokens(sys) * 0.8, `backbone no longer overcounted: ${estSystemTokens(sys)} vs ${estTokens(sys)}`);
+ok(estSystemTokens("no backbone here") === estTokens("no backbone here"), "a prompt without a backbone: unchanged");
+ok(estSystemTokens("<doctrinal_backbone>\n(placeholder)\n</doctrinal_backbone>", 44000) >= 10000, "the server's backbone is counted though absent");
+const longHist = Array.from({length: 40}, (_, i) => ({ role: i%2 ? "assistant":"user", content: big }));
+const f3 = fitMessages({ system: sys, history: longHist, current: "hi", tier: { ctx: 32768, maxTokens: 1200 } });
+const f4 = fitMessages({ system: sys, history: longHist, current: "hi", tier: { ctx: 65536, maxTokens: 1200 } });
+ok(f4.room > f3.room + 30000 && f4.dropped < f3.dropped, `the rented window holds more of the conversation: room ${f3.room} → ${f4.room}`);
+const f5 = fitMessages({ system: "<doctrinal_backbone>\nx\n</doctrinal_backbone>", history: hist, current: "hi", tier: { ctx: 32768, maxTokens: 1200, backbone: "server", serverBackboneChars: 68000 } });
+ok(f5.room < 32768 - 1200 - 15000, "on the account, the server's backbone is subtracted from the room: " + f5.room);
 console.log(`${pass} passed, ${fail} failed`);

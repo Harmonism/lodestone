@@ -100,7 +100,8 @@ class Companion {
 
     // 2 — retrieval, with the previous question as context for a bare follow-up
     const prevUser = [...history].reverse().find(h => h.role === "user")?.content || "";
-    let { hits } = await retriever.retrieve(text, { ...TIER.rag, context: prevUser });
+    const follow = typeof m.isFollowUp === "function" && m.isFollowUp(text) && !retriever.asked(text).length;
+    let { hits, none } = await retriever.retrieve(text, { ...TIER.rag, context: prevUser, follow });
 
     // 3 — the page being read, witness, governor
     const now = Date.now();
@@ -114,12 +115,13 @@ class Companion {
     let system, fitted;
     for (;;) {
       system = m.buildSystem({ tier: TIER, runtime, person: {}, where: up.where || null, turn: {
-        page, vault: retriever.format(hits),
+        page, vault: none && !page && retriever.formatNone ? retriever.formatNone() : retriever.format(hits),
         witness: w ? m.witnessBlock(w.strength) : "",
         governor: m.governorBlock(this.recent.length),
+        lang,
       } });
       fitted = m.fitMessages({ system, history, current: text, tier: TIER });
-      const over = m.estTokens(system) + m.estTokens(text) > TIER.ctx - TIER.maxTokens - 64;
+      const over = m.estSystemTokens(system) + m.estTokens(text) > TIER.ctx - TIER.maxTokens - 64;
       if (!over || !hits.length) break;
       hits = hits.slice(0, -1);
     }

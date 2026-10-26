@@ -33,9 +33,9 @@ rsync -a --delete --delete-excluded \
   --exclude='/.computer-zip/' \
   --exclude='/.site-packs/' --exclude='node_modules/' --exclude='__pycache__/' --exclude='*.pyc' \
   --exclude='/mobile/keys/' --exclude='/mobile/release/' --exclude='/desktop/keys/' \
-  --exclude='/mobile/android/.gradle/' --exclude='/mobile/android/**/build/' \
+  --exclude='/mobile/android/.gradle/' --exclude='/mobile/android/build/' --exclude='/mobile/android/**/build/' \
   --exclude='/mobile/android/local.properties' \
-  --exclude='*.local' --exclude='*.bak-*' --exclude='.DS_Store' \
+  --exclude='*.local' --exclude='*.bak-*' --exclude='*.retired-*' --exclude='.DS_Store' \
   "$SRC/" "$DEST/"
 if [ -n "$GITKEEP" ]; then rm -rf "$DEST/.git"; mv "$GITKEEP/.git" "$DEST/.git"; rmdir "$GITKEEP"; GITKEEP=""; fi
 

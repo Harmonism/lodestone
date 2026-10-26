@@ -210,6 +210,22 @@ function visionState() {
 }
 
 /** 1.1 kept each model as a single file in models/; 1.2 gives each its own folder (shards). */
+/**
+ * Follow-up (October 25, 2026): the page moved a saved choice of a retired
+ * model id to its successor (main.js boot), but the desktop keeps its own choice
+ * in desktop.json, which nothing moved. A retired id there fell outside the
+ * tested list, so its turns went out without the reasoning cap or the token
+ * floor, and DeepSeek spent every token deliberating: the answer showed as "…".
+ */
+function migrateRetiredRemote() {
+  let moved = false;
+  for (const k of ["remote", "remoteSaved"]) {
+    const c = cfg[k];
+    if (c && typeof c.model === "string" && remote.RETIRED[c.model.trim()]) { cfg[k] = { ...c, model: remote.RETIRED[c.model.trim()] }; moved = true; }
+  }
+  if (moved) saveCfg();
+}
+
 function migrateModels() {
   let names = [];
   try { names = fs.readdirSync(modelsDir()); } catch { return; }
@@ -793,6 +809,22 @@ handle("account-call", async (e, method, path, body) => {
     return { ok: false, code: "network", message: `harmonism.io could not be reached (${message}).` };
   }
 }, { app: true });
+// Help Lodestone improve: a conversation the practitioner read and chose to
+// share, already anonymised in the window, goes to lodestone-share.php and
+// nowhere else. Signed in, the sign-in goes along only to count shares a day.
+handle("share-call", async (e, body) => {
+  const action = body?.action;
+  if (!["share", "withdraw"].includes(action)) return { ok: false, code: "bad_request", message: "Not a share call." };
+  const init = { url: HARMONISM + "/lodestone-share.php", method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  try {
+    const res = hosted.signedIn() ? await hosted.call(init) : await fetch(init.url, init);
+    const json = await res.json().catch(() => ({}));
+    return { ok: res.ok, status: res.status, json, message: res.ok ? "" : (json.error?.message || `harmonism.io answered ${res.status}.`) };
+  } catch (err) {
+    return { ok: false, code: "network", message: `harmonism.io could not be reached (${String(err.message || err)}).` };
+  }
+}, { app: true });
+
 // The Sovereignty Bundle downloads in the browser, as from the dashboard: its
 // address carries a short-lived sign-in, the only way a download link can.
 handle("account-open-bundle", async () => {
@@ -907,6 +939,7 @@ handle("quick-models", async () => {
     local: allModels().filter(isDownloaded).sort((a, b) => models.size(a) - models.size(b)).map(m => ({ id: m.id, label: m.label, hand: m.hand || "", vision: !!m.mmproj })),
     remote: sc ? { preset: sc.preset, label: preset.label, host: remote.hostOf(sc.baseUrl), model: sc.model, hasKey: !!remoteKey.get() } : null,
     recommended: preset?.recommended || [],
+    offered: preset?.offered || [],
     hosted: hostedInfo,
     hostedModels: remote.RECOMMENDED,
     recent: cfg.remoteRecent || (sc?.model ? [sc.model] : []),
@@ -1267,6 +1300,7 @@ function pagePermission(wc, permission, details = {}) {
 
 app.whenReady().then(async () => {
   loadCfg();
+  migrateRetiredRemote();
   session.defaultSession.setPermissionRequestHandler((wc, permission, cb, details) => cb(pagePermission(wc, permission, details)));
   session.defaultSession.setPermissionCheckHandler((wc, permission, requestingOrigin, details) =>
     permission === "media" ? (requestingOrigin === origin() || String(requestingOrigin).startsWith(origin() + "/")) && (!details?.mediaType || details.mediaType === "audio")

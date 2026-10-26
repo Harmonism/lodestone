@@ -34,10 +34,13 @@ def main():
         page.route("https://openrouter.ai/**", orouter)
         page.goto(f"http://localhost:{tp.PORT}/lodestone-app/"); page.wait_for_selector("#setup:not([hidden])")
         page.wait_for_function("document.querySelectorAll('#tierChoices .choice').length > 0"); page.wait_for_timeout(400)
-        page.click("#tierChoices .choice:has(strong:has-text('OpenRouter'))"); page.fill("#orKey", tp.GOOD)
+        page.click("#tierChoices .choice:has(strong:has-text('OpenRouter'))")
+        # A model not tested against the doctrine keeps the 32,768-token window (a tested one gets 65,536),
+        # which fourteen long exchanges press: the fold is exercised where the window is narrowest.
+        page.select_option("#orModel", "__other"); page.fill("#orOther", "mistralai/mistral-medium-3"); page.fill("#orKey", tp.GOOD)
         page.wait_for_function("document.querySelector('#orStatus').textContent.includes('works')", timeout=8000)
         page.uncheck("#optSemantic"); page.click("#beginSetup"); page.wait_for_selector("#main:not([hidden])", timeout=60000)
-        page.wait_for_function("document.querySelector('#engineBadge').textContent.includes('OpenRouter')", timeout=20000)
+        page.wait_for_function("document.querySelector('#engineBadge').textContent.includes('OpenRouter') || document.querySelector('#engineBadge').textContent.includes('mistral')", timeout=20000)
         first_sum_at = None
         for i in range(1, 15):
             page.fill("#input", f"Question {i} about sleep: what next?"); page.click("#sendBtn")

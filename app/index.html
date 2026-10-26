@@ -9,9 +9,10 @@
 <meta name="theme-color" content="#f8f6f2" media="(prefers-color-scheme: light)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icons/lodestone-192.png" type="image/png">
-<link rel="apple-touch-icon" sizes="180x180" href="icons/lodestone-touch-180.png">
+<link rel="manifest" href="manifest.webmanifest?v=mark2">
+<link rel="icon" href="icons/lodestone-mark.svg?v=mark2" type="image/svg+xml">
+<link rel="icon" href="icons/lodestone-32.png?v=mark2" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/lodestone-touch-180.png?v=mark2">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -21,7 +22,7 @@
      Colours are --sp-* custom properties (dark skin as fallback; the light skin is
      set in styles.css), so they reach into every <use>. -->
 <svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
-  <symbol id="lodestone-sprite" viewBox="0 0 48 56" overflow="visible"><defs><linearGradient id="ls-sheen" x1="0" y1="0" x2="1" y2="1"><stop offset="0.52" stop-color="#9B3DBE" stop-opacity="0"/><stop offset="0.60" stop-color="#9B3DBE" stop-opacity="0.45"/><stop offset="0.66" stop-color="#3DBE9B" stop-opacity="0.35"/><stop offset="0.72" stop-color="#3D6ABE" stop-opacity="0.4"/><stop offset="0.80" stop-color="#3D6ABE" stop-opacity="0"/></linearGradient><linearGradient id="ls-sheensoft" x1="0" y1="0" x2="1" y2="1"><stop offset="0.46" stop-color="#9B3DBE" stop-opacity="0"/><stop offset="0.58" stop-color="#9B3DBE" stop-opacity="0.30"/><stop offset="0.66" stop-color="#3DBE9B" stop-opacity="0.20"/><stop offset="0.74" stop-color="#3D6ABE" stop-opacity="0.26"/><stop offset="0.86" stop-color="#3D6ABE" stop-opacity="0"/></linearGradient><radialGradient id="ls-eyeglow" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#8B6BAE" stop-opacity="0.35"/><stop offset="100%" stop-color="#8B6BAE" stop-opacity="0"/></radialGradient><radialGradient id="ls-facefade" cx="24" cy="26" r="13" gradientUnits="userSpaceOnUse" gradientTransform="translate(24 26) scale(1.15 0.9) translate(-24 -26)"><stop offset="0.45" stop-color="#000"/><stop offset="1" stop-color="#fff"/></radialGradient><mask id="ls-facemask" maskUnits="userSpaceOnUse" x="0" y="0" width="48" height="56"><rect width="48" height="56" fill="url(#ls-facefade)"/></mask><clipPath id="ls-hull"><path d="M24 4 L38 14 L40 30 L34 44 L14 44 L8 30 L10 14 Z"/></clipPath><clipPath id="ls-eyeL"><path d="M14.2 22 Q18 18 21.8 22 Q18 25.5 14.2 22 Z"/></clipPath><clipPath id="ls-eyeR"><path d="M26.2 22 Q30 18 33.8 22 Q30 25.5 26.2 22 Z"/></clipPath><filter id="ls-eyeblur"><feGaussianBlur stdDeviation="0.35" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><g class="sprite-feet"><g class="foot-left"><ellipse cx="18" cy="47" rx="4" ry="2.6" style="fill:var(--sp-foot,#574878);stroke:var(--sp-edge,#3E3160);stroke-width:.5"/><path d="M14.8 46.2 Q18 44.9 21.2 46.2" style="fill:none;stroke:var(--sp-foot-top,#8A84AA);stroke-width:.5;stroke-linecap:round"/></g><g class="foot-right"><ellipse cx="30" cy="47" rx="4" ry="2.6" style="fill:var(--sp-foot,#574878);stroke:var(--sp-edge,#3E3160);stroke-width:.5"/><path d="M26.8 46.2 Q30 44.9 33.2 46.2" style="fill:none;stroke:var(--sp-foot-top,#8A84AA);stroke-width:.5;stroke-linecap:round"/></g></g><g class="sprite-figure"><g class="sprite-crystal"><g clip-path="url(#ls-hull)"><path d="M24 4 L38 14 L40 30 L34 44 L14 44 L8 30 L10 14 Z" style="fill:var(--sp-base,#6F658F)"/><g mask="url(#ls-facemask)"><polygon points="23,25 24,4 38,14" style="fill:var(--sp-f1,#817AA0)"/><polygon points="23,25 38,14 40,30" style="fill:var(--sp-f2,#6F658F)"/><polygon points="23,25 40,30 34,44" style="fill:var(--sp-f3,#615583)"/><polygon points="23,25 34,44 14,44" style="fill:var(--sp-f4,#756B96)"/><polygon points="23,25 14,44 8,30" style="fill:var(--sp-f5,#655B88)"/><polygon points="23,25 8,30 10,14" style="fill:var(--sp-f6,#786E9A)"/><polygon points="23,25 10,14 24,4" style="fill:var(--sp-f7,#8A84AA)"/></g><g class="sheen-shift"><rect x="-6" y="-6" width="60" height="68" fill="url(#ls-sheensoft)" class="shimmer-layer" style="fill:var(--sp-sheen-fill,url(#ls-sheensoft));opacity:calc(var(--sp-sheen-o,0.6) * .85)"/></g></g><path d="M24 4 L38 14 L40 30 L34 44 L14 44 L8 30 L10 14 Z" style="fill:none;stroke:var(--sp-edge,#3E3160);stroke-width:.55;stroke-linejoin:round"/><path d="M8 30 L10 14 L24 4 L38 14" style="fill:none;stroke:var(--sp-rim,#D2C4F0);stroke-width:.6;stroke-linejoin:round;stroke-linecap:round;opacity:var(--sp-rim-o,0.85)"/><path d="M11.2 13.4 L23.4 5" style="stroke:#fff;stroke-width:.55;stroke-linecap:round;opacity:var(--sp-glint-o,0.85)"/></g><g class="sprite-eyes" filter="url(#ls-eyeblur)"><circle cx="18" cy="22" r="4" fill="url(#ls-eyeglow)" class="eye-glow-left"/><circle cx="30" cy="22" r="4" fill="url(#ls-eyeglow)" class="eye-glow-right"/><g clip-path="url(#ls-eyeL)"><path d="M14.2 22 Q18 18 21.8 22 Q18 25.5 14.2 22 Z" fill="#F0ECF8" class="sclera-left"/><circle cx="18" cy="22" r="1.8" fill="#8B6BAE" class="eye-left"/><circle cx="18" cy="22" r=".95" fill="#2A1B5E" class="pupil-left"/><circle cx="17.3" cy="21.3" r=".55" fill="#fff" opacity=".65"/><circle cx="18.6" cy="22.4" r=".28" fill="#fff" opacity=".3"/></g><g clip-path="url(#ls-eyeR)"><path d="M26.2 22 Q30 18 33.8 22 Q30 25.5 26.2 22 Z" fill="#F0ECF8" class="sclera-right"/><circle cx="30" cy="22" r="1.8" fill="#8B6BAE" class="eye-right"/><circle cx="30" cy="22" r=".95" fill="#2A1B5E" class="pupil-right"/><circle cx="29.3" cy="21.3" r=".55" fill="#fff" opacity=".65"/><circle cx="30.6" cy="22.4" r=".28" fill="#fff" opacity=".3"/></g></g><g class="sprite-eye-outline" style="fill:none;stroke:var(--sp-outline,#3E3160);stroke-width:.45;stroke-linejoin:round;opacity:var(--sp-outline-o,0.55)"><path d="M14.2 22 Q18 18 21.8 22 Q18 25.5 14.2 22 Z"/><path d="M26.2 22 Q30 18 33.8 22 Q30 25.5 26.2 22 Z"/></g><g class="sprite-mouth"><path d="M20 32 Q24 33 28 32" class="mouth-closed" style="fill:none;stroke:var(--sp-mouth,#3A2C58);stroke-width:.8;stroke-linecap:round"/></g></g></symbol>
+  <symbol id="lodestone-sprite" viewBox="0 0 48 56" overflow="visible"><defs><linearGradient id="ls-sheen" x1="0" y1="0" x2="1" y2="1"><stop offset="0.52" stop-color="#9B3DBE" stop-opacity="0"/><stop offset="0.60" stop-color="#9B3DBE" stop-opacity="0.45"/><stop offset="0.66" stop-color="#3DBE9B" stop-opacity="0.35"/><stop offset="0.72" stop-color="#3D6ABE" stop-opacity="0.4"/><stop offset="0.80" stop-color="#3D6ABE" stop-opacity="0"/></linearGradient><linearGradient id="ls-sheensoft" x1="0" y1="0" x2="1" y2="1"><stop offset="0.46" stop-color="#9B3DBE" stop-opacity="0"/><stop offset="0.58" stop-color="#9B3DBE" stop-opacity="0.30"/><stop offset="0.66" stop-color="#3DBE9B" stop-opacity="0.20"/><stop offset="0.74" stop-color="#3D6ABE" stop-opacity="0.26"/><stop offset="0.86" stop-color="#3D6ABE" stop-opacity="0"/></linearGradient><radialGradient id="ls-eyeglow" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#8B6BAE" stop-opacity="0.35"/><stop offset="100%" stop-color="#8B6BAE" stop-opacity="0"/></radialGradient><radialGradient id="ls-facefade" cx="24" cy="26" r="13" gradientUnits="userSpaceOnUse" gradientTransform="translate(24 26) scale(1.15 0.9) translate(-24 -26)"><stop offset="0.45" stop-color="#000"/><stop offset="1" stop-color="#fff"/></radialGradient><mask id="ls-facemask" maskUnits="userSpaceOnUse" x="0" y="0" width="48" height="56"><rect width="48" height="56" fill="url(#ls-facefade)"/></mask><clipPath id="ls-hull"><path d="M24 4 L38 14 L40 30 L34 44 L14 44 L8 30 L10 14 Z"/></clipPath><clipPath id="ls-eyeL"><path d="M14.2 22 Q18 18 21.8 22 Q18 25.5 14.2 22 Z"/></clipPath><clipPath id="ls-eyeR"><path d="M26.2 22 Q30 18 33.8 22 Q30 25.5 26.2 22 Z"/></clipPath><filter id="ls-eyeblur"><feGaussianBlur stdDeviation="0.35" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><g class="sprite-feet"><g class="foot-left"><ellipse cx="18" cy="47" rx="4" ry="2.6" style="fill:var(--sp-foot,#574878);stroke:var(--sp-edge,#3E3160);stroke-width:.5"/><path d="M14.8 46.2 Q18 44.9 21.2 46.2" style="fill:none;stroke:var(--sp-foot-top,#8A84AA);stroke-width:.5;stroke-linecap:round"/></g><g class="foot-right"><ellipse cx="30" cy="47" rx="4" ry="2.6" style="fill:var(--sp-foot,#574878);stroke:var(--sp-edge,#3E3160);stroke-width:.5"/><path d="M26.8 46.2 Q30 44.9 33.2 46.2" style="fill:none;stroke:var(--sp-foot-top,#8A84AA);stroke-width:.5;stroke-linecap:round"/></g></g><g class="sprite-figure"><g class="sprite-crystal"><g clip-path="url(#ls-hull)"><path d="M24 4 L38 14 L40 30 L34 44 L14 44 L8 30 L10 14 Z" style="fill:var(--sp-base,#6F658F)"/><g mask="url(#ls-facemask)"><polygon points="23,25 24,4 38,14" style="fill:var(--sp-f1,#817AA0)"/><polygon points="23,25 38,14 40,30" style="fill:var(--sp-f2,#6F658F)"/><polygon points="23,25 40,30 34,44" style="fill:var(--sp-f3,#615583)"/><polygon points="23,25 34,44 14,44" style="fill:var(--sp-f4,#5E5381)"/><polygon points="23,25 14,44 8,30" style="fill:var(--sp-f5,#655B88)"/><polygon points="23,25 8,30 10,14" style="fill:var(--sp-f6,#786E9A)"/><polygon points="23,25 10,14 24,4" style="fill:var(--sp-f7,#8A84AA)"/></g><g class="sheen-shift"><rect x="-6" y="-6" width="60" height="68" fill="url(#ls-sheensoft)" class="shimmer-layer" style="fill:var(--sp-sheen-fill,url(#ls-sheensoft));opacity:calc(var(--sp-sheen-o,0.6) * .85)"/></g></g><path d="M24 4 L38 14 L40 30 L34 44 L14 44 L8 30 L10 14 Z" style="fill:none;stroke:var(--sp-edge,#3E3160);stroke-width:.55;stroke-linejoin:round"/><path d="M8 30 L10 14 L24 4 L38 14" style="fill:none;stroke:var(--sp-rim,#D2C4F0);stroke-width:.6;stroke-linejoin:round;stroke-linecap:round;opacity:var(--sp-rim-o,0.85)"/><path d="M11.2 13.4 L23.4 5" style="stroke:#fff;stroke-width:.55;stroke-linecap:round;opacity:var(--sp-glint-o,0.85)"/></g><g class="sprite-eyes" filter="url(#ls-eyeblur)"><circle cx="18" cy="22" r="4" fill="url(#ls-eyeglow)" class="eye-glow-left"/><circle cx="30" cy="22" r="4" fill="url(#ls-eyeglow)" class="eye-glow-right"/><g clip-path="url(#ls-eyeL)"><path d="M14.2 22 Q18 18 21.8 22 Q18 25.5 14.2 22 Z" fill="#F0ECF8" class="sclera-left"/><circle cx="18" cy="22" r="1.8" fill="#8B6BAE" class="eye-left"/><circle cx="18" cy="22" r=".95" fill="#2A1B5E" class="pupil-left"/><circle cx="17.3" cy="21.3" r=".55" fill="#fff" opacity=".65"/><circle cx="18.6" cy="22.4" r=".28" fill="#fff" opacity=".3"/></g><g clip-path="url(#ls-eyeR)"><path d="M26.2 22 Q30 18 33.8 22 Q30 25.5 26.2 22 Z" fill="#F0ECF8" class="sclera-right"/><circle cx="30" cy="22" r="1.8" fill="#8B6BAE" class="eye-right"/><circle cx="30" cy="22" r=".95" fill="#2A1B5E" class="pupil-right"/><circle cx="29.3" cy="21.3" r=".55" fill="#fff" opacity=".65"/><circle cx="30.6" cy="22.4" r=".28" fill="#fff" opacity=".3"/></g></g><g class="sprite-eye-outline" style="fill:none;stroke:var(--sp-outline,#3E3160);stroke-width:.45;stroke-linejoin:round;opacity:var(--sp-outline-o,0.55)"><path d="M14.2 22 Q18 18 21.8 22 Q18 25.5 14.2 22 Z"/><path d="M26.2 22 Q30 18 33.8 22 Q30 25.5 26.2 22 Z"/></g><g class="sprite-mouth"><path d="M20 32 Q24 33 28 32" class="mouth-closed" style="fill:none;stroke:var(--sp-mouth,#3A2C58);stroke-width:.8;stroke-linecap:round"/></g></g></symbol>
 </svg>
 <div id="app">
 
@@ -29,7 +30,7 @@
   <section id="setup" class="screen" hidden>
     <div class="setup-inner">
       <svg class="setup-sprite" aria-hidden="true"><use href="#lodestone-sprite"></use></svg>
-      <h1>Lodestone, on your own ground</h1>
+      <h1 id="setupTitle">Lodestone, on your own device</h1>
       <p class="lede">The corpus, your memory and Lodestone's safeguards stay on this device. Where Lodestone thinks is your choice: on hardware you own, nothing you say leaves it.</p>
       <p class="fine" id="aiNotice">Lodestone is an AI, not a person, and not a therapist or a crisis service. It is made for adults: companion chatbots may not be suitable for some minors. <a href="safety.html" target="_blank" rel="noopener">How Lodestone handles a crisis</a>.</p>
 
@@ -156,25 +157,48 @@
     <div id="capCard" class="cap-card" role="alert" hidden></div>
     <div id="attachBar" class="attach-bar" hidden></div>
     <form id="composer" class="composer" autocomplete="off">
-      <button class="web-toggle" id="attachBtn" type="button" aria-label="Attach a file" title="Attach a file: a PDF, a document, a photo or a recording. It is read on this device.">
-        <svg viewBox="0 0 24 24"><path d="M20.5 11.5l-8.2 8.2a5 5 0 0 1-7.1-7.1l8.6-8.6a3.4 3.4 0 0 1 4.8 4.8l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9"/></svg>
-      </button>
-      <input type="file" id="fileInput" multiple hidden>
-      <button class="web-toggle" id="webBtn" type="button" aria-pressed="false" aria-label="Look this up online" title="Look this up online — for this question only">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.6 2.6 3.8 5.4 3.8 8.5s-1.2 5.9-3.8 8.5c-2.6-2.6-3.8-5.4-3.8-8.5S9.4 6.1 12 3.5z"/></svg>
-      </button>
-      <textarea id="input" rows="1" dir="auto" placeholder="Speak from where you are…" aria-label="Message"></textarea>
-      <button class="web-toggle mic" id="micBtn" type="button" aria-pressed="false" aria-label="Dictate" title="Dictate: transcribed on this device">
-        <svg class="i-mic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5V21"/></svg>
-        <svg class="i-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
-        <span class="i-wait" aria-hidden="true"></span>
-      </button>
-      <button class="web-toggle talk" id="talkBtn" type="button" aria-pressed="false" aria-label="A conversation by voice" title="A conversation by voice: Lodestone listens, answers aloud, and listens again" hidden>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/></svg>
-      </button>
-      <button class="send" id="sendBtn" type="submit" aria-label="Send">
-        <svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></svg>
-      </button>
+      <!-- 1.14.1: the settings of the next message on one row (attach, look up,
+           the model, how answers come back), then the box. Dictation sits in the
+           box, where its words land; the last slot is a conversation by voice
+           while the box is empty, and Send once there is something to send. -->
+      <div class="composer-tools">
+        <button class="web-toggle" id="attachBtn" type="button" aria-label="Attach a file" title="Attach a file: a PDF, a document, a photo or a recording. It is read on this device.">
+          <svg viewBox="0 0 24 24"><path d="M20.5 11.5l-8.2 8.2a5 5 0 0 1-7.1-7.1l8.6-8.6a3.4 3.4 0 0 1 4.8 4.8l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9"/></svg>
+        </button>
+        <input type="file" id="fileInput" multiple hidden>
+        <button class="web-toggle" id="webBtn" type="button" aria-pressed="false" aria-label="Look this up online" title="Look this up online — for this question only">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.6 2.6 3.8 5.4 3.8 8.5s-1.2 5.9-3.8 8.5c-2.6-2.6-3.8-5.4-3.8-8.5S9.4 6.1 12 3.5z"/></svg>
+        </button>
+        <div id="modelRow" class="model-row" hidden>
+          <button id="modelChip" class="model-chip" type="button" aria-haspopup="menu" aria-expanded="false" title="The model Lodestone thinks with. Change it here; the conversation continues.">
+            <span id="modelChipLabel">Model</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div id="modelMenu" class="model-menu" role="menu" hidden></div>
+        </div>
+        <div id="voiceWrap" class="voice-wrap">
+          <button id="voiceChip" class="model-chip voice-chip" type="button" aria-haspopup="menu" aria-expanded="false" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg><span id="voiceChipLabel">Text</span>
+          </button>
+          <div id="voiceMenu" class="model-menu voice-menu" role="menu" hidden></div>
+        </div>
+        <button id="costLine" class="cost-line" type="button" hidden title="Usage and costs"></button>
+      </div>
+      <div class="composer-main">
+        <div class="input-wrap">
+          <textarea id="input" rows="2" dir="auto" placeholder="Speak from where you are…" aria-label="Message"></textarea>
+          <button class="web-toggle mic" id="micBtn" type="button" aria-pressed="false" aria-label="Dictate" title="Dictate: transcribed on this device">
+            <svg class="i-mic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5V21"/></svg>
+            <svg class="i-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
+            <span class="i-wait" aria-hidden="true"></span>
+          </button>
+        </div>
+        <button class="web-toggle talk" id="talkBtn" type="button" aria-pressed="false" aria-label="A conversation by voice" title="A conversation by voice: Lodestone listens, answers aloud, and listens again" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/></svg>
+        </button>
+        <button class="send" id="sendBtn" type="submit" aria-label="Send">
+          <svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></svg>
+        </button>
+      </div>
     </form>
     <div id="talkbar" class="recbar talkbar" hidden role="status" aria-live="polite">
       <span class="recdot"></span>
@@ -192,21 +216,6 @@
       <span class="spacer"></span>
       <span class="rec-hint">Click ■ to write it in · Esc to discard</span>
       <button id="recCancel" class="rec-cancel" type="button">Discard</button>
-    </div>
-    <div class="composer-foot">
-      <div id="modelRow" class="model-row" hidden>
-        <button id="modelChip" class="model-chip" type="button" aria-haspopup="menu" aria-expanded="false" title="The model Lodestone thinks with. Change it here; the conversation continues.">
-          <span id="modelChipLabel">Model</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-        </button>
-        <div id="modelMenu" class="model-menu" role="menu" hidden></div>
-      </div>
-      <div id="voiceWrap" class="voice-wrap">
-        <button id="voiceChip" class="model-chip voice-chip" type="button" aria-haspopup="menu" aria-expanded="false" hidden>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg><span id="voiceChipLabel">Text</span>
-        </button>
-        <div id="voiceMenu" class="model-menu voice-menu" role="menu" hidden></div>
-      </div>
-      <button id="costLine" class="cost-line" type="button" hidden title="Usage and costs"></button>
     </div>
   </section>
 
@@ -348,132 +357,163 @@
     <div class="page-main">
     <div class="drawer-head"><h3>Settings</h3><button class="icon-btn" data-close aria-label="Close">×</button></div>
     <div class="settings-body">
-      <section data-nav="Model">
-        <h4><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2.5v2.5M15 2.5v2.5M9 19v2.5M15 19v2.5M2.5 9h2.5M2.5 15h2.5M19 9h2.5M19 15h2.5"/></svg>Model</h4>
-        <div id="setEngine" class="kv"></div>
-        <label>Model <select id="setModel"></select></label>
-        <div id="setAccount" class="row-btns" hidden></div>
-        <button class="btn ghost block" id="setChangeTier" type="button">Change where Lodestone thinks</button>
-      </section>
-      <section data-nav="Vault" id="setLifeBook">
-        <h4><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5h10.5a2 2 0 0 1 2 2v13H7a2 2 0 0 1-2-2z"/><path d="M5 17.5a2 2 0 0 1 2-2h10.5"/></svg>Life book</h4>
-        <p class="hint">Lodestone keeps what matters of your life (people, health, practices, commitments) as notes in a folder of its own, <code>Lodestone/</code>, inside your vault, which you read and edit in Obsidian or any editor. A note comes back into the conversation, word for word, whenever its subject does. Lodestone writes there only what you keep from a card, never anywhere else in the vault.</p>
-        <p class="fine" id="setLbWhere"></p>
-        <div class="row-btns"><button class="btn ghost" id="setLbChoose" type="button">Choose your vault…</button><button class="btn ghost" id="setLbOpen" type="button" hidden>Show the folder</button><button class="btn ghost" id="setLbForget" type="button" hidden>Stop using it</button></div>
-        <p class="fine" id="setLbPrivacy"></p>
-        <p class="fine">A note's <code>keys:</code> (and its <code>aliases:</code> and title) are the words that bring it back; <code>always: true</code> keeps it in every conversation; <code>recall: false</code> keeps it out.</p>
-      </section>
-      <section data-nav="Folders it reads" class="desktop-only" id="setAdvanced">
-        <h4><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>Folders Lodestone may read</h4>
-        <p class="hint">Your notes, journal or writings: when a question touches them, Lodestone finds the passages that bear on it and reads them with you. Markdown and text files only. Lodestone only reads: it never changes, moves or deletes anything there, and reads nothing outside these folders.</p>
-        <p class="fine" id="setFoldersWhere"></p>
-        <div id="setFolders" class="folder-list"></div>
-        <div class="row-btns"><button class="btn ghost" id="setFolderAdd" type="button">Add a folder…</button><button class="btn ghost" id="setFolderReread" type="button" hidden>Read them again</button></div>
-        <p class="fine" id="setFoldersStats"></p>
-      </section>
-      <section data-nav="Usage and costs" id="setUsage">
-        <h4><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M14.8 9.2c-.5-.9-1.6-1.5-2.8-1.5-1.6 0-2.8.9-2.8 2.1 0 2.9 5.7 1.5 5.7 4.3 0 1.2-1.3 2.2-2.9 2.2-1.3 0-2.4-.6-2.9-1.6M12 6v1.7M12 16.3V18"/></svg>Usage and costs</h4>
-        <div id="setUsageKv" class="kv"></div>
-        <button class="btn ghost block" id="setUsageOpen" type="button">Usage and costs…</button>
-        <label>Monthly limit for rented models, in US dollars
-          <input id="setCap" type="text" inputmode="decimal" placeholder="No limit" autocomplete="off">
-        </label>
-        <p class="hint"><span id="setCapNote"></span> Past the limit Lodestone stops sending to OpenRouter and other rented models until you raise it or the month turns; a warning comes at 80%. Your own computer's model is never limited. The hard limit is the one you set on the key at openrouter.ai.</p>
-      </section>
-      <section data-nav="Spoken replies" id="setVoice" hidden>
-        <h4><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>Spoken replies</h4>
-        <div class="seg" id="setVoiceMode">
-          <button type="button" data-v="text">Text</button><button type="button" data-v="voice">Voice</button><button type="button" data-v="both">Both</button><button type="button" data-v="mirror">Mirror</button>
-        </div>
-        <p class="hint" id="setVoiceHint"></p>
-        <div class="seg" id="setVoiceSource"><button type="button" data-v="provider">Natural voice</button><button type="button" data-v="device">This device's voices</button></div>
-        <p class="hint" id="setVoiceSourceHint"></p>
-        <div id="setVoiceCloud" hidden>
-          <label>Natural voice
-            <select id="setVoiceFamily"></select>
+      <!-- The version and updates first, then the settings in six groups; the
+           list at the top names the groups (1.14.1). -->
+      <div class="set-top">
+        <div class="set-top-ver"><b id="setVersion">Lodestone</b><span>Updates come when you ask for them.</span></div>
+        <button class="btn ghost" id="setCheckUpdate" type="button">Check for updates</button>
+        <div class="hint" id="setUpdateMsg"></div>
+      </div>
+      <div class="set-group" data-nav="Model">
+        <h5 class="set-group-title">Model</h5>
+        <section data-nav="Model">
+          <h4><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2.5v2.5M15 2.5v2.5M9 19v2.5M15 19v2.5M2.5 9h2.5M2.5 15h2.5M19 9h2.5M19 15h2.5"/></svg>Model</h4>
+          <div id="setEngine" class="kv"></div>
+          <label>Model <select id="setModel"></select></label>
+          <div id="setAccount" class="row-btns" hidden></div>
+          <button class="btn ghost block" id="setChangeTier" type="button">Change where Lodestone thinks</button>
+        </section>
+        <section data-nav="Usage and costs" id="setUsage">
+          <h4><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M14.8 9.2c-.5-.9-1.6-1.5-2.8-1.5-1.6 0-2.8.9-2.8 2.1 0 2.9 5.7 1.5 5.7 4.3 0 1.2-1.3 2.2-2.9 2.2-1.3 0-2.4-.6-2.9-1.6M12 6v1.7M12 16.3V18"/></svg>Usage and costs</h4>
+          <div id="setUsageKv" class="kv"></div>
+          <button class="btn ghost block" id="setUsageOpen" type="button">Usage and costs…</button>
+          <label>Monthly limit for rented models, in US dollars
+            <input id="setCap" type="text" inputmode="decimal" placeholder="No limit" autocomplete="off">
           </label>
-          <p class="hint" id="setVoiceFamilyNote"></p>
-          <label>A key for voice (optional)
-            <input id="setVoiceKey" type="password" placeholder="Paste an OpenRouter, xAI or OpenAI key" autocomplete="off" spellcheck="false">
+          <p class="hint"><span id="setCapNote"></span> Past the limit Lodestone stops sending to OpenRouter and other rented models until you raise it or the month turns; a warning comes at 80%. Your own computer's model is never limited. The hard limit is the one you set on the key at openrouter.ai.</p>
+        </section>
+      </div>
+      <div class="set-group" data-nav="Voice">
+        <h5 class="set-group-title">Voice</h5>
+        <section data-nav="Spoken replies" id="setVoice" hidden>
+          <h4><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>Spoken replies</h4>
+          <div class="seg" id="setVoiceMode">
+            <button type="button" data-v="text">Text</button><button type="button" data-v="voice">Voice</button><button type="button" data-v="both">Both</button><button type="button" data-v="mirror">Mirror</button>
+          </div>
+          <p class="hint" id="setVoiceHint"></p>
+          <div class="seg" id="setVoiceSource"><button type="button" data-v="provider">Natural voice</button><button type="button" data-v="device">This device's voices</button></div>
+          <p class="hint" id="setVoiceSourceHint"></p>
+          <div id="setVoiceCloud" hidden>
+            <label>Natural voice
+              <select id="setVoiceFamily"></select>
+            </label>
+            <p class="hint" id="setVoiceFamilyNote"></p>
+            <label>A key for voice (optional)
+              <input id="setVoiceKey" type="password" placeholder="Paste an OpenRouter, xAI or OpenAI key" autocomplete="off" spellcheck="false">
+            </label>
+            <div class="voice-row-set"><button class="btn ghost" id="setVoiceKeySave" type="button">Save the key</button></div>
+            <p class="hint" id="setVoiceKeys"></p>
+          </div>
+          <div class="seg" id="setVoiceGender">
+            <button type="button" data-v="female">Female voice</button><button type="button" data-v="male">Male voice</button>
+          </div>
+          <label id="setVoiceNameRow">Voice
+            <select id="setVoiceName"></select>
           </label>
-          <div class="voice-row-set"><button class="btn ghost" id="setVoiceKeySave" type="button">Save the key</button></div>
-          <p class="hint" id="setVoiceKeys"></p>
-        </div>
-        <div class="seg" id="setVoiceGender">
-          <button type="button" data-v="female">Female voice</button><button type="button" data-v="male">Male voice</button>
-        </div>
-        <label id="setVoiceNameRow">Voice
-          <select id="setVoiceName"></select>
-        </label>
-        <p class="hint" id="setVoiceLangNote"></p>
-        <div class="voice-row-set">
-          <label>Speed
-            <select id="setVoiceRate"><option value="0.85">Slower</option><option value="1">Natural</option><option value="1.15">A little faster</option><option value="1.3">Faster</option></select>
+          <p class="hint" id="setVoiceLangNote"></p>
+          <div class="voice-row-set">
+            <label>Speed
+              <select id="setVoiceRate"><option value="0.85">Slower</option><option value="1">Natural</option><option value="1.15">A little faster</option><option value="1.3">Faster</option></select>
+            </label>
+            <button class="btn ghost" id="setVoiceTry" type="button">Try it</button>
+          </div>
+          <p class="hint" id="setVoiceDeviceHint">This computer's own voices: nothing is sent anywhere and nothing is downloaded. Crisis replies and moments of acute distress are never spoken unasked. On a Mac, better voices come from System Settings → Accessibility → Spoken Content → System voice → Manage Voices… (the <em>Premium</em> and <em>Enhanced</em> ones); Lodestone takes them first. Esc stops the voice.</p>
+        </section>
+        <section data-nav="Dictation" id="setDictation">
+          <h4><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5V21"/></svg>Dictation</h4>
+          <p class="hint">The microphone beside the message box. Whisper turns your voice into text on this device: the recording goes nowhere, and the text waits in the box for you to read over and send. In Lodestone Desktop, ⇧⌘D starts and stops; on a Mac, hold fn to speak and let go to write it in (set System Settings → Keyboard → “Press 🌐 key to” to Do Nothing, or macOS acts on fn as well).</p>
+          <div class="seg" id="setDictSource" hidden><button type="button" data-v="device">On this device</button><button type="button" data-v="provider">Through the provider</button></div>
+          <p class="hint" id="setDictSourceHint" hidden></p>
+          <div id="setDictKv" class="kv"></div>
+          <label>Language you dictate in
+            <select id="setDictLang">
+              <option value="auto">Heard from what I say</option>
+              <option value="en">English</option><option value="fr">Français</option><option value="es">Español</option>
+              <option value="ar">العربية</option><option value="pt">Português</option><option value="de">Deutsch</option>
+            </select>
           </label>
-          <button class="btn ghost" id="setVoiceTry" type="button">Try it</button>
-        </div>
-        <p class="hint" id="setVoiceDeviceHint">This computer's own voices: nothing is sent anywhere and nothing is downloaded. Crisis replies and moments of acute distress are never spoken unasked. On a Mac, better voices come from System Settings → Accessibility → Spoken Content → System voice → Manage Voices… (the <em>Premium</em> and <em>Enhanced</em> ones); Lodestone takes them first. Esc stops the voice.</p>
-      </section>
-      <section data-nav="Dictation" id="setDictation">
-        <h4><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5V21"/></svg>Dictation</h4>
-        <p class="hint">The microphone beside the message box. Whisper turns your voice into text on this device: the recording goes nowhere, and the text waits in the box for you to read over and send. In Lodestone Desktop, ⇧⌘D starts and stops; on a Mac, hold fn to speak and let go to write it in (set System Settings → Keyboard → “Press 🌐 key to” to Do Nothing, or macOS acts on fn as well).</p>
-        <div class="seg" id="setDictSource" hidden><button type="button" data-v="device">On this device</button><button type="button" data-v="provider">Through the provider</button></div>
-        <p class="hint" id="setDictSourceHint" hidden></p>
-        <div id="setDictKv" class="kv"></div>
-        <label>Language you dictate in
-          <select id="setDictLang">
-            <option value="auto">Same as the reply language, else this device's</option>
-            <option value="en">English</option><option value="fr">Français</option><option value="es">Español</option>
-            <option value="ar">العربية</option><option value="pt">Português</option><option value="de">Deutsch</option>
-          </select>
-        </label>
-        <label class="check"><input type="checkbox" id="setDictTidy" checked> <span>Tidy what was said: hesitations (um, euh, äh), stutters and repeated words taken out, capitals and commas set right. On this device; the words you meant are left as you said them.</span></label>
-        <label class="check"><input type="checkbox" id="setDictPolish" checked> <span>Then by the model you use: where you changed your mind (“at five, actually six”), what you settled on is kept. The words go where your message will go; with a model on this device they stay here. Not with the browser's own small model, and never on words about safety, keys or card numbers.</span></label>
-        <button class="btn ghost block" id="setDictDownload" type="button" hidden>Download the speech model (about 250 MB)</button>
-      </section>
-      <section data-nav="Appearance">
-        <h4><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 0 0 17z" style="fill:currentColor"/></svg>Appearance and language</h4>
-        <div class="seg" id="setTheme">
-          <button type="button" data-v="dark">Dark</button><button type="button" data-v="light">Light</button><button type="button" data-v="auto">Auto</button>
-        </div>
-        <label>Reply language
-          <select id="setLang">
-            <option value="auto">Match what I write</option>
-            <option value="en">English</option><option value="fr">Français</option>
-            <option value="es">Español</option><option value="ar">العربية</option>
-          </select>
-        </label>
-      </section>
-      <section data-nav="Corpus">
-        <h4><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6.5C10 5 7 4.5 3.5 5v13c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5C17 4.5 14 5 12 6.5zM12 6.5v13"/></svg>Corpus</h4>
-        <div id="setCorpus" class="kv"></div>
-        <button class="btn ghost block" id="setCheckUpdate" type="button">Check for corpus update</button>
-        <p class="hint" id="setUpdateMsg"></p>
-      </section>
-      <section data-nav="Your data">
-        <h4><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7.5" ry="2.8"/><path d="M4.5 6v12c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8V6M4.5 12c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8"/></svg>Your data</h4>
-        <p class="hint">Sync, below, keeps your devices together. A memory file moves it by hand: it holds your conversations, practices and notes.</p>
-        <label class="check"><input type="checkbox" id="setRecall"> <span>Remember earlier conversations: when a message touches something you said in another conversation, Lodestone brings it back, and names it under the answer, where you can tell it to forget. Kept on this device only; needs deep retrieval.</span></label>
-        <p class="hint" id="setRecallWhere"></p>
-        <button class="btn ghost block" id="setExport" type="button">Export memory</button>
-        <label class="btn ghost block file-btn">Import memory<input type="file" id="setImport" accept="application/json" hidden></label>
-        <button class="btn danger block" id="setWipe" type="button">Erase everything on this device</button>
-      </section>
-      <section data-nav="Account" id="setAccountBox">
-        <h4><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20c1.2-3.6 4-5.5 7.5-5.5s6.3 1.9 7.5 5.5"/></svg>Account</h4>
-        <div id="acctBody" class="acct-body"></div>
-      </section>
-      <section data-nav="Sync" id="setSync" hidden>
-        <h4><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 9A8 8 0 0 0 5.2 7.2L3.5 9M4.5 15a8 8 0 0 0 14.3 1.8l1.7-1.8M3.5 4.5V9H8M20.5 19.5V15H16"/></svg>Sync</h4>
-        <p class="hint" id="syncStatus"></p>
-        <div id="syncBody"></div>
-      </section>
-      <section data-nav="Help">
-        <h4><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.1-2.4 3.6M12 16.8v.2"/></svg>Help</h4>
-        <button class="btn ghost block" type="button" data-open-help>Using Lodestone</button>
-        <a class="btn ghost block" href="safety.html" target="_blank" rel="noopener">How Lodestone handles a crisis</a>
-        <p class="fine">Lodestone is an AI, not a person. Made for adults: companion chatbots may not be suitable for some minors.</p>
-      </section>
+          <label class="check"><input type="checkbox" id="setDictTidy" checked> <span>Tidy what was said: hesitations (um, euh, äh), stutters and repeated words taken out, capitals and commas set right. On this device; the words you meant are left as you said them.</span></label>
+          <label class="check"><input type="checkbox" id="setDictPolish" checked> <span>Then by the model you use: where you changed your mind (“at five, actually six”), what you settled on is kept. The words go where your message will go; with a model on this device they stay here. Not with the browser's own small model, and never on words about safety, keys or card numbers.</span></label>
+          <button class="btn ghost block" id="setDictDownload" type="button" hidden>Download the speech model (about 250 MB)</button>
+        </section>
+      </div>
+      <div class="set-group" data-nav="Memory">
+        <h5 class="set-group-title">Memory</h5>
+        <section data-nav="Vault" id="setLifeBook">
+          <h4><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5h10.5a2 2 0 0 1 2 2v13H7a2 2 0 0 1-2-2z"/><path d="M5 17.5a2 2 0 0 1 2-2h10.5"/></svg>Life book</h4>
+          <p class="hint">Lodestone keeps what matters of your life (people, health, practices, commitments) as notes in a folder of its own, <code>Lodestone/</code>, inside your vault, which you read and edit in Obsidian or any editor. A note comes back into the conversation, word for word, whenever its subject does. Lodestone writes there only what you keep from a card, never anywhere else in the vault. On a phone or in a browser the life book works too: what you keep is in your memory at once, synced, encrypted, between your devices, and Lodestone Desktop writes it into your vault when it next opens.</p>
+          <p class="fine" id="setLbWhere"></p>
+          <div class="row-btns"><button class="btn ghost" id="setLbChoose" type="button">Choose your vault…</button><button class="btn ghost" id="setLbOpen" type="button" hidden>Show the folder</button><button class="btn ghost" id="setLbForget" type="button" hidden>Stop using it</button></div>
+          <p class="fine" id="setLbPrivacy"></p>
+          <div class="row-btns"><button class="btn ghost" id="setLbOrganize" type="button" hidden>Sort my life book…</button></div>
+          <p class="hint" id="setLbOrganizeMsg"></p>
+          <p class="fine">A note's <code>keys:</code> (and its <code>aliases:</code> and title) are the words that bring it back; <code>always: true</code> keeps it in every conversation; <code>recall: false</code> keeps it out.</p>
+        </section>
+        <section data-nav="Your data">
+          <h4><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7.5" ry="2.8"/><path d="M4.5 6v12c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8V6M4.5 12c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8"/></svg>Your data</h4>
+          <p class="hint">Sync, below, keeps your devices together. A memory file moves it by hand: it holds your conversations, practices and notes.</p>
+          <label class="check"><input type="checkbox" id="setRecall"> <span>Remember earlier conversations: when a message touches something you said in another conversation, Lodestone brings it back, and names it under the answer, where you can tell it to forget. Kept on this device only; needs deep retrieval.</span></label>
+          <p class="hint" id="setRecallWhere"></p>
+          <label class="check"><input type="checkbox" id="setLearn"> <span>Let harmonism.io keep what Lodestone has learned of you up to date from conversations on this device. Your memory and recent messages go there now and then and are not stored; conversations answered on this computer, or by no model, never go. Off, only the website's own conversations are used.</span></label>
+          <button class="btn ghost block" id="setExport" type="button">Export memory</button>
+          <label class="btn ghost block file-btn">Import memory<input type="file" id="setImport" accept="application/json" hidden></label>
+          <button class="btn danger block" id="setWipe" type="button">Erase everything on this device</button>
+        </section>
+        <section data-nav="Folders it reads" id="setAdvanced">
+          <h4><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>Folders Lodestone may read</h4>
+          <p class="hint">Your notes, journal or writings: when a question touches them, Lodestone finds the passages that bear on it and reads them with you. Markdown and text files only. Lodestone only reads: it never changes, moves or deletes anything there, and reads nothing outside these folders.</p>
+          <p class="fine" id="setFoldersWhere"></p>
+          <div id="setFolders" class="folder-list"></div>
+          <div class="row-btns"><button class="btn ghost" id="setFolderAdd" type="button">Add a folder…</button><button class="btn ghost" id="setFolderReread" type="button" hidden>Read them again</button><button class="btn ghost" id="setFolderAllow" type="button" hidden>Allow again</button></div>
+          <p class="fine" id="setFoldersStats"></p>
+        </section>
+      </div>
+      <div class="set-group" data-nav="Account">
+        <h5 class="set-group-title">Account</h5>
+        <section data-nav="Account" id="setAccountBox">
+          <h4><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20c1.2-3.6 4-5.5 7.5-5.5s6.3 1.9 7.5 5.5"/></svg>Account</h4>
+          <div id="acctBody" class="acct-body"></div>
+        </section>
+        <section data-nav="Sync" id="setSync" hidden>
+          <h4><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 9A8 8 0 0 0 5.2 7.2L3.5 9M4.5 15a8 8 0 0 0 14.3 1.8l1.7-1.8M3.5 4.5V9H8M20.5 19.5V15H16"/></svg>Sync</h4>
+          <p class="hint" id="syncStatus"></p>
+          <div id="syncBody"></div>
+        </section>
+      </div>
+      <div class="set-group" data-nav="Display">
+        <h5 class="set-group-title">Display</h5>
+        <section data-nav="Appearance">
+          <h4><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 0 0 17z" style="fill:currentColor"/></svg>Appearance and language</h4>
+          <div class="seg" id="setTheme">
+            <button type="button" data-v="dark">Dark</button><button type="button" data-v="light">Light</button><button type="button" data-v="auto">Auto</button>
+          </div>
+          <label>Reply language
+            <select id="setLang">
+              <option value="auto">Match what I write</option>
+              <option value="en">English</option><option value="fr">Français</option>
+              <option value="es">Español</option><option value="ar">العربية</option>
+            </select>
+          </label>
+        </section>
+      </div>
+      <div class="set-group" data-nav="About">
+        <h5 class="set-group-title">About</h5>
+        <section data-nav="Corpus">
+          <h4><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6.5C10 5 7 4.5 3.5 5v13c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5C17 4.5 14 5 12 6.5zM12 6.5v13"/></svg>Lodestone and the corpus</h4>
+          <div id="setCorpus" class="kv"></div>
+        </section>
+        <section data-nav="Help">
+          <h4><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.1-2.4 3.6M12 16.8v.2"/></svg>Help</h4>
+          <button class="btn ghost block" type="button" data-open-help>Using Lodestone</button>
+          <a class="btn ghost block" href="safety.html" target="_blank" rel="noopener">How Lodestone handles a crisis</a>
+          <p class="fine">Lodestone is an AI, not a person. Made for adults: companion chatbots may not be suitable for some minors.</p>
+        </section>
+        <section data-nav="Help Lodestone improve" id="improveBox">
+          <h4><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-7.5-10A4.2 4.2 0 0 1 12 8a4.2 4.2 0 0 1 7.5 2.5c0 5.4-7.5 10-7.5 10z"/></svg>Help Lodestone improve</h4>
+          <p class="hint">Share one conversation with Harmonia, so that people at Harmonia can read what Lodestone said: where it held to Harmonism, where it drifted, and whether it held you as it should. Nothing is ever shared unless you do it here. Names are replaced on this device before anything leaves, and you read the whole copy first.</p>
+          <div id="improveBody" class="sync-form"></div>
+        </section>
+      </div>
       <p class="fine" id="setAbout"></p>
     </div>
     </div>
@@ -484,10 +524,10 @@
     <div class="drawer-head"><h3>Using Lodestone</h3><button class="icon-btn" data-close aria-label="Close">×</button></div>
     <div class="prose help-body">
       <h4>What this is</h4>
-      <p>Lodestone is Harmonia's companion. The Harmonism articles and everything you tell it are stored on your own device, and its safeguards run there. The model that answers runs where you choose: on this device or a computer you own, and then nothing you write is sent to anyone; or, if you choose, on harmonism.io's hosted models under your account, or on OpenRouter under your own key, and then each message goes there and nothing else does.</p>
+      <p>Lodestone is Harmonia's companion. The Harmonism articles and everything you tell it are stored on your own device, and its safeguards run there. The model that answers runs where you choose: on a computer you own, and then nothing you write is sent to anyone; or, if you choose, on harmonism.io's hosted models under your account, or on OpenRouter under your own key, and then each message goes there and nothing else does.</p>
 
       <h4>First use</h4>
-      <p>Connect to Wi-Fi, choose where Lodestone should think, and press <em>Download and begin</em>. On a computer, <em>This device</em> needs nothing installed and downloads about six gigabytes, once. Keep the page open until it finishes.</p>
+      <p>Connect to Wi-Fi, choose where Lodestone should think, and press <em>Begin</em>. The corpus downloads once; keep the page open until it finishes.</p>
 
       <h4>On a phone or tablet</h4>
       <p>A phone does not run the model. The models small enough to fit answer badly enough to misrepresent the system they speak for, so that option is not offered — a poor answer in Lodestone's voice is worse than no answer. A phone holds the whole corpus for reading and searching offline, and thinks in one of four ways. <strong>Your computer</strong>: a model on a computer you own, over your own Wi-Fi; nothing leaves your network. <strong>Your harmonism.io account</strong>: the models hosted Lodestone runs on, ten messages a day in total across the website, Telegram and Lodestone's apps. <strong>OpenRouter</strong>: a model you rent with your own key, with no daily limit. <strong>No model</strong>: a question brings back the passages of the corpus that bear on it, with no network at all. Settings → <em>Change where Lodestone thinks</em> moves between them; your conversations stay.</p>
@@ -498,8 +538,8 @@
       <p><strong>Mac or PC:</strong> in Chrome or Edge, click the install icon at the right end of the address bar.</p>
       <p>Opened from the home screen, Lodestone works with airplane mode on.</p>
 
-      <h4>If the model will not start</h4>
-      <p>There is no smaller model to fall back to, and that is deliberate: below this size the answers stop being trustworthy in Lodestone's voice, and a confident wrong answer about the system is worse than none. If this computer cannot hold it, or the browser says it has no WebGPU, run the model outside the browser instead — it can hold far more there, and it is the better version anyway. See below.</p>
+      <h4>Why Lodestone does not think inside the browser</h4>
+      <p>Lodestone speaks from the whole of its doctrine on every turn, about fifteen thousand words held beside the conversation. No model a browser can hold carries that and a conversation together, and a lighter Lodestone answering from a shortened doctrine misrepresents the system it speaks for; a confident wrong answer in its voice is worse than none. So it thinks on a computer you own, on your harmonism.io account, or on OpenRouter under your own key. Lodestone Desktop, below, runs a model on your own computer.</p>
 
       <h4>Keeping the articles current</h4>
       <p>The articles never update by themselves. When you are online, open Settings and press <em>Check for corpus update</em>. Nothing downloads unless you confirm.</p>
@@ -517,7 +557,7 @@
       <p>To use that computer's model from your phone, choose <em>Use from your phone…</em> in the app's Lodestone menu, switch it on, and scan the code with the phone on the same Wi-Fi. Two consequences worth knowing. The phone then works only while the computer is awake and Lodestone is open on it, and that page cannot be saved for offline use — a plain address on your network is not one browsers will let an app store itself from. And what you tell Lodestone there is kept separately from what you tell the computer, because they are different addresses; Settings → Export and Import move it across.</p>
 
       <h4>What Lodestone cannot do here</h4>
-      <p>These models are far smaller than the one on harmonism.io. They make mistakes and can state things the articles do not say — which is why nothing below the seven-billion class is offered here at all. When something matters, read the article: every reply lists the articles it drew on, and they open offline. In a crisis Lodestone gives you a helpline, not a conversation; it is a companion, not a clinician.</p>
+      <p>Every model Lodestone thinks with can make mistakes and state things the articles do not say — which is why only models that hold its whole doctrine are offered at all. When something matters, read the article: every reply lists the articles it drew on, and they open offline. In a crisis Lodestone gives you a helpline, not a conversation; it is a companion, not a clinician.</p>
     </div>
   </aside>
 

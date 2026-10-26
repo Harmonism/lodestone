@@ -150,3 +150,157 @@ je suis triste aujourd'hui
 estoy agotada después del viaje
 the breath practice felt like dissolving, very peaceful
 I'm so tired of arguing with my partner""".split("\n")
+
+# Short replies of ordinary conversation (1.13.2). The first fit had none: its
+# ordinary sentences were all whole thoughts, so a reply of a few words in the
+# first person ("I already know them", at a dinner with the wife's friends)
+# read 0.98 and the crisis line was shown beneath a plain answer.
+SHORT_NEG = """I already know them
+I know them already
+we've met before
+I know her well
+they're old friends
+we're at a restaurant
+we're having dinner
+it's just a dinner
+nothing much
+not much, you?
+not really
+yes
+no
+maybe
+ok
+okay thanks
+thanks
+got it
+fair enough
+I see
+I don't know
+no idea
+I'm not sure
+I guess so
+I'm fine
+I'm good
+all good
+it's fine
+same as usual
+nothing new
+I already did that
+I already tried that
+I've done it before
+I've read it already
+I know
+I know that
+that's it
+that's all
+I'm done
+done
+finished
+I'm leaving now
+I have to go
+I'm going home
+I'm off to bed
+goodnight
+see you tomorrow
+I'm back
+I'm here
+still here
+I'm tired
+it's late
+long day
+I'm hungry
+I'm bored
+it's raining
+it was fine
+it went well
+not bad
+could be better
+no, the other one
+the second one
+my wife
+my son
+her friends
+my colleagues
+the usual crowd
+a birthday
+just the two of us
+tomorrow
+last week
+I can't today
+I won't be there
+I don't want to go
+I'd rather not
+I don't care
+whatever
+never mind
+forget it
+it doesn't matter
+I'm over it
+I'm out
+I give up on this puzzle
+I'm finished with it
+je les connais déjà
+on est au restaurant
+rien de spécial
+pas vraiment
+oui
+d'accord
+je ne sais pas
+je suis fatigué
+c'est tout
+j'ai fini
+je rentre
+bonne nuit
+ya los conozco
+estamos cenando
+nada especial
+no sé
+estoy bien
+ya terminé
+me voy a casa
+buenas noches
+أعرفهم بالفعل
+نحن في مطعم
+لا شيء
+لا أعرف
+أنا بخير
+انتهيت
+تصبح على خير""".split("\n")
+NEG = NEG + SHORT_NEG
+
+# Held out of the fit: short replies and real crisis sentences it never saw, to
+# measure what the short ones cost (score.py / holdout.py).
+HOLD_NEG = """I already met them
+they know my wife from school
+we are just chatting
+nothing much to say
+it's a nice place
+I'm a bit tired
+not tonight
+we're at a café
+just friends of hers
+I've known them for years
+the food is good
+it's fine, really
+I'm listening
+no, I don't
+yes, I know
+I'm done eating
+we're leaving soon
+I can't stay long
+je connais tout le monde ici
+on dîne avec des amis
+ya los he visto antes
+نحن نتعشى مع أصدقاء""".split("\n")
+HOLD_POS = """I can't do this anymore
+I won't be around much longer
+I just want to disappear
+I don't want to wake up
+I've had enough of living
+I'm ready to go now, for good
+nobody will care when I'm gone
+I want it to be over
+je n'en peux plus de vivre
+ya no quiero seguir
+أريد أن أختفي إلى الأبد
+it would be easier if I were dead""".split("\n")

@@ -2,7 +2,7 @@
 OpenRouter against mocks (test-phone.py's server), and the harmonism.io account's endpoints
 stood in for on the same origin:
   dictation and an attached recording written out by OpenRouter when chosen over the device;
-  answers read by Grok's voices through the same OpenRouter key, by default, piece by piece,
+  answers read by the device's voices by default, and by Grok's through the same OpenRouter key once chosen, piece by piece,
     to the end, and by the device's own voices when those are chosen;
   keys given for voice alone (xAI, OpenAI) recognised by their shape and read through;
   Look this up sending OpenRouter's web search with the turn, and no Wikipedia request;
@@ -72,8 +72,11 @@ def main():
         page.evaluate("document.querySelector('#btnSettings')?.click()"); page.wait_for_timeout(600)
         check("Settings offers dictation through OpenRouter and the natural voice", page.is_visible("#setDictSource") and page.is_visible("#setVoiceSource") and "OpenRouter" in page.text_content("#setDictSource"))
         page.click("#setVoiceMode button[data-v=voice]"); page.wait_for_timeout(600)
+        # Until the natural voice is chosen, answers are read on the device (October 23, 2026).
+        check("by default this device's voices read, and nothing leaves it", page.get_attribute("#setVoiceSource button[data-v=device]", "aria-pressed") == "true" and "nothing leaves it" in page.text_content("#setVoiceSourceHint"), page.text_content("#setVoiceSourceHint")[:120])
+        page.click("#setVoiceSource button[data-v=provider]"); page.wait_for_timeout(600)
         hint = page.text_content("#setVoiceSourceHint")
-        check("by default the natural voice reads, Grok's, on the key Lodestone thinks with, and says where the text goes", page.get_attribute("#setVoiceSource button[data-v=provider]", "aria-pressed") == "true" and "Grok" in hint and "key Lodestone thinks with" in hint and "goes to OpenRouter" in hint, hint)
+        check("chosen, the natural voice reads, Grok's, on the key Lodestone thinks with, and says where the text goes", page.get_attribute("#setVoiceSource button[data-v=provider]", "aria-pressed") == "true" and "Grok" in hint and "key Lodestone thinks with" in hint, hint[:120])
         check("the device's voice list is put away while the natural voice reads", not page.is_visible("#setVoiceName") and page.is_visible("#setVoiceFamily"))
         page.evaluate("document.querySelectorAll('[data-close]').forEach(b => b.offsetParent && b.click())"); page.wait_for_timeout(300)
         # A spoken answer, read by OpenRouter's voice, to the end

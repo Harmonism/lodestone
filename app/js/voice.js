@@ -109,7 +109,7 @@ export class Speaker {
     this.stop();
     this.gen++;   // a session of its own: the cancelled one's late end events no longer count (1.13.1)
     this.voice = voice; this.lang = lang; this.rate = rate; this.key = key;
-    this.rawSaid = 0; this.pending = 0; this.done = false; this.active = true; this.held = [];
+    this.rawSaid = 0; this.pending = 0; this.done = false; this.active = true; this.held = []; this.paused = false;
     this.onState(true, key);
   }
   /** `text` is the whole reply so far; `final` once it is complete. */
@@ -135,11 +135,15 @@ export class Speaker {
     u.onend = end; u.onerror = end;
     speechSynthesis.speak(u);
   }
-  finish() { if (!this.active) return; this.active = false; this.held = []; const k = this.key; this.key = null; this.onState(false, k); }
+  finish() { if (!this.active) return; this.active = false; this.paused = false; this.held = []; const k = this.key; this.key = null; this.onState(false, k); }
+  /** Holds the voice where it is; resume() goes on from the same word. */
+  pause() { if (!this.active || this.paused) return; this.paused = true; try { speechSynthesis.pause(); } catch {} this.onState(true, this.key); }
+  resume() { if (!this.active || !this.paused) return; this.paused = false; try { speechSynthesis.resume(); } catch {} this.onState(true, this.key); }
   stop() {
     if (!available()) return;
     const was = this.active, k = this.key;
-    this.active = false; this.key = null; this.held = []; this.gen++;
+    this.active = false; this.paused = false; this.key = null; this.held = []; this.gen++;
+    try { speechSynthesis.resume(); } catch {}   // a paused queue cancelled while paused stays paused in Chromium
     try { speechSynthesis.cancel(); } catch {}
     if (was) this.onState(false, k);
   }

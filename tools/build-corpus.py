@@ -19,10 +19,9 @@ Single source of truth, nothing re-typed:
   - Crisis library     crisis-patterns.json + templates/resources parsed from
                        companion-crisis-detector.php
   - Witness markers    parsed from telegram-companion/companion-classifier.php
-  - Full backbone      telegram-companion/doctrinal-backbone.md (live Tier 1)
-  - Light backbone     lodestone/doctrine/backbone-light.md (curated extraction;
-                       the build warns when the full backbone has moved past the
-                       version the light one was derived from)
+  - Backbone           telegram-companion/doctrinal-backbone.md (live Tier 1), the
+                       one backbone everywhere: the light extraction was retired
+                       with in-browser thinking on 25 October 2026
 
 Holds: any file whose frontmatter carries `publication_hold: true` is excluded
 regardless of location. Public titles that touch a held subject
@@ -289,11 +288,6 @@ def main():
     backbone_full = (astro / "telegram-companion" / "doctrinal-backbone.md").read_text(encoding="utf-8")
     m = re.search(r"Document version:\s*([\d.]+)", backbone_full)
     full_version = m.group(1) if m else "unknown"
-    light_path = ROOT / "doctrine" / "backbone-light.md"
-    backbone_light = light_path.read_text(encoding="utf-8")
-    m = re.search(r"derived_from_version:\s*([\d.]+)", backbone_light)
-    light_from = m.group(1) if m else "unknown"
-    light_body = re.sub(r"^---\n.*?\n---\n", "", backbone_light, flags=re.S).strip()
 
     corpus = {"articles": articles, "chunks": chunks}
     corpus_bytes = json.dumps(corpus, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
@@ -313,9 +307,11 @@ def main():
             "chunks": len(chunks),
             "corpus_bytes": len(corpus_bytes),
             "backbone_full_version": full_version,
-            "backbone_light_derived_from": light_from,
+            "backbone_chars": len(backbone_full),
         },
-        "backbone": {"full": backbone_full, "light": light_body},
+        # "light" carries the full backbone for app versions from before 25 October
+        # 2026, which read it on the withdrawn in-browser tier; nothing current reads it.
+        "backbone": {"full": backbone_full, "light": backbone_full},
         "retrieval": {"stop_words": stop_words, "synonyms": synonyms},
         "crisis": {"patterns": crisis_patterns, "templates": crisis_templates,
                    "resources": crisis_resources},
@@ -341,9 +337,7 @@ def main():
           f"witness: {sum(len(v) for v in witness_patterns.values())} markers")
     if hold_subject:
         print(f"  REVIEW: {len(hold_subject)} included file(s) touch a held subject")
-    if light_from != full_version:
-        print(f"  WARNING: backbone-light derived from v{light_from}; live backbone is v{full_version}. "
-              f"Re-derive doctrine/backbone-light.md before shipping.")
+    print(f"  backbone v{full_version}: {len(backbone_full):,} characters, about {round(len(backbone_full) / 4.6):,} tokens")
     stale = out / "embeddings.bin"
     if stale.exists():
         meta_p = out / "embeddings.json"

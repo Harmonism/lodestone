@@ -214,7 +214,10 @@ function presetChanged(fill = true) {
   $("#rRec").replaceChildren(...rec.map(m => el("button", {
     class: "link", title: `${m.maker} · ${m.licence}${m.note ? " · " + m.note : ""}`,
     onclick: ev => { ev.preventDefault(); $("#rModel").value = m.id; showAssess(); },
-  }, m.label)));
+  }, m.label)), ...(p.offered || []).map(m => el("button", {
+    class: "link", title: `${m.maker} · ${m.licence} · ${m.note}`,
+    onclick: ev => { ev.preventDefault(); $("#rModel").value = m.id; showAssess(); },
+  }, `${m.label} (not recommended)`)));
   showAssess();
   const a = $("#rKeyLink"); a.hidden = !p.keyUrl;
   a.onclick = ev => { ev.preventDefault(); if (p.keyUrl) window.open(p.keyUrl); };
@@ -226,9 +229,10 @@ function showAssess() {
   const preset = $("#rPreset").value, id = $("#rModel").value.trim(), box = $("#rAssess");
   const rec = (S.presets[preset]?.recommended || []).some(m => m.id === id);
   const closed = preset === "anthropic" || CLOSED_ID.test(id);
+  const off = (S.presets[preset]?.offered || []).some(m => m.id === id);
   box.hidden = !id || rec;
-  box.textContent = closed ? "Closed weights · not tested against the doctrine." : "Not tested against the doctrine.";
-  box.classList.toggle("warn", closed);
+  box.textContent = off ? "Not recommended · doctrinal fidelity. Strong otherwise; closed weights." : closed ? "Closed weights · not tested against the doctrine." : "Not tested against the doctrine.";
+  box.classList.toggle("warn", closed || off);
 }
 
 const remoteConf = () => ({ preset: $("#rPreset").value, baseUrl: $("#rUrl").value.trim(), model: $("#rModel").value.trim() });
@@ -244,10 +248,10 @@ async function listRemoteModels() {
   finally { btn.disabled = false; }
 }
 
-// ─── harmonism.io account: hosted models, ten messages a day ─────────
+// ─── harmonism.io account: hosted models, ten messages a day, then five ─────────
 
 const hostedLabel = id => (S.hosted?.recommended || []).find(m => m.id === id)?.label || id;
-const remoteLabel = id => Object.values(S.presets || {}).flatMap(p => p.recommended || []).find(m => m.id === id)?.label || id;
+const remoteLabel = id => Object.values(S.presets || {}).flatMap(p => [...(p.recommended || []), ...(p.offered || [])]).find(m => m.id === id)?.label || id;
 const left = st => st && st.cap > 0 && st.remaining != null ? `${st.remaining} of ${st.cap} messages left today` : st && st.cap === 0 ? "no daily limit on this account" : "";
 
 async function renderHosted() {

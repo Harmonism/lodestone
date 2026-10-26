@@ -147,6 +147,9 @@ const BUNDLED = [
     minMem: 16, hand: "PrismML, on Alibaba's Qwen",
     why: "A 27-billion-parameter model compressed to ternary weights, so it fits in 6 GB and runs on a 16 GB laptop. Not yet tested against Lodestone's doctrine: the model it was built from gave the consensus answer on autism in Harmonia's tests. It runs on a second engine, Prism ML's, downloaded with it (about 12–36 MB).",
   },
+  // Retired 25 Oct 2026: a model Lodestone offers must hold the whole doctrinal
+  // backbone with the conversation beside it, and a 9B model does not. Kept for
+  // those who have it; never recommended, never offered.
   // Added 19 Oct 2026 at Tahir's request, for computers under 16 GB: the
   // only Bonsai that fits them. Prism ML's own ternary packing of Qwen 3.5 9B, the
   // base withdrawn from this list on 29 Sep for answers that misrepresented the
@@ -155,6 +158,7 @@ const BUNDLED = [
   // API, 19 Oct 2026; the PTQ1_0 hash re-computed on the downloaded file.
   {
     id: "bonsai2-9b",
+    retired: true,
     untested: true,
     weaker: true,
     engine: "prism",
@@ -199,9 +203,12 @@ if (process.env.MUNAI_TEST_MODEL === "tiny") BUNDLED.push({
   minMem: 1, hand: "Alibaba", why: "For testing the app only.",
 });
 
+// 16 GB is the floor: below it no model that holds the doctrine fits. Under 16 GB
+// Lodestone recommends DeepSeek V4.1 Flash on the account or the practitioner's
+// own key, and says the computer needs more memory to think on its own.
 const MIN_MEM = 16;
-/** The least memory any model offered on this computer needs: 8 GB where Prism ML's engine runs (Bonsai 2 9B). */
-const minMemHere = () => (prismAsset() && CATALOG.some(m => m.id === SMALL_LOCAL.id) ? 8 : MIN_MEM);
+/** The least memory any model offered on this computer needs. */
+const minMemHere = () => MIN_MEM;
 
 // The catalog in use: the one this version shipped with, or a newer one the
 // practitioner fetched from harmonism.io (Library Languages and Updates…).
@@ -219,16 +226,14 @@ const DEFAULTS = BUNDLED_DEFAULTS.map(d => [...d]);
 // A model on this computer is no longer the first-launch default: DeepSeek V4.1
 // Flash, on the account or under the practitioner's key, is (launcher.html).
 const PREFERRED_LOCAL = { id: "bonsai2-27b-heretic", from: 15, below: 46 };   // 15: a "16 GB" PC can report a little under 16
-// Under 16 GB: the smaller Bonsai, where Prism ML's engine runs. 16 GB is the
-// floor for holding the doctrine; 8 GB the floor for any useful answer (Tahir, 19 Oct).
-const SMALL_LOCAL = { id: "bonsai2-9b", from: 7 };
+// Under 16 GB nothing is recommended to run here (the 9B Bonsai was retired on
+// 25 Oct 2026): the list's smallest model is shown with the memory warning.
 
 /** The model recommended for a machine with `memGB` of RAM (unified memory on Apple silicon). */
 function defaultFor(memGB) {
   if (process.env.MUNAI_TEST_MODEL === "tiny") return "tiny";
   const has = id => prismAsset() && CATALOG.some(m => m.id === id && !m.retired);
   if (memGB >= PREFERRED_LOCAL.from && memGB < PREFERRED_LOCAL.below && has(PREFERRED_LOCAL.id)) return PREFERRED_LOCAL.id;
-  if (memGB < PREFERRED_LOCAL.from && has(SMALL_LOCAL.id)) return SMALL_LOCAL.id;
   for (const [min, id] of DEFAULTS) if (memGB >= min && CATALOG.some(m => m.id === id && !m.retired)) return id;
   return CATALOG.filter(m => !m.retired).pop()?.id;
 }
@@ -261,7 +266,7 @@ function validateCatalog(d) {
   const defaults = (Array.isArray(d.defaults) ? d.defaults : []).filter(x => Array.isArray(x) && Number.isFinite(x[0]) && ids.has(x[1])).map(x => [x[0], x[1]]);
   const recommended = (Array.isArray(d.recommended) ? d.recommended : []).filter(r => r && typeof r.id === "string" && /^[A-Za-z0-9._:\/-]{3,120}$/.test(r.id)).map(r => ({
     id: r.id, label: String(r.label || r.id), maker: String(r.maker || ""), licence: String(r.licence || ""),
-    reasoning: r.reasoning === "" ? "" : "none", minTokens: Number.isSafeInteger(r.minTokens) && r.minTokens >= 0 && r.minTokens <= 32000 ? r.minTokens : 0, note: String(r.note || ""),
+    reasoning: r.reasoning === "" ? "" : /^(low|medium|high)$/.test(r.reasoning) ? r.reasoning : "none", minTokens: Number.isSafeInteger(r.minTokens) && r.minTokens >= 0 && r.minTokens <= 32000 ? r.minTokens : 0, note: String(r.note || ""),
   }));
   return { models, defaults, recommended };
 }

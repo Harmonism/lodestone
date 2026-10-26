@@ -28,6 +28,7 @@ if (location.protocol === "file:" && /\/(launcher|phone)\.html$/.test(location.p
     hostedSignOut: () => call("hosted-sign-out"),
     // The account's page on harmonism.io, in the app: consent, plan, the bundle.
     accountCall: (method, path, body) => call("account-call", method, path, body),
+    shareCall: body => call("share-call", body),
     accountOpenBundle: () => call("account-open-bundle"),
     revealLog: () => call("reveal-log"),
     library: () => call("library"),

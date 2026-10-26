@@ -3,10 +3,10 @@ import * as store from "./store.js";
 import * as corpusPack from "./corpus.js";
 import { Retriever, wantsWhole, isFollowUp } from "./retrieval.js";
 import { Embedder } from "./embedder.js";
-import { TIERS, MODELS, probeWebGPU, DeviceEngine, ServerEngine, ReaderEngine, isHandheld, isIOS, localInferenceAvailable, defaultModelFor, smallerModelThan } from "./engine.js";
-import { HostedEngine, OpenRouterEngine, hosted, secrets, phoneRoutesAvailable, RECOMMENDED, DEFAULT_REMOTE, refreshRecommended, assess, testOpenRouter, accountLinks, signInWithPassword } from "./phone.js";
+import { TIERS, MODELS, probeWebGPU, DeviceEngine, ServerEngine, ReaderEngine, isHandheld, isIOS, localInferenceAvailable, defaultModelFor, smallerModelThan, RENTED_CTX, OWNED_CTX } from "./engine.js";
+import { HostedEngine, OpenRouterEngine, hosted, secrets, phoneRoutesAvailable, RECOMMENDED, OFFERED, DEFAULT_REMOTE, refreshRecommended, assess, testOpenRouter, accountLinks, signInWithPassword } from "./phone.js";
 import * as unlock from "./unlock.js";
-import { heldBlock, personContext, buildSystem, fitMessages, estTokens, PILLARS, LEVELS, webBlock, foldersBlock, earlierBlock, fullArticleBlock, stripRetrievalNote, summaryBlock, summaryRequest, renderSummary, summaryPlan } from "./prompt.js";
+import { heldBlock, personContext, buildSystem, fitMessages, estTokens, estSystemTokens, PILLARS, LEVELS, webBlock, foldersBlock, earlierBlock, fullArticleBlock, stripRetrievalNote, summaryBlock, summaryRequest, renderSummary, summaryPlan } from "./prompt.js";
 import { detectLang, detectCrisis, buildCrisisResponse, detectWitness, witnessBlock, governorBlock, crisisLine } from "./safety.js";
 import { careCheck, indirectCare } from "./care.js";
 import * as presence from "./presence.js";
@@ -20,15 +20,18 @@ import { normUsage } from "./sse.js";
 import * as voice from "./voice.js";
 import * as learning from "./learning.js";
 import * as lifebook from "./lifebook.js";
+import { asksAboutLodestone, selfBlock } from "./selfknow.js";
 import * as canon from "./canon.js";
 import * as outreach from "./outreach.js";
+import { webFolders, foldersSupported } from "./folders-web.js";
 import { isHPCode, parseHP, decodeHP } from "./hp.js";
 import { buildProfile, renderProfile } from "./profileview.js";
-import { Sync, SyncError, normCode, merge as syncMerge } from "./sync.js";
+import { Sync, SyncError, normCode, merge as syncMerge, deviceGuess } from "./sync.js";
 import { wire } from "./syncwire.js";
 import * as held from "./held.js";
 import { tidyTranscript, CLEANUP_PROMPT, cleanupRequest, acceptCleanup, SPOKEN_SECRET } from "./tidy.js";
 import { isNative, lanFetch, pairWith, pairing, computerServer, parsePairLink, onAppLink } from "./native.js";
+import * as shareout from "./shareout.js";
 
 const $ = s => document.querySelector(s);
 const el = (tag, attrs = {}, ...kids) => {
@@ -94,6 +97,10 @@ const S = {
 const DESKTOP = window.lodestoneDesktop || window.munaiDesktop || null;   // munaiDesktop: desktop builds before the rename
 // Where attachments and dictation are read: "this computer" in Lodestone Desktop, "this device" in the web app and on the phone.
 const HERE = DESKTOP ? "this computer" : "this device";
+// The folders Lodestone may read: the desktop's own, else the browser's folder access (Chromium on a computer).
+const FOLDERS = DESKTOP?.foldersList ? DESKTOP : foldersSupported() && !isHandheld() ? webFolders : null;
+// The setup heading names the surface: the computer in Lodestone Desktop, the phone in the Android app, the device in a browser.
+{ const t = document.getElementById("setupTitle"); if (t) t.textContent = `Lodestone, on your own ${DESKTOP ? "computer" : isNative() ? "phone" : "device"}`; }
 if (!DESKTOP) setSpeechMode("web");
 // On the desktop with its speech engine (whisper.cpp on the Mac's GPU, 1.13.2), recordings are written out there.
 else DESKTOP.info?.().then(i => {
@@ -106,6 +113,24 @@ else DESKTOP.info?.().then(i => {
 const desktopServer = () => ({ baseUrl: new URL("v1", location.href).href, model: "lodestone", ctx: 32768 });
 const desktopConfigured = () => S.settings.tier === "server" && S.settings.server?.model === "lodestone"
   && S.settings.server?.baseUrl === desktopServer().baseUrl;
+
+/**
+ * The window a turn gets. A rented model tested against the doctrine (the
+ * account's, a recommended one on OpenRouter, or one Lodestone Desktop rents)
+ * gets RENTED_CTX; a rented model not tested, OWNED_CTX, since its own window
+ * is unknown; a model the practitioner runs keeps what its tier or their
+ * setting says. On the account, the backbone harmonism.io puts in place of the
+ * placeholder is counted too (serverBackboneChars).
+ */
+function windowFor(tier) {
+  let ctx = tier.ctx;
+  if (S.where) {
+    const id = S.engine?.model || S.whereModel || "";
+    const tested = S.where === "harmonism.io" || (!!id && assess(id).tested);
+    ctx = tested ? Math.max(ctx, RENTED_CTX) : Math.min(ctx, OWNED_CTX);
+  }
+  return { ...tier, ctx, serverBackboneChars: tier.backbone === "server" ? (S.pack?.runtime?.backbone?.full || "").length : 0 };
+}
 
 function setWebNext(on) {
   S.webNext = !!on;
@@ -189,6 +214,14 @@ async function boot() {
   if (syncAvailable()) { try { await held.bind(); } catch (e) { console.warn("[memory]", e?.message || e); } }
   await migrateCaches();
   S.settings = (await store.kv.get("settings")) || { theme: "dark", lang: "auto" };
+  // October 24, 2026: the September DeepSeek V4.1 Flash left the tested list
+  // for its October 17 snapshot. A saved choice of it moves to the new default once,
+  // so the menu does not show both (the old one by its raw id under OpenRouter).
+  if (S.settings.remote?.model === "deepseek/deepseek-v4.1-flash" && !S.settings.flash1017Moved) {
+    S.settings.remote = { ...S.settings.remote, model: DEFAULT_REMOTE };
+    S.settings.flash1017Moved = true;
+    try { await store.kv.set("settings", S.settings); } catch {}
+  }
   if (BRIDGE) return startBridge();
   await pairBrowserFromCode();
   applyTheme(S.settings.theme);
@@ -202,6 +235,11 @@ async function boot() {
     navigator.serviceWorker?.getRegistrations().then(rs => rs.forEach(r => r.unregister())).catch(() => {});
   } else if ("serviceWorker" in navigator && window.isSecureContext) {
     navigator.serviceWorker.register(new URL("../sw.js", import.meta.url), { scope: new URL("../", import.meta.url).pathname }).catch(e => console.warn("[sw]", e));
+    // The version this page runs: the worker that served it, asked once at the start.
+    // A newer worker taking over later (it installs itself as soon as it is published)
+    // means a newer Lodestone is ready, and runs at the next reload.
+    swVersion().then(v => { S.appVersion = v; });
+    navigator.serviceWorker.addEventListener("controllerchange", () => { swVersion().then(v => { if (v && v !== S.appVersion) S.appReady = v; }); });
   }
   bindChrome();
   if (isNative()) onAppLink(handleAppLink);
@@ -224,6 +262,7 @@ async function boot() {
     if (refreshed) toast("The corpus has been updated.", 5000);
     return;
   }
+  if (S.settings.tier === "standard") toast("Lodestone no longer thinks inside the browser: no model a browser can hold carries its whole doctrine and a conversation beside it. Choose where it thinks; your conversations and memory are kept.", 9000);
   if (!installed || !S.settings.tier || !TIERS[S.settings.tier]) return showSetup();
   await startMain();
 }
@@ -276,7 +315,7 @@ function applyTheme(t) {
 
 // ─── Setup ───────────────────────────────────────────────────────────────────
 
-const remoteName = id => RECOMMENDED.find(m => m.id === id)?.label || hosted.models?.find(m => m.id === id)?.label || id;
+const remoteName = id => [...RECOMMENDED, ...OFFERED].find(m => m.id === id)?.label || hosted.models?.find(m => m.id === id)?.label || id;
 
 /** Where Lodestone thinks now, in one sentence, as Lodestone Desktop's Model page says it. "" on first run. */
 function routeLine() {
@@ -303,7 +342,10 @@ async function showSetup() {
   // one is saved. A model in this browser is offered, never chosen for them.
   // A page served by the practitioner's own computer (tools/serve.py) keeps it.
   const orKeySaved = phoneOk ? !!(await secrets.get("openrouter").catch(() => null)) : false;
-  let chosen = S.preferTier || S.settings.tier || (served ? "server" : phoneOk ? (orKeySaved ? "openrouter" : "hosted") : localOk && S.gpu.ok ? "standard" : "server");
+  // A pick made before leaving to sign in on harmonism.io survives the round trip:
+  // the website's sign-in reloads this page, and setup would otherwise ask again.
+  let pending = null; try { pending = localStorage.getItem(SETUP_PICK); } catch {}
+  let chosen = S.preferTier || pending || S.settings.tier || (served ? "server" : phoneOk ? (orKeySaved ? "openrouter" : "hosted") : "server");
   S.preferTier = null;
   if (!TIERS[chosen]) chosen = null;                 // a tier this build withdrew: choose again
   if (!localOk && TIERS[chosen]?.engine === "webllm") chosen = phoneOk ? "hosted" : "server";
@@ -325,7 +367,7 @@ async function showSetup() {
   const nativePair = isNative();
   let paired = nativePair ? await pairing.get().catch(() => null) : null;
   if (nativePair && S.preferComputer) { chosen = "server"; S.preferComputer = false; }
-  const ORDER = phoneOk ? ["hosted", "openrouter", "server", "standard", "reader"] : ["standard", "server", "reader"];
+  const ORDER = phoneOk ? ["hosted", "openrouter", "server", "reader"] : ["server", "reader"];
   const tierList = [...ORDER.filter(k => TIERS[k]), ...Object.keys(TIERS).filter(k => !ORDER.includes(k))].map(k => [k, TIERS[k]]);
   for (const [key, t] of tierList) {
     const needsGpu = t.engine === "webllm";
@@ -340,20 +382,14 @@ async function showSetup() {
       // The tested models, by name: the same list the model menu offers.
       t.engine === "hosted" || t.engine === "openrouter" ? el("span", { class: "models" }, RECOMMENDED.map(m => m.id === DEFAULT_REMOTE ? `${m.label} (default)` : m.label).join(" · ")) : null,
     );
-    b.onclick = () => { chosen = key; [...box.children].forEach(c => c.setAttribute("aria-pressed", "false")); b.setAttribute("aria-pressed", "true"); sync(); };
+    b.onclick = () => { chosen = key; try { localStorage.setItem(SETUP_PICK, key); } catch {} [...box.children].forEach(c => c.setAttribute("aria-pressed", "false")); b.setAttribute("aria-pressed", "true"); sync(); };
     box.append(b);
   }
   const note = $("#gpuNote");
   if (!localOk) {
     note.hidden = false;
     note.textContent = "On a phone or tablet Lodestone does not think locally: the models small enough to run here answer poorly enough to misrepresent the system they speak for. It thinks on a computer you own, on harmonism.io under your account, or on OpenRouter under your own key — or not at all, and then a question brings back the passages that answer it. Whichever you choose, the corpus, your memory and Lodestone's safeguards stay on this phone, and reading and searching work with no network at all.";
-  } else if (!S.gpu.ok) {
-    note.hidden = false;
-    note.textContent = `This browser cannot run a model itself: that needs WebGPU, and it has none (${S.gpu.reason}). Every other route above works here.`;
-  } else if (!S.gpu.f16) {
-    note.hidden = false;
-    note.textContent = "This GPU lacks 16-bit shaders. Lodestone will use the 32-bit build, which is larger and somewhat slower.";
-  }
+  } else note.hidden = true;
   const orModel = () => $("#orModel").value === "__other" ? $("#orOther").value.trim() : $("#orModel").value;
   const sync = () => {
     $("#serverFields").hidden = chosen !== "server" || phoneComputer;
@@ -422,13 +458,31 @@ async function showSetup() {
     const sel = $("#orModel"), keep = sel.value || orSaved || RECOMMENDED[0]?.id;
     sel.innerHTML = "";
     for (const m of RECOMMENDED) sel.append(el("option", { value: m.id }, `${m.label} · ${m.maker} · tested with Lodestone`));
+    for (const m of OFFERED) sel.append(el("option", { value: m.id }, `${m.label} · ${m.maker} · not recommended · doctrinal fidelity`));
     sel.append(el("option", { value: "__other" }, "Another model on OpenRouter…"));
-    if (RECOMMENDED.some(m => m.id === keep)) sel.value = keep;
+    if ([...RECOMMENDED, ...OFFERED].some(m => m.id === keep)) sel.value = keep;
     else if (keep) { sel.value = "__other"; $("#orOther").value = keep; }
   };
   fillOr();
   refreshRecommended().then(ok => { if (ok) { fillOr(); sync(); } });
-  secrets.get("openrouter").then(k => { if (k) { $("#orKey").value = k; ready.openrouter = !!orSaved; $("#orStatus").textContent = orSaved ? "A key is saved on this device." : ""; sync(); } }).catch(() => {});
+  // The key: this device's own, or, on a device signed in with none, the one the
+  // synced memory carries. Sync otherwise starts only after setup, so a new
+  // install signed in to the account was asked to paste a key it already had.
+  (async () => {
+    let k = await secrets.get("openrouter").catch(() => null), fromSync = false;
+    if (!k && phoneOk && (await hosted.account().catch(() => null))) {
+      $("#orStatus").textContent = "Looking for your key in your synced memory…";
+      await Promise.race([autoSync().catch(() => {}), new Promise(r => setTimeout(r, 12000))]);
+      k = await secrets.get("openrouter").catch(() => null); fromSync = !!k;
+      $("#orStatus").textContent = "";
+    }
+    if (!k) return;
+    $("#orKey").value = k;
+    ready.openrouter = !!orSaved;
+    $("#orStatus").textContent = fromSync ? "Your key came with your synced memory." : orSaved ? "A key is saved on this device." : "";
+    if (!ready.openrouter) $("#orTest").click();   // proved once with the chosen model, no paste needed
+    sync();
+  })().catch(() => {});
   const orChanged = () => { ready.openrouter = false; $("#orStatus").textContent = ""; sync(); };
   let orAuto;
   $("#orKey").oninput = () => {
@@ -481,6 +535,7 @@ async function showSetup() {
 
   $("#beginSetup").onclick = async () => {
     $("#beginSetup").disabled = true;
+    try { localStorage.removeItem(SETUP_PICK); } catch {}
     const server = chosen !== "server" ? null
       : nativePair && phoneComputer && paired ? await computerServer(paired)
       : { baseUrl: $("#srvUrl").value.trim(), model: $("#srvModel").value.trim(), ctx: Number($("#srvCtx").value) || 32768 };
@@ -814,7 +869,7 @@ async function desktopWhere(base) {
 
 /** Where the next turn will be answered, asked afresh: the computer can change its model at any time. */
 async function refreshWhere() {
-  if (DESKTOP) S.where = (await DESKTOP.info().catch(() => ({}))).remote?.host || null;
+  if (DESKTOP) { const r = (await DESKTOP.info().catch(() => ({}))).remote; S.where = r?.host || null; S.whereModel = r?.model || ""; }
   else if (S.engine?.kind === "server") {
     // The Android app paired with the computer, or a browser on the computer's own page.
     const srv = S.settings.server || {};
@@ -1095,6 +1150,44 @@ async function deleteThread(t) {
 }
 
 /** The conversation as Markdown: what was said, with the articles each answer drew on. */
+// Icons for an answer's actions (1.14.1).
+const ACT_SVG = {
+  copy: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V6.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2"/></svg>',
+  done: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  listen: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>',
+  stop: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>',
+  save: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5v10M7.5 10.5l4.5 4.5 4.5-4.5M5 19.5h14"/></svg>',
+  retry: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4"/></svg>',
+};
+function actIcon(name, label, onclick) {
+  const b = el("button", { type: "button", class: "act-icon", title: label, "aria-label": label, onclick });
+  b.innerHTML = ACT_SVG[name]; return b;
+}
+
+/** Copy an answer; the older way where the clipboard API is refused. */
+async function copyAnswer(text, btn = null) {
+  try { await navigator.clipboard.writeText(text); }
+  catch {
+    const t = el("textarea", { style: "position:fixed;opacity:0" }); t.value = text; document.body.append(t); t.select();
+    try { document.execCommand("copy"); } catch {} t.remove();
+  }
+  if (btn) { btn.innerHTML = ACT_SVG.done; btn.classList.add("on"); setTimeout(() => { btn.innerHTML = ACT_SVG.copy; btn.classList.remove("on"); }, 1500); }
+  else toast("Copied");
+}
+
+/** One answer as a Markdown file: shared to Files on a phone, downloaded elsewhere (1.14.1). */
+async function saveAnswer(m) {
+  const title = (S.thread?.title || "Lodestone").trim();
+  const md = `# ${title}\n\n*Lodestone · ${new Date(m.ts || Date.now()).toLocaleString()}*\n\n${String(m.content || "").trim()}\n`;
+  const first = String(m.content || "").replace(/[#*_>`\[\]]/g, "").trim().split(/\s+/).slice(0, 6).join(" ");
+  const name = `${title} — ${first}`.replace(/[\\/:*?"<>|\n\r]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 90) + ".md";
+  const file = new File([md], name, { type: "text/markdown" });
+  if (matchMedia("(pointer: coarse)").matches && navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file] }); return; } catch (e) { if (e?.name === "AbortError") return; }
+  }
+  download(name, "text/markdown", md);
+}
+
 async function exportThread(t) {
   const msgs = await store.messages.forThread(t.id);
   const titles = new Map((S.pack?.corpus.articles || []).map(a => [a.p, a]));
@@ -1127,6 +1220,12 @@ function sumUsage(list) {
   const a = { in: 0, out: 0, cost: 0, priced: false, turns: 0 };
   for (const u of list) { if (!u) continue; a.turns++; a.in += u.in || 0; a.out += u.out || 0; if (u.cost != null) { a.cost += u.cost; a.priced = true; } }
   return a;
+}
+
+/** On a phone the cost line has no room under the box: the model menu carries it (1.14.1). */
+function costInMenu(kids) {
+  const b = $("#costLine");
+  if (b && !b.hidden && b.textContent) kids.push(el("button", { class: "model-manage model-cost", type: "button", onclick: () => { closeModelMenu(); openUsage(); } }, b.textContent));
 }
 
 function renderCostLine() {
@@ -1220,7 +1319,7 @@ function msgNode(m) {
   const isUser = m.role === "user";
   const body = el("div", { class: "body" + (isUser ? "" : " prose") + (voiceOnly.has(m) ? " folded" : ""), dir: "auto" });
   if (isUser) body.textContent = m.content;
-  else body.innerHTML = render(m.content);
+  else { body.innerHTML = render(m.content); linkArticles(body); }
   const wrap = el("div", { class: `msg ${m.role}${m.meta?.crisis ? " crisis" : ""}${m.meta?.notice ? ` notice ${m.meta.notice}` : ""}` });
   if (m.meta?.notice) { body.className = "body"; body.textContent = m.content; wrap.append(el("div", { class: "col", style: "flex:1;min-width:0" }, body)); return wrap; }
   if (!isUser) wrap.append(sprite("avatar"));
@@ -1230,6 +1329,7 @@ function msgNode(m) {
     const row = el("div", { class: "voice-row" },
       el("span", { class: "vr-wave", "aria-hidden": "true" }, el("i"), el("i"), el("i"), el("i")),
       el("span", { class: "vr-state" }, me ? "Lodestone is speaking" : "Spoken"),
+      el("button", { type: "button", class: "vr-pause", hidden: !me, onclick: togglePause }, speaker.paused ? "Resume" : "Pause"),
       el("button", { type: "button", class: "vr-stop", hidden: !me, onclick: () => speaker.stop() }, "Stop"),
       el("button", { type: "button", class: "vr-show", onclick: e => { const f = body.classList.toggle("folded"); e.target.textContent = f ? "Show the text" : "Hide the text"; } }, "Show the text"));
     row._msg = m;
@@ -1237,17 +1337,22 @@ function msgNode(m) {
   }
   if (isUser && m.meta?.files?.length) col.prepend(el("div", { class: "msg-files" }, m.meta.files.map(f => el("span", { title: f.note || f.kind }, `📎 ${f.name}${f.images ? ` · ${f.images} image${f.images > 1 ? "s" : ""}` : ""}`))));
   if (!isUser && m.meta?.recalled?.length) col.append(recalledNode(m));
-  if (!isUser && (m.meta?.sources?.length || m.meta?.web?.length || m.meta?.yours?.length)) col.append(sourcesNode(m.meta.sources || [], m.meta.web || [], m.meta.yours || []));
+  // The corpus articles a reply drew on are kept in its record (the next turn reads them), not shown under it (1.14.1).
+  if (!isUser && (m.meta?.web?.length || m.meta?.yours?.length)) col.append(sourcesNode([], m.meta.web || [], m.meta.yours || []));
   const actions = el("div", { class: "actions" });
   if (isUser) {
     actions.append(el("button", { type: "button", onclick: () => remember(m.content) }, "Remember this about me"));
     if (lifeBookOn()) actions.append(el("button", { type: "button", title: "A card opens to choose the note; nothing is written until you keep it", onclick: () => keepFromMessage(m.content) }, "Keep in my life book"));
     if (isLastPair(m) && !m.meta?.files?.length) actions.append(el("button", { type: "button", class: "last-only", title: "Take this message and its answer back into the message box, to change and send again", onclick: () => editLast() }, "Edit"));
   } else if (!m.meta?.crisis) {
-    actions.append(el("button", { type: "button", onclick: () => { navigator.clipboard?.writeText(m.content); toast("Copied"); } }, "Copy"));
-    actions.append(el("button", { type: "button", onclick: () => { openDrawer("#drawerMe"); renderMe(); $("#prText").focus(); } }, "Make a practice of this"));
+    // 1.14.1: the common actions as icons (copy, listen, save, retry), the two
+    // that are Lodestone's own in words.
+    const cp = actIcon("copy", "Copy this answer", () => copyAnswer(m.content, cp));
+    actions.append(cp);
     if (voice.available() && m.content) actions.append(listenButton(m));
-    if (isLastPair(m) && !lastUser()?.meta?.files?.length) actions.append(el("button", { type: "button", class: "last-only", title: "Ask again: this answer is replaced by a new one", onclick: () => retryLast() }, "Retry"));
+    actions.append(actIcon("save", "Save this answer as a Markdown file", () => saveAnswer(m)));
+    if (lifeBookOn()) actions.append(el("button", { type: "button", title: "Kept with your answers, under the pillar of the Wheel it concerns; nothing is written until you keep it", onclick: () => keepFromMessage(m.content, "answer") }, "Keep in my life book"));
+    actions.append(el("button", { type: "button", onclick: () => { openDrawer("#drawerMe"); renderMe(); $("#prText").focus(); } }, "Make a practice of this"));
     if (m.meta?.stopped) actions.append(el("span", { class: "meta stopped" }, "stopped"));
     const u = m.meta?.usage;
     if (u) {
@@ -1291,7 +1396,54 @@ function sourcesNode(paths, web = [], yours = []) {
   return box;
 }
 
+// ─── Articles a reply names, made links that open them here (1.14.1) ──────────
+// A title in italics or bold, or a title just after the word "article" (in the
+// languages Lodestone answers in), opens the article in the Library.
+let titleIdx = null, titleIdxOf = null;
+const normTitle = s => String(s || "").normalize("NFC").toLowerCase().replace(/[’‘`]/g, "'").replace(/[“”«»"]/g, "").replace(/\s+/g, " ").trim().replace(/[.,;:!?)]+$/, "");
+function titleIndex() {
+  const arts = S.pack?.corpus?.articles || [];
+  if (titleIdxOf !== arts) {
+    titleIdx = new Map(); titleIdxOf = arts;
+    arts.forEach((a, i) => { const k = normTitle(a.t); if (k.length >= 4 && !titleIdx.has(k)) titleIdx.set(k, i); });
+  }
+  return titleIdx;
+}
+const ARTICLE_WORD = /(?:^|[^\p{L}])(?:the article|article|l'article|l’article|cet article|el artículo|artículo|l'articolo|o artigo|der Artikel|المقال|مقال)\s+(?:«\s*|"|“)?/giu;
+function linkArticles(body) {
+  const idx = titleIndex(); if (!idx.size) return;
+  const arts = S.pack.corpus.articles;
+  const mk = i => el("a", { href: arts[i].u || "#", class: "art-link", "data-art": String(i), title: "Open the article" });
+  for (const e of body.querySelectorAll("em, strong, i, b")) {
+    if (e.closest("a, code, pre")) continue;
+    const i = idx.get(normTitle(e.textContent)); if (i == null) continue;
+    const a = mk(i); e.replaceWith(a); a.append(e);
+  }
+  const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, { acceptNode: n => n.parentElement.closest("a, code, pre") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+  const nodes = []; while (walker.nextNode()) nodes.push(walker.currentNode);
+  for (let node of nodes) {
+    ARTICLE_WORD.lastIndex = 0;
+    let m;
+    while ((m = ARTICLE_WORD.exec(node.data))) {
+      const start = m.index + m[0].length, rest = node.data.slice(start, start + 120);
+      let best = 0, bi = -1;
+      for (let p = 1; p <= rest.length; p++) {
+        if (p < rest.length && /[\p{L}\p{N}'’-]/u.test(rest[p])) continue;
+        if (!/[\p{L}\p{N})]/u.test(rest[p - 1])) continue;
+        const i = idx.get(normTitle(rest.slice(0, p)));
+        if (i != null) { best = p; bi = i; }
+      }
+      if (bi < 0) continue;
+      const tail = node.splitText(start); const after = tail.splitText(best);
+      const a = mk(bi); tail.replaceWith(a); a.append(tail);
+      node = after; ARTICLE_WORD.lastIndex = 0;
+    }
+  }
+}
+
 function onLinkClick(e) {
+  const art = e.target.closest("a.art-link");
+  if (art) { e.preventDefault(); openReader(Number(art.dataset.art)); return; }
   const a = e.target.closest("a[data-hurl]");
   if (!a) return;
   const url = a.dataset.hurl.replace(/[.,;:]+$/, "");
@@ -1318,7 +1470,7 @@ async function prepareTurn(text, history, { getWeb = null, files = [], folders =
   const care = await careCheck(text, embed).catch(() => null);
 
   // 2 — retrieval
-  let tier = S.engine.tier;
+  let tier = windowFor(S.engine.tier);
   const prevUser = [...history].reverse().find(m => m.role === "user")?.content || "";
   const prevSources = [...history].reverse().find(m => m.role === "assistant" && m.meta?.sources?.length)?.meta.sources || [];
   const titles = new Map(S.pack.corpus.articles.map(a => [a.p, a.t]));
@@ -1328,7 +1480,8 @@ async function prepareTurn(text, history, { getWeb = null, files = [], folders =
   // last message") names no topic of its own, so it searches with the last
   // question as well.
   const follow = isFollowUp(text) && !S.retriever.asked(text).length;
-  let { hits } = await S.retriever.retrieve(text, { ...tier.rag, context: prevUser, follow });
+  const prior = prevSources.map(p => S.pack.corpus.articles.findIndex(a => a.p === p)).filter(i => i >= 0);
+  let { hits, none } = await S.retriever.retrieve(text, { ...tier.rag, context: prevUser, follow, prior });
 
   // 2a — articles read whole, from the corpus pack on this device. Asked for in
   // full: the one named, else the one the practitioner last named, else the first
@@ -1366,7 +1519,7 @@ async function prepareTurn(text, history, { getWeb = null, files = [], folders =
   const web = getWeb ? await getWeb() : [];
 
   // 2b′ — the practitioner's chosen folders: in Lodestone's own window only, never over Telegram
-  let yours = folders && DESKTOP?.searchFolders ? await DESKTOP.searchFolders(text).catch(() => []) : [];
+  let yours = folders && FOLDERS?.searchFolders ? await FOLDERS.searchFolders(text).catch(() => []) : [];
 
   // What leaves for a model elsewhere is screened as this message was (1.13.1):
   // earlier turns and files, the summary, recalled passages, the life book and
@@ -1403,9 +1556,12 @@ async function prepareTurn(text, history, { getWeb = null, files = [], folders =
   // Earlier turns, screened before they are fitted (1.13.1: after, a marker could
   // push the fitted window past the model's), except those sent as written.
   const screened = history.map(m => S.where && !m.meta?.asWritten && typeof m.content === "string" ? { ...m, content: leaveOut(m.content) } : m);
+  // A question about Lodestone itself: the manual and this install's state (1.14.1).
+  const self = asksAboutLodestone(text) ? selfBlock(await selfState(lbSel).catch(() => [])) : "";
   let system, fitted;
   for (;;) {
     system = buildSystem({ tier, runtime, person, where: S.where || null, device: !DESKTOP && isHandheld() ? "device" : "computer", turn: {
+      self,
       files: filesBlock(all, filesBudget),
       folders: away(foldersBlock(yours)),
       lifebook: away(lifebook.lifeBookBlock(lbSel, lbBudget)),
@@ -1413,7 +1569,7 @@ async function prepareTurn(text, history, { getWeb = null, files = [], folders =
       care: presence.careBlock(care),
       summary: away(summaryBlock(summary?.text)),
       article: articleBlocks(),
-      vault: S.retriever.format(hits),
+      vault: none && !full.length ? S.retriever.formatNone() : S.retriever.format(hits),
       earlier: earlierBlock(history, titleOf),
       web: webBlock(web),
       witness: w ? witnessBlock(w.strength) : "",
@@ -1421,10 +1577,11 @@ async function prepareTurn(text, history, { getWeb = null, files = [], folders =
       held: heldBlock(S.heldBlocks),
       calibration: calib.blocks,
       reading: reading.block,
+      lang,
     } });
     // turns already folded into the summary are not sent a second time
     fitted = fitMessages({ system, history: screened.filter(m => !m.meta?.crisis && !m.meta?.notice && !(summary && summary.through && (m.ts || 0) <= summary.through)), current: text, tier });
-    const over = estTokens(system) + estTokens(text) > tier.ctx - tier.maxTokens - 64;
+    const over = estSystemTokens(system, tier.serverBackboneChars) + estTokens(text) > tier.ctx - tier.maxTokens - 64;
     if (!over) break;
     if (yours.length) { yours = yours.slice(0, -1); continue; }   // small context: shed folder passages first
     if (hits.length) { hits = hits.slice(0, -1); continue; }   // then retrieval
@@ -1633,7 +1790,7 @@ async function sendOne(prefill) {
     }
     const { tier, fitted, w, web, sources, images } = turn;
 
-    const um = { threadId: S.thread.id, role: "user", content: redact(text), meta: { ...(turn.care ? { care: turn.care.level } : {}), ...(asWritten ? { asWritten: true } : {}), ...(files.length ? { files: storedFiles(files) } : {}) } };
+    const um = { threadId: S.thread.id, role: "user", content: redact(text), meta: { ...hereMeta(), ...(turn.care ? { care: turn.care.level } : {}), ...(asWritten ? { asWritten: true } : {}), ...(files.length ? { files: storedFiles(files) } : {}) } };
     um.id = await store.messages.add(um);
     S.history.push(um);
     recallAdd(um);
@@ -1643,7 +1800,7 @@ async function sendOne(prefill) {
     chat.append(unode);
 
     if (S.engine.kind === "reader") {
-      const rm = { threadId: S.thread.id, role: "assistant", content: readerReply(turn.hits), meta: { sources, model: "corpus-only" } };
+      const rm = { threadId: S.thread.id, role: "assistant", content: readerReply(turn.hits), meta: { ...hereMeta(), sources, model: "corpus-only" } };
       rm.id = await store.messages.add(rm);
       S.history.push(rm);
       chat.append(msgNode(rm)); chat.scrollTop = chat.scrollHeight;
@@ -1653,7 +1810,7 @@ async function sendOne(prefill) {
       return;
     }
 
-    const am = { threadId: S.thread.id, role: "assistant", content: "", meta: { sources, web: web.map(r => ({ title: r.title, url: r.url })), yours: turn.yours, model: S.engine.describe(), witness: w?.strength || null, ...(turn.recalled?.length ? { recalled: turn.recalled } : {}), ...(turn.care ? { care: turn.care.level } : {}) } };
+    const am = { threadId: S.thread.id, role: "assistant", content: "", meta: { ...hereMeta(), sources, web: web.map(r => ({ title: r.title, url: r.url })), yours: turn.yours, model: S.engine.describe(), witness: w?.strength || null, ...(turn.recalled?.length ? { recalled: turn.recalled } : {}), ...(turn.care ? { care: turn.care.level } : {}) } };
     // Spoken as it is written, when the mode asks for it (never in witness mode, never a crisis reply: those never reach here).
     // Not spoken: witness mode, and a care moment (1.13.1), read rather than heard in passing.
     const speak = wantsSpeech(spoke) && !w && !turn.care && (await startSpeaking(am, detectLang(text, S.settings.lang || "auto")));
@@ -1669,7 +1826,7 @@ async function sendOne(prefill) {
       // Stop pressed while the turn was being prepared: nothing is asked of the model (1.13.1).
       if (!S.stopRequested) for await (const partial of S.engine.stream(withImages(fitted.messages, images), { maxTokens: tier.maxTokens, web: webViaProvider })) {
         out = partial;
-        body.innerHTML = render(stripRetrievalNote(out));
+        body.innerHTML = render(stripRetrievalNote(out)); linkArticles(body);
         if (speak && speaker.key === am) speaker.feed(stripRetrievalNote(out));
         followChat();
       }
@@ -1679,6 +1836,8 @@ async function sendOne(prefill) {
     body.classList.remove("typing");
     if (speak && speaker.key === am) { if (S.stopRequested) speaker.stop(); else speaker.feed(stripRetrievalNote(out), true); }
     if (S.stopRequested) am.meta.stopped = true;
+    // A moment care.js only suspected, which the model read as real (1.13.2): the line is shown.
+    if (turn.care && presence.hasCareMark(out)) { turn.careMarked = true; am.meta.care = "marked"; }
     out = stripRetrievalNote(out).trim() || (S.stopRequested ? "(stopped before answering)" : "…");
     guard.clear();   // it loaded and answered: nothing for the loop guard to catch
     am.content = out; am.meta.ms = Math.round(performance.now() - t0);
@@ -1700,7 +1859,9 @@ async function sendOne(prefill) {
     scheduleSummary(S.thread, S.history, turn.fitted);
   } catch (e) {
     console.error(e);
-    toast(`Something failed: ${e.message || e}`);
+    // The free messages used for today: said as it is, with the way past it, not as a failure (October 24, 2026).
+    const capped = e?.code === "daily_cap" || /free messages are used/.test(String(e?.message || e));
+    toast(capped ? String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, "") : `Something failed: ${e.message || e}`, capped ? 15000 : undefined);
     // The answer failed, the care line does not: it was never the model's to give.
     if (turnForNotice?.care?.level === "refer" && !noticesDone && S.thread) {
       noticesDone = true;
@@ -1721,7 +1882,7 @@ async function sendOne(prefill) {
 async function addNotices(turn, threadId, show, channel = null) {
   const lang = turn.lang || "en";
   const out = [];
-  if (turn.care?.level === "refer") out.push({ notice: "care", content: crisisLine(S.profile.country, lang, S.pack.runtime.crisis) });
+  if (turn.care?.level === "refer" || turn.careMarked) out.push({ notice: "care", content: crisisLine(S.profile.country, lang, S.pack.runtime.crisis) });
   // The pause bell: one sitting at a time, on this device, whatever the window or the bot.
   const st = presence.advanceSitting(await store.kv.get("sitting").catch(() => null));
   await store.kv.set("sitting", st.state);
@@ -1895,7 +2056,7 @@ async function bridgeHandle(r) {
   S.wheel = (await store.kv.get("wheel")) || {};
   S.practices = (await store.kv.get("practices")) || [];
   S.assessment = (await store.kv.get("assessment")) || null;
-  S.where = (await DESKTOP.info().catch(() => ({}))).remote?.host || null;
+  { const r = (await DESKTOP.info().catch(() => ({}))).remote; S.where = r?.host || null; S.whereModel = r?.model || ""; }
   await loadPathState();
 
   if (r.kind === "new") { await bridgeThread(true); return true; }
@@ -1908,7 +2069,7 @@ async function bridgeHandle(r) {
     const o = await composeOutreach("telegram");
     if (!o) return null;
     const th = await bridgeThread();
-    await store.messages.add({ threadId: th.id, role: "assistant", content: o.text, meta: { outreach: o.type, channel: "telegram", model: S.engine.describe(), ...(o.usage ? { usage: o.usage } : {}) } });
+    await store.messages.add({ threadId: th.id, role: "assistant", content: o.text, meta: { ...hereMeta(), outreach: o.type, channel: "telegram", model: S.engine.describe(), ...(o.usage ? { usage: o.usage } : {}) } });
     th.updated = Date.now(); await store.threads.put(th);
     return o.text;
   }
@@ -1939,7 +2100,7 @@ async function bridgeHandle(r) {
     if (kind === "image" && !(vision === "yes" || vision === "maybe")) return vision === "download"
       ? "To see photos, the model needs its vision component, downloaded once on the computer: attach an image in Lodestone's window there the first time."
       : `${info.label || "The model in use"} cannot see images. A Gemma model, or a rented model such as Claude, can.`;
-    const language = speechLanguage(S.settings.lang && S.settings.lang !== "auto" ? S.settings.lang : navigator.language);
+    const language = speechLanguage(dictCode());   // recordings, like dictation: heard, unless a language is set
     const data = await readAttachment(file, { canSee: vision === "yes" || vision === "maybe", language, convert: convertFile });
     if (!data.text?.trim() && !data.images?.length) return kind === "audio" ? "Nothing could be heard in it." : `Nothing readable in ${file.name}.`;
     // A voice message with nothing written is what was said.
@@ -1978,7 +2139,7 @@ async function bridgeHandle(r) {
   if (keepTg) S.profile.notes = withMemory(notesTg, keepTg);
   const turn = await prepareTurn(text, history, { summary: threadSummary(th, history), files });
   if (keepTg) { S.profile.notes = notesTg; if (!turn.crisis && !turn.care) await keepMemory(keepTg); }
-  const tgUid = await store.messages.add({ threadId: th.id, role: "user", content: redact(text), meta: { channel: "telegram", ...(turn.crisis ? { crisis: turn.crisis.category } : {}), ...(turn.care ? { care: turn.care.level } : {}), ...(files.length ? { files: storedFiles(files) } : {}) } });
+  const tgUid = await store.messages.add({ threadId: th.id, role: "user", content: redact(text), meta: { ...hereMeta(), channel: "telegram", ...(turn.crisis ? { crisis: turn.crisis.category } : {}), ...(turn.care ? { care: turn.care.level } : {}), ...(files.length ? { files: storedFiles(files) } : {}) } });
 
   if (turn.crisis) {
     await store.messages.add({ threadId: th.id, role: "assistant", content: turn.reply, meta: { crisis: turn.crisis.category, model: "crisis-template", channel: "telegram" } });
@@ -1996,15 +2157,16 @@ async function bridgeHandle(r) {
   }
   const tgUsage = usageNow(), tgLabel = currentModelLabel();
   setTimeout(() => afterTurn(turn), 0);
+  if (turn.care && presence.hasCareMark(out)) turn.careMarked = true;   // 1.13.2, as in the window
   out = stripRetrievalNote(out).trim() || "…";
-  await store.messages.add({ threadId: th.id, role: "assistant", content: out, meta: { ...(turn.recalled?.length ? { recalled: turn.recalled } : {}), ...(turn.care ? { care: turn.care.level } : {}), sources: turn.sources, model: S.engine.describe(), witness: turn.w?.strength || null, channel: "telegram", ms: Math.round(performance.now() - t0), ...(tgUsage ? { usage: tgUsage } : {}), ...(tgLabel ? { modelLabel: tgLabel } : {}) } });
+  await store.messages.add({ threadId: th.id, role: "assistant", content: out, meta: { ...hereMeta(), ...(turn.recalled?.length ? { recalled: turn.recalled } : {}), ...(turn.care ? { care: turn.care.level } : {}), sources: turn.sources, model: S.engine.describe(), witness: turn.w?.strength || null, channel: "telegram", ms: Math.round(performance.now() - t0), ...(tgUsage ? { usage: tgUsage } : {}), ...(tgLabel ? { modelLabel: tgLabel } : {}) } });
   th.updated = Date.now(); await store.threads.put(th);
   const notes = [];
   await addNotices(turn, th.id, n => notes.push(n.content), "telegram");
   scheduleSummary(th, await store.messages.forThread(th.id), turn.fitted);
   const idx = new Map(S.pack.corpus.articles.map(a => [a.p, a]));
-  const read = turn.sources.map(s => idx.get(s)).filter(Boolean).slice(0, 4).map(a => a.u ? `[${a.t}](${a.u})` : a.t);
-  return gateNote + (read.length ? `${out}\n\nDrawn from: ${read.join(" · ")}` : out) + notes.map(n => `\n\n${n}`).join("");
+  // No "Drawn from" list under a reply (1.14.1): an article it builds on is named in the reply itself.
+  return gateNote + out + notes.map(n => `\n\n${n}`).join("");
 }
 
 async function touchThread() {
@@ -2044,7 +2206,7 @@ function scheduleSummary(thread, history, fit = null) {
   const fold = summaryPlan(pending, fit);
   if (!fold) return;
   const titles = new Map(S.pack.corpus.articles.map(a => [a.p, a.t]));
-  const tier = S.engine?.tier || TIERS[S.settings.tier] || { ctx: 8192 };
+  const tier = S.engine?.tier ? windowFor(S.engine.tier) : (TIERS[S.settings.tier] || { ctx: 8192 });
   const room = tier.ctx - SUMMARY_MAX_TOKENS - 64;
   const job = (async () => {
     try {
@@ -2119,8 +2281,10 @@ function wantsSpeech(spoke) {
 
 function onSpeakState(on, key) {
   if (!on && T.on && T.phase === "speaking") setTimeout(() => { if (T.on && T.phase === "speaking" && !speaker.active) talkListen(); }, 250);
-  document.querySelectorAll(".listen-btn").forEach(b => { const me = b._msg === key || b._msg === speaker.key; b.textContent = me && speaker.active ? "Stop" : "Listen"; b.classList.toggle("on", me && speaker.active); });
-  document.querySelectorAll(".voice-row").forEach(r => { const me = r._msg === speaker.key && speaker.active; r.querySelector(".vr-state").textContent = me ? "Lodestone is speaking" : "Spoken"; r.querySelector(".vr-stop").hidden = !me; });
+  const held = !!speaker.paused;
+  document.querySelectorAll(".listen-btn").forEach(b => { const me = b._msg === key || b._msg === speaker.key; const on = me && speaker.active; b.innerHTML = on ? ACT_SVG.stop : ACT_SVG.listen; b.title = on ? "Stop reading" : "Hear this answer"; b.setAttribute("aria-label", b.title); b.classList.toggle("on", on); });
+  document.querySelectorAll(".pause-btn").forEach(b => { const me = b._msg === speaker.key && speaker.active; b.hidden = !me; b.textContent = held ? "Resume" : "Pause"; });
+  document.querySelectorAll(".voice-row").forEach(r => { const me = r._msg === speaker.key && speaker.active; r.querySelector(".vr-state").textContent = me ? (held ? "Paused" : "Lodestone is speaking") : "Spoken"; r.querySelector(".vr-stop").hidden = !me; r.querySelector(".vr-pause").hidden = !me; r.querySelector(".vr-pause").textContent = held ? "Resume" : "Pause"; r.classList.toggle("paused", me && held); });
 }
 // A natural voice, else the device's own: one speaks, the other is silent.
 const deviceSpeaker = new voice.Speaker(onSpeakState);
@@ -2150,14 +2314,20 @@ async function startSpeaking(m, lang) {
   return true;
 }
 
+function togglePause() { if (!speaker.active) return; if (speaker.paused) speaker.resume(); else speaker.pause(); }
+
 function listenButton(m) {
-  const b = el("button", { type: "button", class: "listen-btn", title: "Hear this answer" }, speaker.active && speaker.key === m ? "Stop" : "Listen");
+  const me = speaker.active && speaker.key === m;
+  const p = el("button", { type: "button", class: "pause-btn", title: "Hold the voice here; Resume goes on from the same place", hidden: !me, onclick: togglePause }, speaker.paused ? "Resume" : "Pause");
+  p._msg = m;
+  const b = el("button", { type: "button", class: "listen-btn act-icon", title: me ? "Stop reading" : "Hear this answer", "aria-label": me ? "Stop reading" : "Hear this answer" });
+  b.innerHTML = me ? ACT_SVG.stop : ACT_SVG.listen;
   b._msg = m;
   b.onclick = async () => {
     if (speaker.active && speaker.key === m) { speaker.stop(); return; }
     if (await startSpeaking(m, detectLang(m.content, S.settings.lang || "auto"))) speaker.feed(m.content, true);
   };
-  return b;
+  return el("span", { class: "listen-pair" }, p, b);
 }
 
 function setSending(on) {
@@ -2343,7 +2513,10 @@ const lbSticky = new Map();   // thread id → (note → turns it stays)
 // In the web app and on the phone the life book is the copy Lodestone
 // Desktop keeps in sync ("lifebook"): read for recall, and Keep queues the
 // change there for the desktop to write; nothing on a phone writes to the vault.
-function lifeBookOn() { return DESKTOP ? !!(DESKTOP.lifebookEntries && S.lifeBook?.vault) : !!S.lbMirror?.notes?.length; }
+// Since October 24, 2026 every device keeps notes: away from the desktop, what
+// is kept lives in the synced record (lifebook.js withPending) until Lodestone
+// Desktop writes it into the vault; without a desktop that record is the life book.
+function lifeBookOn() { return DESKTOP ? !!(DESKTOP.lifebookEntries && S.lifeBook?.vault) : true; }
 const LB_MIRROR_CAP = 400000;   // characters of notes carried to other devices; past it, the largest notes stay on the computer
 async function loadLifeBookMirror() { S.lbMirror = (await store.kv.get("lifebook")) || null; }
 
@@ -2390,7 +2563,7 @@ async function applyLifeBookQueue() {
 async function loadLifeBookStatus() { if (!DESKTOP?.lifebookStatus) { S.lifeBook = null; return; } try { S.lifeBook = await DESKTOP.lifebookStatus(); } catch { S.lifeBook = null; } }
 async function lifeBookEntries(force = false) {
   if (!lifeBookOn()) return [];
-  if (!DESKTOP) return (S.lbMirror?.notes || []).map(n => lifebook.parseEntry(n.rel, n.text, n.mtime));
+  if (!DESKTOP) { if (force) await loadLifeBookMirror(); return lifebook.withPending(S.lbMirror).map(n => ({ ...lifebook.parseEntry(n.rel, n.text, n.mtime), pending: !!n.pending })); }
   if (!force && Date.now() - lbCache.at < 5000) return lbCache.entries;
   try { const r = await DESKTOP.lifebookEntries(); lbCache = { at: Date.now(), entries: (r || []).map(n => lifebook.parseEntry(n.rel, n.text, n.mtime)) }; }
   catch (e) { console.warn("[life book]", e); lbCache = { at: Date.now(), entries: [] }; }
@@ -2413,11 +2586,13 @@ async function proposeLifeBook(all) {
 }
 
 /** "Keep in my life book" on a message of theirs: a card to place it, nothing written yet. */
-async function keepFromMessage(text) {
+async function keepFromMessage(text, kind = "fact") {
   const entries = await lifeBookEntries(true);
-  const path = "Life/Notes.md";
+  // The pillar it concerns, guessed from its words; the card lets them choose another (1.14.1).
+  const p = lifebook.guessPillar(text);
+  const path = kind === "answer" ? `Kept/${p || "General"}.md` : p ? `Wheel/${p}.md` : "Unsorted.md";
   const have = entries.find(e => e.rel.toLowerCase() === path.toLowerCase());
-  const pr = have ? { op: "append", path: have.rel, text: String(text).trim(), mtime: have.mtime } : { op: "create", path, keys: [], text: String(text).trim() };
+  const pr = { ...(have ? { op: "append", path: have.rel, mtime: have.mtime } : { op: "create", path, keys: lifebook.keysForPath(path) }), text: String(text).trim(), kind };
   S.learned.lifeBook = [...(S.learned.lifeBook || []), { ...pr, id: String(Date.now()), ts: Date.now(), mine: true }].slice(-6);
   await saveLearned();
   renderCheckins();
@@ -2430,22 +2605,26 @@ async function dropLifeBook(pr) {
 }
 
 async function keepLifeBook(pr, edited, pathIn) {
+  if (pr.op === "seed") return keepSeed(pr);
+  if (pr.op === "organize") return keepOrganize(pr);
   let change;
   const text = edited ?? (pr.op === "replace" ? pr.replace : pr.text);
   const path = (pathIn || pr.path).trim().replace(/^\/+/, "").replace(/^Lodestone\//i, "");
   const target = /\.md$/i.test(path) ? path : path + ".md";
   const entries = await lifeBookEntries(true);
   const have = entries.find(e => e.rel.toLowerCase() === target.toLowerCase());
-  if (pr.op === "replace") change = { op: "replace", path: target, find: pr.find, replace: text, mtime: pr.mtime };
-  else if (have) change = { op: "append", path: have.rel, text: lifebook.appendedText(text), mtime: pr.path.toLowerCase() === have.rel.toLowerCase() ? pr.mtime : have.mtime };
-  else change = { op: "create", path: target, text: lifebook.newNoteText(target, pr.keys || [], text) };
+  // A note not yet written by the desktop has no file time to check against.
+  const onDisk = have && !have.pending;
+  if (pr.op === "replace") change = { op: "replace", path: target, find: pr.find, replace: text, ...(onDisk ? { mtime: pr.mtime } : {}) };
+  else if (have) change = { op: "append", path: have.rel, text: lifebook.appendedText(text), ...(onDisk ? { mtime: pr.path.toLowerCase() === have.rel.toLowerCase() ? pr.mtime : have.mtime } : {}) };
+  else change = { op: "create", path: target, text: lifebook.newNoteText(target, target.toLowerCase() === String(pr.path).toLowerCase() && pr.keys?.length ? pr.keys : lifebook.keysForPath(target), text) };
   if (!DESKTOP) {
     // Not on this device: queued in the synced record for Lodestone Desktop to write.
     const m = (await store.kv.get("lifebook")) || { notesAt: 0, notes: [], queue: [], applied: [] };
     m.queue = [...(m.queue || []), { id: pr.id + "-" + Date.now(), ts: Date.now(), change, card: { op: pr.op, path: change.path, text, keys: pr.keys || [], find: pr.find, replace: pr.replace } }];
     await store.kv.set("lifebook", m); S.lbMirror = m;
     await dropLifeBook(pr); syncSoon(1000);
-    toast(`Kept: Lodestone Desktop writes it in Lodestone/${change.path} the next time it opens.`, 6000);
+    toast(`Kept in your life book (${change.path}). It comes back whenever its subject does, on all your devices${S.lbMirror?.notes?.length ? "; Lodestone Desktop also writes it into your vault" : ""}.`, 7000);
     return;
   }
   try {
@@ -2456,24 +2635,183 @@ async function keepLifeBook(pr, edited, pathIn) {
   } catch (e) { toast(String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ""), 8000); }
 }
 
+/** Keep a whole new life book at once (from memory carried in): one change per note, queued like any other. */
+async function keepSeed(pr) {
+  const entries = await lifeBookEntries(true);
+  const changes = (pr.notes || []).map(n => {
+    const have = entries.find(e => e.rel.toLowerCase() === n.path.toLowerCase());
+    return have ? { op: "append", path: have.rel, text: lifebook.appendedText(lifebook.parseEntry(n.path, n.text).body), ...(have.pending ? {} : { mtime: have.mtime }) } : { op: "create", path: n.path, text: n.text };
+  });
+  if (DESKTOP) {
+    let ok = 0;
+    for (const c of changes) { try { await DESKTOP.lifebookWrite(c); ok++; } catch (e) { console.warn("[life book seed]", e); } }
+    lbCache.at = 0; await lifeBookEntries(true);
+    toast(`${ok} note${ok === 1 ? "" : "s"} written in Lodestone/${pr.folder}/.`, 6000);
+  } else {
+    const m = (await store.kv.get("lifebook")) || { notesAt: 0, notes: [], queue: [], applied: [] };
+    m.queue = [...(m.queue || []), ...changes.map((change, i) => ({ id: `${pr.id}-${i}`, ts: Date.now() + i, change, card: { op: change.op, path: change.path, text: "", keys: [] } }))];
+    await store.kv.set("lifebook", m); S.lbMirror = m; syncSoon(1000);
+    toast(`Your life book has begun: ${changes.length} note${changes.length === 1 ? "" : "s"} in ${pr.folder}/, on all your devices.`, 7000);
+  }
+  await store.kv.set("lifebook:seeded", { at: Date.now(), folder: pr.folder });
+  await dropLifeBook(pr);
+}
+
+/**
+ * Settings → "Organize my life book": the model lays the whole book out again
+ * (lifebook.js ORGANIZE_PROMPT: a note per pillar of the Wheel, a note per
+ * person, the two always-present notes), moving lines only. The plan comes back
+ * as one card; nothing is written until Keep.
+ */
+async function organizeLifeBook() {
+  const msg = $("#setLbOrganizeMsg");
+  const entries = (await lifeBookEntries(true)).filter(e => !e.off);
+  if (entries.length < 1) { msg.textContent = "There is nothing to sort yet."; return; }
+  if (!S.engine || !S.engineReady) { msg.textContent = "Lodestone's model is not ready yet; try again in a moment."; return; }
+  // Parts sized to the model: what it reads and what it writes back each take about a
+  // third of its context, and no answer is asked for more than ~40k characters.
+  const ctx = S.engine?.tier?.ctx || TIERS[S.settings.tier]?.ctx || 32768;
+  const partChars = Math.max(6000, Math.min(40000, Math.floor(ctx * 3.3 * 0.33)));
+  const parts = lifebook.organizeBatches(entries, partChars);
+  const btn = $("#setLbOrganize"); btn.disabled = true;
+  const say = t => { msg.textContent = t; };
+  say(`Lodestone is sorting ${entries.length} note${entries.length === 1 ? "" : "s"}${parts.length > 1 ? `, in ${parts.length} parts` : ""}… This can take ${parts.length > 3 ? "several minutes" : "a minute"}; you can keep using Lodestone meanwhile.`);
+  try {
+    const layouts = [], made = []; let read = 0;
+    for (let i = 0; i < parts.length; i++) {
+      if (parts.length > 1) say(`Sorting part ${i + 1} of ${parts.length}…`);
+      const req = lifebook.organizeBatchRequest(parts[i], made, i, parts.length);
+      let lay = null;
+      for (let attempt = 0; attempt < 2 && !lay; attempt++) {
+        const raw = await complete(lifebook.ORGANIZE_PROMPT, req, Math.min(32000, 4000 + Math.ceil(req.length / 2)));
+        lay = lifebook.parseOrganize(raw, parts[i]);
+      }
+      // A part that cannot be laid out still loses nothing: its lines go to Unsorted.
+      if (lay) read++;
+      layouts.push(lay || lifebook.parseOrganize(JSON.stringify({ notes: [] }), parts[i]));
+      for (const n of (lay?.notes || [])) if (!n.unsorted && !made.includes(n.path)) made.push(n.path);
+    }
+    const layout = read ? lifebook.mergeLayouts(layouts) : null;
+    if (layout && read < parts.length) layout.unread = parts.length - read;
+    if (!layout) { msg.textContent = "The model's answer could not be read as a sorting. Nothing was changed; try again."; return; }
+    S.learned.lifeBook = [...(S.learned.lifeBook || []).filter(p => p.op !== "organize"), { op: "organize", id: "organize-" + Date.now(), ts: Date.now(), path: "", layout, from: entries.length }].slice(-6);
+    await saveLearned(); renderCheckins();
+    msg.textContent = "The sorted life book is waiting as a card in the conversation: read it, then Keep or Not now.";
+    closeDrawers?.();
+  } catch (e) { msg.textContent = `Not sorted: ${String(e.message || e)}`; }
+  finally { btn.disabled = false; }
+}
+
+/** Keep a layout: new notes written (or rewritten whole), the old ones switched off with recall: false. Nothing is deleted. */
+async function keepOrganize(pr) {
+  const entries = await lifeBookEntries(true);
+  const changes = lifebook.organizeChanges(pr.layout, entries);
+  if (DESKTOP) {
+    let ok = 0; const failed = [];
+    for (const c of changes) { try { await DESKTOP.lifebookWrite(c); ok++; } catch (e) { failed.push(`${c.path}: ${String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, "")}`); } }
+    lbCache.at = 0; await lifeBookEntries(true);
+    toast(failed.length ? `${ok} of ${changes.length} changes written; not written: ${failed.join("; ")}` : `Your life book is sorted into ${pr.layout.notes.length} notes. The old notes are switched off, not deleted, and their earlier versions are in Lodestone/.backups/.`, 9000);
+  } else {
+    const m = (await store.kv.get("lifebook")) || { notesAt: 0, notes: [], queue: [], applied: [] };
+    m.queue = [...(m.queue || []), ...changes.map((change, i) => ({ id: `${pr.id}-${i}`, ts: Date.now() + i, change, card: { op: change.op, path: change.path, text: "", keys: [] } }))];
+    await store.kv.set("lifebook", m); S.lbMirror = m; syncSoon(1000);
+    toast(`Your life book is sorted into ${pr.layout.notes.length} notes, on all your devices. The old notes are switched off, not deleted.`, 8000);
+  }
+  await dropLifeBook(pr);
+  renderLifeBook();
+}
+
+/** Memory carried in (from Lodestone on Telegram): offered once as the start of a life book, kept only with Keep. */
+async function offerSeed() {
+  if (!lifeBookOn() || !S.learned || await store.kv.get("lifebook:seeded")) return;
+  if ((S.learned.lifeBook || []).some(p => p.op === "seed")) return;
+  const rows = ((await store.kv.get("companion"))?.state?.tables?.profile_notes || []).filter(r => r.confidence === "migrated" || r.confidence === "telegram");
+  if (rows.length < 3) return;
+  const folder = "From Telegram";
+  const c0 = (await store.kv.get("companion"))?.state?.tables?.clients?.[0] || {};
+  const notes = lifebook.seedNotes(rows, folder, { self: [c0.display_name, (await heldAccount())?.email?.split("@")[0]] });
+  S.learned.lifeBook = [...(S.learned.lifeBook || []), { op: "seed", id: "seed-" + Date.now(), ts: Date.now(), folder, path: folder + "/", notes, facts: rows.length }].slice(-6);
+  await saveLearned(); renderCheckins();
+}
+
 function lifeBookCards() {
   if (!lifeBookOn()) return [];
   return (S.learned?.lifeBook || []).map(pr => {
+    if (pr.op === "organize") {
+      const L = pr.layout, list = el("ul", { class: "lb-plan" }, ...L.notes.map(n => el("li", {}, el("code", {}, n.path), (() => { const c = n.lines.filter(l => !/^#/.test(l)).length; return ` · ${c} line${c === 1 ? "" : "s"}${n.always ? " · always" : n.own?.length ? ` · ${n.own.slice(0, 5).join(", ")}` : ""}`; })())));
+      return el("div", { class: "checkin proposal lifebook" },
+        el("p", {}, el("b", {}, "Sort your life book? "), `${pr.from} note${pr.from === 1 ? "" : "s"} sorted into ${L.notes.length}: a note per pillar of the Wheel and per person. ${L.moved} lines moved word for word`,
+          L.unsorted ? `; ${L.unsorted} the sorting did not place are kept in Unsorted.md` : "", L.invented ? `; ${L.invented} line${L.invented === 1 ? "" : "s"} the model wrote itself left out` : "", L.unread ? `; ${L.unread} part${L.unread === 1 ? "" : "s"} the model could not sort went to Unsorted.md whole` : "", ". The old notes are switched off, not deleted."),
+        el("details", {}, el("summary", {}, "The new notes"), list),
+        el("div", { class: "row" },
+          el("button", { type: "button", onclick: () => keepLifeBook(pr) }, "Keep"),
+          el("button", { type: "button", onclick: () => dropLifeBook(pr) }, "Not now")));
+    }
+    if (pr.op === "seed") return el("div", { class: "checkin proposal lifebook" },
+      el("p", {}, el("b", {}, "Start your life book from what Lodestone knew of you on Telegram? "),
+        `${pr.facts} facts in ${pr.notes.length} notes (${pr.notes.map(n => n.path.split("/").pop().replace(/\.md$/, "")).join(", ")}), in `, el("code", {}, `Lodestone/${pr.folder}/`), ". Each comes back word for word whenever its subject does; you can read and correct them in Settings → Life book."),
+      el("div", { class: "row" },
+        el("button", { type: "button", onclick: () => keepLifeBook(pr) }, "Keep"),
+        el("button", { type: "button", onclick: () => dropLifeBook(pr) }, "Not now")));
     const preview = pr.op === "replace"
       ? el("p", { class: "lb-diff" }, el("del", {}, pr.find), " → ", el("ins", {}, pr.replace))
       : el("p", { class: "lb-text" }, pr.text);
     const edit = el("textarea", { class: "lb-edit", rows: 4, hidden: true, "aria-label": "What to keep" });
-    const where = el("input", { class: "lb-path", hidden: true, "aria-label": "Note", value: pr.path });
+    const notes = el("datalist", { id: `lb-notes-${pr.id}` });
+    const where = el("input", { class: "lb-path", hidden: true, "aria-label": "Note", value: pr.path, list: `lb-notes-${pr.id}`, placeholder: "Life/Kept answers.md" });
     const what = pr.op === "create" ? "a new note," : pr.op === "append" ? "an addition to" : "a correction in";
+    if (pr.mine && pr.op !== "replace") return keptCard(pr, preview, edit, where);
     return el("div", { class: "checkin proposal lifebook" },
-      el("p", {}, el("b", {}, pr.mine ? "Keep this in your life book? " : "Worth keeping in your life book? "), `${what} `, el("code", {}, `Lodestone/${pr.path}`)),
+      el("p", {}, el("b", {}, "Worth keeping in your life book? "), `${what} `, el("code", {}, `Lodestone/${pr.path}`)),
       pr.note ? el("p", { class: "fine" }, `Kept on another device, not written: ${pr.note}`) : null,
-      preview, where, edit,
+      preview, where, notes, edit,
       el("div", { class: "row" },
         el("button", { type: "button", onclick: () => keepLifeBook(pr, edit.hidden ? null : edit.value, where.hidden ? null : where.value) }, "Keep"),
-        el("button", { type: "button", onclick: () => { const opening = edit.hidden; edit.hidden = !opening; where.hidden = !opening || pr.op === "replace"; if (opening) { edit.value = pr.op === "replace" ? pr.replace : pr.text; edit.focus(); } } }, "Edit"),
+        el("button", { type: "button", onclick: () => { const opening = edit.hidden; edit.hidden = !opening; where.hidden = !opening || pr.op === "replace"; if (opening) { edit.value = pr.op === "replace" ? pr.replace : pr.text; edit.focus(); lifeBookEntries().then(es => notes.replaceChildren(...es.map(e => el("option", { value: e.rel })))).catch(() => {}); } } }, pr.op === "replace" ? "Edit" : "Edit or choose the note"),
         el("button", { type: "button", onclick: () => dropLifeBook(pr) }, "Not this")));
   });
+}
+
+/**
+ * The card for something they chose to keep (1.14.1): where it goes is chosen in
+ * the card, by the Wheel's pillars. What they keep about themselves: a pillar,
+ * a person, how to speak with them, an open thread, or Unsorted. An answer of
+ * Lodestone's: the shelf of kept answers, by pillar.
+ */
+function keptCard(pr, preview, edit, where) {
+  const answer = pr.kind === "answer";
+  const sel = el("select", { class: "lb-where", "aria-label": "Where it goes" });
+  const wheel = el("optgroup", { label: answer ? "Kept answers, by pillar of the Wheel" : "Wheel of Harmony" },
+    ...lifebook.PILLARS.map(p => el("option", { value: `${answer ? "Kept" : "Wheel"}/${p}.md` }, p)));
+  sel.append(wheel);
+  if (answer) sel.append(el("option", { value: "Kept/General.md" }, "General"));
+  else sel.append(el("optgroup", { label: "Always with Lodestone" }, el("option", { value: "How to speak with me.md" }, "How to speak with me"), el("option", { value: "Open threads.md" }, "Open threads")),
+    el("option", { value: "Unsorted.md" }, "Unsorted (placed at the next Organize)"));
+  const other = el("option", { value: "__other" }, "Another note…");
+  sel.append(other);
+  const has = v => [...sel.options].some(o => o.value.toLowerCase() === String(v).toLowerCase());
+  if (!has(pr.path)) sel.insertBefore(el("option", { value: pr.path }, pr.path.replace(/\.md$/i, "")), other);
+  sel.value = [...sel.options].find(o => o.value.toLowerCase() === pr.path.toLowerCase())?.value || pr.path;
+  if (!answer) lifeBookEntries().then(es => {
+    const ppl = es.filter(e => /^People\//i.test(e.rel) && !e.off);
+    if (!ppl.length) return;
+    const keep = sel.value;
+    sel.insertBefore(el("optgroup", { label: "People" }, ...ppl.map(e => el("option", { value: e.rel }, e.title))), other);
+    sel.value = keep;
+  }).catch(() => {});
+  where.value = ""; where.placeholder = answer ? "Kept/My protocols.md" : "Practices/Morning.md";
+  sel.onchange = () => { where.hidden = sel.value !== "__other"; if (!where.hidden) where.focus(); };
+  const target = () => sel.value === "__other" ? (where.value.trim() || pr.path) : sel.value;
+  return el("div", { class: "checkin proposal lifebook" },
+    el("p", {}, el("b", {}, answer ? "Keep this answer? " : "Keep this in your life book? "),
+      answer ? "It goes on your shelf of kept answers, to reread; Lodestone does not read them back." : "Lodestone reads it back whenever its subject comes up."),
+    pr.note ? el("p", { class: "fine" }, `Kept on another device, not written: ${pr.note}`) : null,
+    preview,
+    el("label", { class: "lb-where-row" }, el("span", {}, "In"), sel), where, edit,
+    el("div", { class: "row" },
+      el("button", { type: "button", onclick: () => keepLifeBook(pr, edit.hidden ? null : edit.value, target()) }, "Keep"),
+      el("button", { type: "button", onclick: () => { const opening = edit.hidden; edit.hidden = !opening; if (opening) { edit.value = pr.text; edit.focus(); } } }, "Edit the text"),
+      el("button", { type: "button", onclick: () => dropLifeBook(pr) }, "Not this")));
 }
 
 // Settings → Life book
@@ -2481,10 +2819,21 @@ async function renderLifeBook() {
   const sec = $("#setLifeBook"); if (!sec) return;
   if (!DESKTOP) {
     await loadLifeBookMirror();
-    const n = S.lbMirror?.notes?.length || 0, q = S.lbMirror?.queue?.length || 0;
-    $("#setLbWhere").textContent = n ? `${n.toLocaleString()} note${n === 1 ? "" : "s"} from Lodestone Desktop, through sync${q ? ` · ${q} kept here, waiting for the desktop to write` : ""}.` : "The life book lives in Lodestone Desktop. With sync on there, its notes are read here too.";
+    const view = lifebook.withPending(S.lbMirror);
+    const fromDesk = S.lbMirror?.notes?.length || 0, waiting = view.filter(x => x.pending).length;
+    $("#setLbWhere").textContent = view.length
+      ? `${view.length.toLocaleString()} note${view.length === 1 ? "" : "s"}, kept in your memory and synced, encrypted, between your devices${fromDesk ? ` · ${fromDesk} from Lodestone Desktop` : ""}${fromDesk && waiting ? ` · ${waiting} waiting for the desktop to write into your vault` : ""}.`
+      : "No notes yet. Keep one from a card, or with \"Keep in my life book\" under a message of yours. With Lodestone Desktop, the notes are also written into your vault.";
     for (const id of ["#setLbChoose", "#setLbForget", "#setLbOpen"]) $(id).hidden = true;
-    $("#setLbPrivacy").textContent = n ? (S.where ? `The notes Lodestone recalls travel with each message to ${S.where}, which can read them.` : "") : "";
+    $("#setLbPrivacy").textContent = view.length ? (S.where ? `The notes Lodestone recalls travel with each message to ${S.where}, which can read them.` : "") : "";
+    $("#setLbOrganize").hidden = !view.some(n => !lifebook.parseEntry(n.rel, n.text).off);
+    let list = $("#setLbNotes");
+    if (!list) { list = el("div", { id: "setLbNotes", class: "lb-notes" }); $("#setLbPrivacy").after(list); }
+    const parsed = view.map(n => ({ n, e: lifebook.parseEntry(n.rel, n.text, n.mtime) })).sort((a, b) => (a.e.off - b.e.off) || a.n.rel.localeCompare(b.n.rel));
+    list.replaceChildren(...parsed.map(({ n, e }) => {
+      return el("details", { class: "lb-note" + (e.off ? " off" : "") }, el("summary", {}, e.title, el("span", { class: "fine" }, `  Lodestone/${n.rel}${e.off ? " · switched off" : e.always ? " · always" : e.keys.length ? ` · ${e.keys.slice(0, 6).join(", ")}${e.keys.length > 6 ? "…" : ""}` : ""}`)),
+        el("pre", { class: "lb-body" }, e.body));
+    }));
     return;
   }
   if (!DESKTOP?.lifebookStatus) { sec.hidden = true; return; }
@@ -2492,7 +2841,7 @@ async function renderLifeBook() {
   const on = !!S.lifeBook?.vault;
   $("#setLbWhere").textContent = on ? `${S.lifeBook.dir} · ${S.lifeBook.notes.toLocaleString()} note${S.lifeBook.notes === 1 ? "" : "s"}` : "No vault chosen.";
   $("#setLbChoose").textContent = on ? "Choose another vault…" : "Choose your vault…";
-  $("#setLbForget").hidden = !on; $("#setLbOpen").hidden = !on;
+  $("#setLbForget").hidden = !on; $("#setLbOpen").hidden = !on; $("#setLbOrganize").hidden = !on || !S.lifeBook?.notes;
   $("#setLbPrivacy").textContent = !on ? "" : S.where
     ? `Lodestone is thinking with a rented model (${S.where}): the notes it recalls travel with each message to that provider, which can read them.`
     : "Lodestone is thinking on this computer: nothing from the life book leaves it.";
@@ -2551,7 +2900,8 @@ const { syncVia, computerLabel, accountTransport, computerTransport, syncTranspo
 
 let SY = null;
 function syncer() {
-  if (!SY && syncAvailable()) SY = new Sync({ transport: syncTransport(), secret: syncSecret(), canRun: () => !S.busy, onChange: afterSync });
+  if (!SY && syncAvailable()) SY = new Sync({ transport: syncTransport(), secret: syncSecret(), canRun: () => !S.busy, onChange: afterSync,
+    device: () => ({ ...deviceGuess(!!DESKTOP), version: DESKTOP ? S.desktopVersion || null : null }) });
   return SY;
 }
 
@@ -2622,6 +2972,21 @@ async function takeUnlockHandoff() {
   } catch { return false; }
 }
 
+async function takeServerMemory() {
+  const before = await store.kv.get("held:migrated");
+  await held.migrate();
+  const after = await store.kv.get("held:migrated");
+  if (!after || after.empty || (before && before.at === after.at)) return;
+  // Memory arrived: the profile blocks are drawn from it now, not after ten turns.
+  try { await held.heldCall("lodestone-learn.php", { withRecent: true }); await store.kv.set("held:learnSince", 0); } catch (e) { console.warn("[memory move] learn", e?.message || e); }
+  S.heldBlocks = ((await store.kv.get("companion")) || {}).blocks || null;
+  S.wheel = (await store.kv.get("wheel")) || S.wheel;
+  renderThreadList();
+  refreshProfileView();
+  toast("Your earlier conversations with Lodestone are here, and what it knew of you.", 8000);
+  offerSeed().catch(e => console.warn("[life book seed]", e));
+}
+
 async function autoSync() {
   const sy = syncer();
   if (!sy) return;
@@ -2630,6 +2995,10 @@ async function autoSync() {
   S.autoState = r.state;
   if (r.state === "on") await startSync();
   renderSyncBanner();
+  // Memory still on harmonism.io (the website's, or carried from Lodestone on
+  // Telegram) comes into this device's memory here as well as on the dashboard:
+  // a Home Screen app keeps its own storage, apart from Safari's.
+  if (r.state !== "signed-out") takeServerMemory().then(() => offerSeed()).catch(e => console.warn("[memory move]", e?.message || e));
   // Turned on without a press, here or on the website: said plainly, once.
   const ann = (await sy.conf()).announce;
   if (ann === "joined") {
@@ -2647,6 +3016,7 @@ async function autoSync() {
 // until they sign in or say not to; an account whose sign-in this computer lost
 // (an expiry, or an update the keychain would not open to) is always asked for.
 const SIGNIN_ASK = "lodestone-signin-ask";
+const SETUP_PICK = "lodestone-setup-pick";   // where Lodestone thinks, chosen before leaving to sign in
 async function askSignIn() {
   if (!syncAvailable() || BRIDGE || $("#signinAsk") || !$("#setup").hidden) return;
   if (!DESKTOP && !phoneRoutesAvailable()) return;
@@ -2728,7 +3098,11 @@ const ago = t => { const m = Math.round((Date.now() - t) / 60000); return m < 1 
 const mb = b => b == null ? "" : b < 1e6 ? `${Math.max(1, Math.round(b / 1e3))} KB` : `${(b / 1e6).toFixed(1)} MB`;
 
 let syncPick = null;
-async function renderSync() {
+// One drawing of the Sync panel at a time: two at once (the button's, and the
+// sync finishing) each cleared the panel, then each filled it, so it showed twice.
+let syncDraw = Promise.resolve();
+function renderSync() { const next = syncDraw.then(drawSync, drawSync); syncDraw = next.catch(() => {}); return next; }
+async function drawSync() {
   const sec = $("#setSync"), box = $("#syncBody"), st = $("#syncStatus");
   if (!sec) return;
   if (!syncAvailable()) { sec.hidden = true; return; }
@@ -2784,6 +3158,7 @@ async function renderSync() {
     if (DESKTOP) box.append(desktopSignIn(() => { syncer().now(); renderSync(); }));
     else { const L = accountLinks(); box.append(el("div", { class: "row-btns" }, el("a", { class: "btn ghost", href: L.signIn }, "Sign in"))); }
   }
+  if (acct) await renderDevices(box);
   const key = el("input", { type: "checkbox", id: "syncKey" });
   key.checked = !!conf.key;
   key.onchange = async () => { key.disabled = true; await sy.setKey(key.checked); renderSync(); };
@@ -2831,6 +3206,69 @@ function desktopSignIn(done, known = null) {
   for (const f of [email, pass]) f.addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing && !go.disabled) { e.preventDefault(); go.click(); } });
   return el("div", { class: "sync-form" }, email, pass, go, msg,
     el("p", { class: "fine" }, "No account? ", el("a", { href: "https://harmonism.io/member/register.php", target: "_blank", rel: "noopener" }, "Create one at harmonism.io"), ", confirm it by email, then sign in here."));
+}
+
+// ─── The devices that sync (sync.js, October 23, 2026) ──────────────────────
+// Each synced device names itself in the synced copy; every device lists them.
+// This one can be renamed; another can be removed, and stops at its next sync.
+const deviceSeen = d => !d.seen ? "" : Date.now() - d.seen > 30 * 864e5 ? `not seen since ${new Date(d.seen).toLocaleDateString()}` : `synced ${ago(d.seen)}`;
+
+async function renderDevices(box) {
+  const sy = syncer();
+  const list = await sy.devices().catch(() => []);
+  const conf = await sy.conf();
+  const wrap = el("div", { class: "devices" }, el("h5", {}, "Devices syncing this memory"));
+  const ul = el("ul", { class: "device-list" });
+  for (const d of list) {
+    const name = el("b", {}, d.name || "A device");
+    const meta = el("small", {}, [d.here ? "This device" : null, d.here ? (conf.last ? `synced ${ago(conf.last)}` : "") : deviceSeen(d),
+      d.version ? `Lodestone ${d.version}` : null].filter(Boolean).join(" · "));
+    const m = el("p", { class: "hint", role: "status" });
+    const act = el("div", { class: "row-btns" });
+    const li = el("li", { class: "device" + (d.here ? " here" : "") }, el("div", { class: "device-name" }, name, meta), act, m);
+    if (d.here) {
+      act.append(el("button", { class: "link-btn", type: "button", onclick: () => {
+        const input = el("input", { type: "text", value: d.name || "", maxlength: "60", "aria-label": "Name of this device" });
+        const save = el("button", { class: "btn primary", type: "button", onclick: async () => {
+          save.disabled = true;
+          try { await sy.renameDevice(input.value); toast("Renamed on every device at its next sync."); renderSync(); }
+          catch (e) { m.textContent = syncErr(e); save.disabled = false; }
+        } }, "Save");
+        input.addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); save.click(); } if (e.key === "Escape") renderSync(); });
+        act.replaceChildren(input, save, el("button", { class: "btn ghost", type: "button", onclick: () => renderSync() }, "Cancel"));
+        input.focus(); input.select();
+      } }, "Rename"));
+    } else {
+      act.append(el("button", { class: "link-btn danger", type: "button", onclick: async e => {
+        if (!confirm(`Remove ${d.name || "this device"}?\n\nIt stops syncing the next time it goes online, and says so there. What it holds stays on it. To sync it again, turn sync on there and let it in.`)) return;
+        e.target.disabled = true;
+        try { await sy.removeDevice(d.id); toast(`${d.name || "The device"} is removed: it stops at its next sync.`, 6000); renderSync(); }
+        catch (err) { m.textContent = syncErr(err); e.target.disabled = false; }
+      } }, "Remove"));
+    }
+    ul.append(li);
+  }
+  wrap.append(ul,
+    el("p", { class: "fine" }, list.length < 2
+      ? "Your other devices appear here once they sync. A device on an older Lodestone appears once it updates."
+      : "A device on an older Lodestone appears once it updates. In a browser, each browser is a device of its own; on an iPhone, Safari and the Home Screen app are two."));
+  // A device lost, or in someone else's hands: removing it is not enough while it knows your password.
+  if (conf.via !== "computer") {
+    // The password field is made only when this is opened: no hidden password field waits in Settings.
+    const lost = el("details", { class: "link-alt" }, el("summary", {}, "Lost a device?"),
+      el("p", { class: "hint" }, "Remove it above. If it may be in someone else's hands, also change your harmonism.io password, then type the new one here: the synced copy starts again from this device under a new key, locked under the new password. The lost device can read nothing synced after that; your other devices open your memory again when you sign in on them with the new password."));
+    lost.addEventListener("toggle", () => {
+      if (!lost.open || lost.querySelector(".sync-form")) return;
+      lost.append(passwordForm("Change the key", async m => {
+        if (!confirm("Start the synced copy again from this device under a new key? It syncs first, so nothing is lost; every other device then opens your memory again with your new password.")) return;
+        m.textContent = "Syncing, then changing the key…";
+        try { await sy.takeOver(); startSync(); toast("The key is changed: only your new password opens your memory now.", 7000); renderSync(); }
+        catch (e) { m.textContent = syncErr(e); }
+      }));
+    });
+    wrap.append(lost);
+  }
+  box.append(wrap);
 }
 
 // ─── Linking devices (sync.js, v2) ───────────────────────────────────────────
@@ -3067,7 +3505,9 @@ async function renderLinkTools(box, where) {
   if ((await sy.conf()).via === "computer") return;
   const ps = await sy.passwordState().catch(() => ({}));
   if (ps.here && ps.locked) { box.append(el("p", { class: "hint" }, "Signing in with your harmonism.io password on another device opens this memory there.")); return; }
-  box.append(el("p", { class: "hint" }, "Let your password open this memory on your other devices: type it once here. Then signing in on a device is all it takes."),
+  box.append(el("p", { class: "hint" }, ps.locked
+      ? "Your password already opens this memory on a device you sign in on. Nothing to do here, unless you changed your password since: then type the new one once, so it opens with that."
+      : "Let your password open this memory on your other devices: type it once here. Then signing in on a device is all it takes."),
     passwordForm("Use my password", async m => {
       await sy.keepLock().catch(() => false);
       m.textContent = (await sy.passwordState().catch(() => ({}))).locked ? "Done: signing in on another device now opens your memory there." : "It could not be done just now. Try again in a moment.";
@@ -3089,8 +3529,18 @@ if (DESKTOP) held.configure({
 });
 const heldAccount = () => (DESKTOP ? DESKTOP.syncAccount() : hosted.account()).catch(() => null);
 
+// A turn answered on this computer (a model in this browser, Lodestone Desktop's
+// own model, a model server that runs it itself) or by no model is marked, and
+// never goes to harmonism.io for the learning jobs (held.js recent(); October 23, 2026).
+function answeredHere() {
+  const k = S.engine?.kind;
+  return k === "device" || k === "reader" || (k === "server" && !S.where);
+}
+const hereMeta = () => (answeredHere() ? { here: true } : {});
+
 async function maybeLearn() {
   if (!syncAvailable()) return;
+  if (!(await held.learnFromApps())) return;
   const n = ((await store.kv.get("held:learnSince")) || 0) + 1;
   await store.kv.set("held:learnSince", n);
   if (n < 10) return;
@@ -3385,7 +3835,7 @@ async function composeOutreach(via, { force = false } = {}) {
     while (S.busy) await new Promise(r => setTimeout(r, 2000));
     const person = personContext({ profile: S.profile, wheel: S.wheel, practices: S.practices, assessment: S.assessment, learned: learning.learnedLines(S.learned) });
     const tier = S.engine.tier;
-    const system = outreach.composeSystem({ backbone: tier.backbone === "full" ? S.pack.runtime.backbone.full : S.pack.runtime.backbone.light, personContext: person, trigger: d.winner, name: S.profile?.name || "this practitioner" });
+    const system = outreach.composeSystem({ backbone: S.pack.runtime.backbone.full, personContext: person, trigger: d.winner, name: S.profile?.name || "this practitioner" });
     let text = "";
     for await (const part of S.engine.stream([{ role: "system", content: system }, { role: "user", content: "Compose the outreach message now." }], { maxTokens: 600, temperature: 0.7, background: true })) text = part;
     text = stripRetrievalNote(text).replace(/<think>[\s\S]*?<\/think>/g, "").trim();
@@ -3457,7 +3907,7 @@ async function composeReview(via, { force = false } = {}) {
 
 async function storeReview(r) {
   const th = await store.threads.create(`The week · ${r.span}`);
-  await store.messages.add({ threadId: th.id, role: "assistant", content: r.text, meta: { review: r.week, model: S.engine.describe(), ...(r.via === "telegram" ? { channel: "telegram" } : {}), ...(r.usage ? { usage: r.usage } : {}) } });
+  await store.messages.add({ threadId: th.id, role: "assistant", content: r.text, meta: { ...hereMeta(), review: r.week, model: S.engine.describe(), ...(r.via === "telegram" ? { channel: "telegram" } : {}), ...(r.usage ? { usage: r.usage } : {}) } });
   th.updated = Date.now(); await store.threads.put(th);
   return th;
 }
@@ -3557,6 +4007,165 @@ function renderShare() {
       el("button", { class: "btn primary", type: "button", onclick: () => shareFiles(parts(), "html") }, "A page to print or send"),
       el("button", { class: "btn ghost", type: "button", onclick: () => shareFiles(parts(), "md") }, "Markdown"),
       el("button", { class: "btn ghost", type: "button", onclick: () => { navigator.clipboard?.writeText(shareMarkdown(parts())); toast("Copied."); } }, "Copy")));
+}
+
+// ─── Helping Lodestone improve ───────────────────────────────────────────────
+// Settings → Help Lodestone improve. The practitioner chooses one conversation;
+// shareout.js proposes stand-ins for the names in it and builds the copy; the
+// copy is shown in full, turn by turn, and goes to harmonism.io only when they
+// have ticked that they read it. No account goes with it: what comes back is a
+// receipt (an id and a token) kept on this device, which withdraws it.
+
+let shareVocab = null;
+const IMP = { thread: null, msgs: [], names: [], keep: new Set(), reasons: new Set(), note: "", read: false, busy: false };
+
+const onHarmonism = () => /(^|\.)harmonism\.io$/.test(location.hostname);
+async function shareCall(body) {
+  if (DESKTOP) {
+    if (!DESKTOP.shareCall) throw new Error("Update Lodestone Desktop to share from here.");
+    const r = await DESKTOP.shareCall(body);
+    if (!r?.ok) throw new Error(r?.message || "harmonism.io could not be reached.");
+    return r.json;
+  }
+  const url = (onHarmonism() ? location.origin : "https://harmonism.io") + "/lodestone-share.php";
+  const init = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  // Signed in, the sign-in goes along only to count shares a day; it is not kept with them.
+  const signedIn = onHarmonism() && !!(await hosted.account().catch(() => null));
+  const res = signedIn ? await hosted.call(url, init) : await fetch(url, init);
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(j.error?.message || `harmonism.io answered ${res.status}.`);
+  return j;
+}
+
+const sharesSent = async () => (await store.kv.get("shares:sent", [])) || [];
+function shareClient() {
+  return {
+    surface: DESKTOP ? "desktop" : isNative() ? "android" : isHandheld() ? "phone" : "web",
+    route: S.engine?.kind || null,
+    pack: S.pack?.runtime?.pack?.built_at || null,
+    lang: S.settings?.lang || "auto",
+  };
+}
+
+async function renderImprove() {
+  const box = $("#improveBody"); if (!box) return;
+  const sent = await sharesSent();
+  const list = sent.length ? el("div", { class: "kv share-sent" }, el("b", {}, "What you have shared"),
+    ...sent.slice().reverse().map(r => el("div", {}, `${new Date(r.sent).toLocaleDateString()} — ${r.title} (${r.n} turns) `,
+      el("button", { class: "link-btn", type: "button", onclick: () => withdrawShare(r) }, "Withdraw")))) : null;
+  const ths = (await store.threads.list()).filter(t => t.id);
+  const sel = el("select", { "aria-label": "Conversation to share" }, ...ths.map(t => el("option", { value: t.id }, `${t.title || "Conversation"} · ${new Date(t.updated || t.created).toLocaleDateString()}`)));
+  if (IMP.thread) sel.value = IMP.thread.id;
+  const prep = el("button", { class: "btn ghost", type: "button", onclick: () => prepareShare(sel.value) }, "Prepare a copy to review");
+  box.replaceChildren(...[list,
+    ths.length ? el("label", {}, "Conversation", sel) : el("p", { class: "hint" }, "No conversation yet."),
+    ths.length ? el("div", { class: "row-btns" }, prep) : null,
+    el("div", { id: "improveReview" })].filter(Boolean));
+  if (IMP.thread) renderShareReview();
+}
+
+async function prepareShare(id) {
+  const t = await store.threads.get(id); if (!t) return;
+  const msgs = (await store.messages.forThread(id)).filter(m => (m.role === "user" || m.role === "assistant") && !m.notice && String(m.content || "").trim());
+  if (!msgs.length) { toast("That conversation has nothing to share yet."); return; }
+  if (!shareVocab) shareVocab = shareout.vocabulary(S.pack?.corpus?.articles || []);
+  const known = [S.profile?.name].filter(Boolean);
+  Object.assign(IMP, { thread: t, msgs, names: shareout.standIns(shareout.findNames(msgs, shareVocab, known)), keep: new Set(msgs.map(m => m.id)), reasons: new Set(), note: "", read: false });
+  renderShareReview();
+  $("#improveReview")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function shareNow() {
+  return shareout.buildShare({ messages: IMP.msgs, keep: IMP.keep, chosen: IMP.names.filter(n => n.include), reasons: [...IMP.reasons], note: IMP.note, client: shareClient() });
+}
+
+function renderShareReview() {
+  const box = $("#improveReview"); if (!box) return;
+  const nameRow = n => {
+    const c = el("input", { type: "checkbox" }); c.checked = n.include;
+    c.onchange = () => { n.include = c.checked; IMP.read = false; renderSharePreview(); };
+    const stand = el("input", { type: "text", value: n.stand, "aria-label": `Stand-in for ${n.phrase}` });
+    stand.onchange = () => { n.stand = `[${stand.value.replace(/[[\]]/g, "").trim() || "someone"}]`; stand.value = n.stand; IMP.read = false; renderSharePreview(); };
+    return el("div", { class: "share-name" }, c, el("span", {}, n.forms.join(" · "), el("small", {}, ` ×${n.count}`)), stand);
+  };
+  const sure = IMP.names.filter(n => n.sure), other = IMP.names.filter(n => !n.sure);
+  const add = el("input", { type: "text", placeholder: "A name, a place, a word to hide" });
+  const addBtn = el("button", { class: "btn ghost", type: "button", onclick: () => {
+    const w = add.value.trim(); if (!w) return;
+    const n = IMP.names.filter(x => !x.known).length;
+    IMP.names.push({ key: w.toLowerCase(), phrase: w, forms: [w], count: 0, known: false, sure: true, include: true, stand: `[Name ${String.fromCharCode(65 + (n % 26))}${n >= 26 ? Math.floor(n / 26) : ""}]` });
+    IMP.read = false; renderShareReview();
+  } }, "Hide this too");
+  const reasons = shareout.REASONS.map(([k, label]) => { const c = el("input", { type: "checkbox", value: k }); c.checked = IMP.reasons.has(k); c.onchange = () => { c.checked ? IMP.reasons.add(k) : IMP.reasons.delete(k); }; return el("label", { class: "check" }, c, el("span", {}, label)); });
+  const note = el("textarea", { rows: "3", placeholder: "What should Harmonia look at? Which reply, and why. (Optional; names you hid above are hidden here too.)" });
+  note.value = IMP.note; note.onchange = () => { IMP.note = note.value; IMP.read = false; renderSharePreview(); };
+  const read = el("input", { type: "checkbox", id: "improveRead" }); read.checked = IMP.read;
+  const send = el("button", { class: "btn primary", type: "button", id: "improveSend", disabled: !IMP.read, onclick: sendShare }, "Share this copy");
+  read.onchange = () => { IMP.read = read.checked; send.disabled = !IMP.read || IMP.busy; };
+  box.replaceChildren(
+    el("h5", {}, `“${IMP.thread.title || "Conversation"}”`),
+    el("h5", {}, "Names it will hide"),
+    el("p", { class: "hint" }, "Each ticked name is replaced by its stand-in wherever it appears, in your words and in Lodestone's. Rename a stand-in if a role helps the reader (“[my mother]”, “[a city]”); a name it did not find, or one written in Arabic script, add below."),
+    el("div", { class: "share-names" }, ...(sure.length ? sure.map(nameRow) : [el("p", { class: "hint" }, "It found no names.")])),
+    other.length ? el("details", {}, el("summary", {}, `Other capitalised words (${other.length}), probably ordinary`), el("div", { class: "share-names" }, ...other.map(nameRow))) : null,
+    el("div", { class: "row-btns" }, add, addBtn),
+    el("h5", {}, "Why you are sharing it"),
+    ...reasons, note,
+    el("h5", {}, "Exactly what will be sent"),
+    el("p", { class: "hint" }, "Untick a turn to leave it out. Email addresses, phone numbers, links, keys and card numbers are taken out whatever you tick. With the words go the day the conversation began, the minutes between turns, which model wrote each reply, whether a safety step answered instead, how many files were attached (never the files), and where Lodestone ran. Your memory, notes, Wheel, Harmonic Profile, the conversation's title and your account never go."),
+    el("div", { class: "share-preview", id: "improvePreview" }),
+    el("label", { class: "check" }, read, el("span", {}, "I have read the copy above. Harmonia may keep it for review, by people at Harmonia and by the AI models they use to read it, for at most a year, and I can withdraw it here until then.")),
+    el("div", { class: "row-btns" }, send, el("button", { class: "btn ghost", type: "button", onclick: () => { IMP.thread = null; renderImprove(); } }, "Cancel")));
+  renderSharePreview();
+}
+
+function renderSharePreview() {
+  const box = $("#improvePreview"); if (!box) return;
+  const r = $("#improveRead"); if (r) r.checked = IMP.read;
+  const s = $("#improveSend"); if (s) s.disabled = !IMP.read || IMP.busy;
+  const chosen = IMP.names.filter(n => n.include);
+  const marked = text => shareout.marks(text, chosen.map(n => n.stand)).map((part, i) => (i % 2 ? el("mark", {}, part) : part));
+  const t0 = IMP.msgs[0]?.ts || 0;
+  box.replaceChildren(...IMP.msgs.map(m => {
+    const on = IMP.keep.has(m.id);
+    const c = el("input", { type: "checkbox", "aria-label": "Include this turn" }); c.checked = on;
+    c.onchange = () => { c.checked ? IMP.keep.add(m.id) : IMP.keep.delete(m.id); IMP.read = false; renderSharePreview(); };
+    const who = m.role === "user" ? "You" : `Lodestone${m.meta?.modelLabel || m.meta?.model ? ` · ${m.meta.modelLabel || m.meta.model}` : ""}`;
+    const gate = m.meta?.crisis ? " · safety step" : m.meta?.care ? " · care step" : "";
+    return el("div", { class: `share-msg ${m.role}${on ? "" : " off"}` },
+      el("header", {}, c, el("span", {}, `${who}${gate} · +${Math.round((m.ts - t0) / 60000)} min`)),
+      el("div", {}, ...(on ? marked(shareout.anonymize(m.content, chosen)) : ["(left out)"])));
+  }));
+  if (IMP.note.trim()) box.append(el("div", { class: "share-msg note" }, el("header", {}, el("span", {}, "Your note")), el("div", {}, ...marked(shareout.anonymize(IMP.note, chosen)))));
+}
+
+async function sendShare() {
+  if (!IMP.read || IMP.busy) return;
+  const share = shareNow();
+  if (!share.messages.length) { toast("Every turn is left out: there is nothing to send."); return; }
+  IMP.busy = true; renderSharePreview();
+  try {
+    const r = await shareCall({ action: "share", share });
+    const sent = await sharesSent();
+    sent.push({ id: r.id, token: r.token, title: IMP.thread.title || "Conversation", n: share.messages.length, sent: Date.now(), until: r.until || null });
+    await store.kv.set("shares:sent", sent);
+    IMP.thread = null;
+    toast("Shared. Thank you: this is how Lodestone is held to Harmonism.", 6000);
+    renderImprove();
+  } catch (e) { toast(`Not shared: ${e.message || e}`, 7000); }
+  finally { IMP.busy = false; renderSharePreview(); }
+}
+
+async function withdrawShare(r) {
+  if (!confirm(`Withdraw “${r.title}”? Harmonia's copy is deleted.`)) return;
+  try {
+    await shareCall({ action: "withdraw", id: r.id, token: r.token });
+  } catch (e) {
+    if (!/not found|already/i.test(String(e.message))) { toast(`Not withdrawn: ${e.message || e}`, 7000); return; }
+  }
+  await store.kv.set("shares:sent", (await sharesSent()).filter(x => x.id !== r.id));
+  toast("Withdrawn: Harmonia's copy is deleted.");
+  renderImprove();
 }
 
 // ─── Your path: the learned profile and the score ────────────────────────────
@@ -3671,7 +4280,7 @@ async function renderAccountBox() {
     const until = t => t ? new Date(t * 1000).toLocaleDateString() : "";
     plan.textContent = st === "paid" ? `Plan: Harmonia Member${m.expires_at ? `, access until ${until(m.expires_at)}` : m.renews_at ? `, renews ${until(m.renews_at)}` : ""}.`
       : st === "comp" ? `Plan: Complimentary Member${m.comp_expires_at ? `, until ${until(m.comp_expires_at)}` : ""}.`
-      : "Plan: free. On harmonism.io's hosted models: ten messages a day the first month, then three. Lodestone on a computer you own, or a model under your own key, has no limit.";
+      : "Plan: free. On harmonism.io's hosted models: ten messages a day the first month, then five. Lodestone on a computer you own, or a model under your own key, has no limit.";
     if (st === "paid") plan.append(" ", ext(site + "/member/dashboard.php", "Manage the subscription on harmonism.io"));
   }).catch(e => { plan.textContent = "Plan: " + (e.code === "auth" ? "sign in again to see it." : "could not be read just now."); });
 
@@ -3876,7 +4485,7 @@ async function refreshWebChip() {
   $("#modelRow").hidden = !show;
   if (!show) return;
   if (S.engine.kind === "hosted") await hosted.status().catch(() => null);   // the model's name, not its id
-  $("#modelChipLabel").textContent = S.engine.describe();
+  $("#modelChipLabel").textContent = chipLabel(S.engine.describe());
   $("#modelChip").classList.toggle("rented", S.engine.kind === "hosted" || S.engine.kind === "openrouter" || (S.engine.kind === "server" && !!S.where));
 }
 
@@ -3914,7 +4523,8 @@ async function toggleWebMenu() {
     kids.push(el("div", { class: "model-group" }, "OpenRouter, your key — OpenRouter reads each turn"));
     if (key) {
       for (const m of RECOMMENDED) kids.push(item(m.label, `${m.maker} · ${m.licence} · tested with Lodestone`, cur.tier === "openrouter" && (cur.model || DEFAULT_REMOTE) === m.id, { tier: "openrouter", model: m.id }));
-      if (cur.tier === "openrouter" && cur.model && !RECOMMENDED.some(m => m.id === cur.model)) kids.push(item(cur.model, assess(cur.model).note, true, { tier: "openrouter", model: cur.model }));
+      for (const m of OFFERED) kids.push(item(m.label, `${m.maker} · ${m.licence} · not recommended · doctrinal fidelity`, cur.tier === "openrouter" && cur.model === m.id, { tier: "openrouter", model: m.id }));
+      if (cur.tier === "openrouter" && cur.model && ![...RECOMMENDED, ...OFFERED].some(m => m.id === cur.model)) kids.push(item(cur.model, assess(cur.model).note, true, { tier: "openrouter", model: cur.model }));
       const inp = el("input", { type: "text", placeholder: "Any other model id", spellcheck: "false", "aria-label": "Another model id on OpenRouter" });
       const go = () => { const id = inp.value.trim(); if (id) switchWebTo({ tier: "openrouter", model: id }); };
       inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); go(); } });
@@ -3938,12 +4548,9 @@ async function toggleWebMenu() {
   if (pc) kids.push(el("div", { class: "model-group" }, S.pairedWhere ? `Your computer — it rents from ${HOST_LABEL[S.pairedWhere] || S.pairedWhere}` : "Your computer — nothing leaves your network"), item(`Lodestone Desktop · ${pc.name}`, `over your Wi-Fi, at ${pc.base}`, cur.tier === "server" && !!S.settings.server?.paired, { tier: "server", computer: true }));
   let sameOrigin = false; try { sameOrigin = !!S.settings.server?.baseUrl && new URL(S.settings.server.baseUrl).origin === location.origin; } catch {}
   if (S.settings.server?.model && sameOrigin) kids.push(el("div", { class: "model-group" }, "Your computer — nothing leaves your network"), item(S.settings.server.model, "the model server that served this page", cur.tier === "server", { tier: "server" }));
-  if (localInferenceAvailable() && TIERS.standard) {
-    kids.push(el("div", { class: "model-group" }, "In this browser — nothing leaves this device"));
-    for (const k of TIERS.standard.models) kids.push(item(k, `${MODELS[k].note} · about ${Math.round(MODELS[k].gb)} GB, downloaded once`, cur.tier === "standard" && (S.settings.modelKey || TIERS.standard.models[0]) === k, { tier: "standard", modelKey: k }));
-  }
   kids.push(el("div", { class: "model-group" }, "No model"), item("Read and search only", "the passages that bear on a question", cur.tier === "reader", { tier: "reader" }));
   kids.push(el("button", { class: "model-manage", type: "button", onclick: async () => { closeModelMenu(); S.engineReady = false; S.engine = null; await showSetup(); } }, "Keys, account and where Lodestone thinks…"));
+  costInMenu(kids);
   menu.replaceChildren(...kids);
   menu.hidden = false; $("#modelChip").setAttribute("aria-expanded", "true");
 }
@@ -4104,18 +4711,30 @@ function openReader(i) {
 
 // Settings → Advanced: folders Lodestone may read
 async function renderFolders(r) {
-  if (!DESKTOP?.foldersList) return;
-  r = r || await DESKTOP.foldersList().catch(() => ({ folders: [] }));
+  if (!FOLDERS) {
+    $("#setFolders").replaceChildren(el("p", { class: "fine" }, isHandheld()
+      ? "Folders are read on a computer: in Lodestone Desktop, or in Chrome, Edge or Brave on a computer."
+      : "This browser cannot give Lodestone a folder to read. Chrome, Edge or Brave can, and so can Lodestone Desktop."));
+    for (const id of ["#setFolderAdd", "#setFolderReread", "#setFolderAllow"]) { const b = $(id); if (b) b.hidden = true; }
+    $("#setFoldersWhere").textContent = ""; $("#setFoldersStats").textContent = "";
+    return;
+  }
+  r = r || await FOLDERS.foldersList().catch(() => ({ folders: [] }));
   const box = $("#setFolders"); box.innerHTML = "";
-  for (const p of r.folders) box.append(el("div", { class: "folder-row" }, el("span", { class: "p", title: p }, p),
-    el("button", { class: "btn ghost", type: "button", onclick: async () => renderFolders(await DESKTOP.foldersRemove(p)) }, "Remove")));
+  r.folders.forEach((p, i) => box.append(el("div", { class: "folder-row" }, el("span", { class: "p", title: p }, p),
+    r.waiting?.includes(r.ids?.[i]) ? el("span", { class: "fine" }, "not allowed now") : null,
+    el("button", { class: "btn ghost", type: "button", onclick: async () => renderFolders(await FOLDERS.foldersRemove(r.ids?.[i] || p)) }, "Remove"))));
   if (!r.folders.length) box.append(el("p", { class: "fine" }, "No folder yet."));
   $("#setFolderReread").hidden = !r.folders.length;
+  { const a = $("#setFolderAllow"); if (a) a.hidden = !r.waiting?.length; }
   renderVault();
   $("#setFoldersStats").textContent = r.stats ? `${r.stats.files.toLocaleString()} files read, ${r.stats.chunks.toLocaleString()} passages${r.stats.skipped ? ` (${r.stats.skipped} files over 2 MB left out)` : ""}.` : "";
   $("#setFoldersWhere").textContent = S.where
     ? `Lodestone is thinking with a rented model (${S.where}): the passages it uses from these folders travel with each message to that provider, which can read them.`
-    : "Lodestone is thinking on this computer: nothing from these folders leaves it.";
+    : DESKTOP ? "Lodestone is thinking on this computer: nothing from these folders leaves it."
+    : !r.folders.length ? ""
+    : ["openrouter", "hosted", "server"].includes(S.engine?.kind) ? `The browser lets Lodestone read these folders, and only read them. The passages it uses travel with each message to ${WHERE_LABEL[S.engine.kind]}, which can read them.`
+    : "The browser lets Lodestone read these folders, and only read them; the model runs in this browser, so nothing from them leaves this device.";
 }
 
 // Settings → Spoken replies, and the chip under the message box.
@@ -4145,7 +4764,7 @@ async function renderVoiceSettings() {
   $("#setVoiceSourceHint").textContent = plan ? voicePlanLine(plan)
     : v.source === "provider" ? "No natural voice can be reached yet: paste a key below, think with OpenRouter or your harmonism.io account, or sign in to it. Until then this device's own voices read."
     : v.source === "device" ? "Answers are read by this device's own voices: nothing leaves it."
-    : convLocal() && hasVoiceRoute() ? "Lodestone is thinking on this device, so its voice stays here too: choose Natural voice to have answers read by Grok's voices instead."
+    : hasVoiceRoute() ? "This device's own voices read: nothing leaves it. Choose Natural voice to have answers read by Grok's voices instead: the text of each answer then goes to the provider to be read."
     : "This device's own voices read: nothing leaves it. A natural voice needs an OpenRouter, xAI or OpenAI key, or your harmonism.io account.";
   if (plan?.zdr) $("#setVoiceSourceHint").append(" ", el("button", { type: "button", class: "btn ghost small", onclick: async () => {
     clearPolicyBlocks(); S.voiceSubNoted = false; speaker.stop();
@@ -4223,8 +4842,16 @@ function renderRecallSetting() {
   if (where) where.textContent = !S.retriever?.embedQuery ? "Deep retrieval is not loaded on this device, so nothing is recalled here." : S.where && recallOn() ? `What is recalled travels with the message to ${S.where}, which can read it.` : "";
 }
 
+function renderLearnSetting() {
+  const box = $("#setLearn"); if (!box) return;
+  held.learnFromApps().then(on => { box.checked = on; });
+  box.onchange = async () => { await held.setLearnFromApps(box.checked); toast(box.checked ? "harmonism.io keeps what Lodestone has learned of you up to date from conversations on this device." : "Conversations on this device no longer go to harmonism.io to update what Lodestone has learned of you.", 6000); };
+}
+
 async function renderSettings() {
   renderRecallSetting();
+  renderLearnSetting();
+  renderImprove();
   renderFolders();
   renderLifeBook();
   renderSync();
@@ -4264,8 +4891,9 @@ async function renderSettings() {
       } }, "Sign out"));
     } else {
       for (const m of RECOMMENDED) sel.append(el("option", { value: m.id }, `${m.label} · ${m.maker} · tested with Lodestone`));
+      for (const m of OFFERED) sel.append(el("option", { value: m.id }, `${m.label} · ${m.maker} · not recommended · doctrinal fidelity`));
       const cur = S.settings.remote?.model;
-      if (cur && !RECOMMENDED.some(m => m.id === cur)) sel.append(el("option", { value: cur }, `${cur} · ${assess(cur).note}`));
+      if (cur && ![...RECOMMENDED, ...OFFERED].some(m => m.id === cur)) sel.append(el("option", { value: cur }, `${cur} · ${assess(cur).note}`));
       sel.value = cur || RECOMMENDED[0]?.id;
       sel.onchange = () => reengine(sel.value);
       acct.append(el("button", { class: "btn ghost", type: "button", onclick: async () => {
@@ -4277,12 +4905,12 @@ async function renderSettings() {
   } else if (DESKTOP) {
     const info = await DESKTOP.info().catch(() => ({}));
     kvBox.innerHTML = "";
-    S.where = info.remote?.host || null;
+    S.where = info.remote?.host || null; S.whereModel = info.remote?.model || "";
     kvBox.append(el("div", {}, el("b", {}, S.where ? `Rented from ${S.where}, with your key` : "On this computer")), el("div", {}, info.label || "Lodestone's model"),
       el("div", {}, "Context 32,768 tokens · full doctrinal backbone"));
     sel.parentElement.hidden = true;
     $("#setChangeTier").textContent = "Change model…";
-    $("#setCheckUpdate").textContent = "Check for updates (Lodestone and the corpus)";
+    $("#setCheckUpdate").textContent = "Check for updates";
     S.desktopVersion = info.version || null;
   } else if (t.engine === "webllm") {
     sel.parentElement.hidden = false;
@@ -4302,6 +4930,10 @@ async function renderSettings() {
   $("#setLang").value = S.settings.lang || "auto";
   const p = S.pack.runtime.pack;
   $("#setCorpus").innerHTML = "";
+  const ver = DESKTOP ? (S.desktopVersion ? `Lodestone Desktop ${S.desktopVersion}` : "") : (vname(S.appVersion) ? `Lodestone ${vname(S.appVersion)}` : "");
+  $("#setVersion").textContent = ver || "Lodestone";
+  if (ver || S.appReady) $("#setCorpus").append(el("div", {}, ver ? el("b", {}, ver) : null,
+    S.appReady && !DESKTOP ? [" · a newer version (", vname(S.appReady), ") is installed: ", reloadButton("Reload to use it")] : null));
   $("#setCorpus").append(
     el("div", {}, el("b", {}, `${p.articles} articles`), ` · ${p.chunks} passages · ${(p.corpus_bytes / 1e6).toFixed(1)} MB`),
     el("div", {}, `Built ${new Date(p.built_at).toLocaleString()} · backbone v${p.backbone_full_version}`),
@@ -4337,9 +4969,42 @@ async function renderSettings() {
         ? `Lodestone${S.desktopVersion ? " " + S.desktopVersion : ""}. Retrieval, the safeguards and memory run on this computer; each turn's question and context go to ${S.where}, which answers it. There is no telemetry. Lodestone, the corpus and the library update only when you ask.`
         : `Lodestone${S.desktopVersion ? " " + S.desktopVersion : ""}. Inference, retrieval and memory run on this computer. There is no telemetry. Lodestone, the corpus and the library update only when you ask.`)
     : remoteKind
-    ? `Lodestone. Retrieval, the safeguards and memory run on this device; each turn's question and context go to ${S.engine.where}, which answers it. There is no telemetry. The corpus updates only when you ask it to.`
-    : "Lodestone. Inference, retrieval and memory run on hardware you own. There is no telemetry. The corpus updates only when you ask it to.";
+    ? `Lodestone${vname(S.appVersion) ? " " + vname(S.appVersion) : ""}. Retrieval, the safeguards and memory run on this device; each turn's question and context go to ${S.engine.where}, which answers it. There is no telemetry. The corpus updates only when you ask it to.`
+    : `Lodestone${vname(S.appVersion) ? " " + vname(S.appVersion) : ""}. Inference, retrieval and memory run on hardware you own. There is no telemetry. The corpus updates only when you ask it to.`;
+  if (!DESKTOP) $("#setCheckUpdate").textContent = "Check for updates";
 }
+
+// ─── The app's version and its updates (web) ─────────────────────────────────
+
+/** The version a service worker reports ("munai-offline-shell-v67"), or null. */
+function swVersion(worker = navigator.serviceWorker?.controller) {
+  if (!worker) return Promise.resolve(null);
+  return new Promise(res => {
+    const ch = new MessageChannel(); const t = setTimeout(() => res(null), 1500);
+    ch.port1.onmessage = e => { clearTimeout(t); res(e.data?.version || null); };
+    try { worker.postMessage({ type: "version" }, [ch.port2]); } catch { clearTimeout(t); res(null); }
+  });
+}
+const vnum = v => Number(String(v || "").match(/v(\d+)\s*$/)?.[1] || 0);
+const vname = v => (vnum(v) ? `v${vnum(v)}` : "");
+/** The newest version published, read from the worker's own file on the server. */
+async function latestAppVersion() {
+  const r = await fetch(new URL("../sw.js", import.meta.url), { cache: "no-store" });
+  if (!r.ok) throw new Error(`harmonism.io answered ${r.status}`);
+  return (await r.text()).match(/const VERSION = "([^"]+)"/)?.[1] || null;
+}
+/** Take the newest version now: the worker updates, then the page reloads into it. */
+async function updateAndReload(msg) {
+  if (msg) msg.textContent = "Updating…";
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration();
+    const changed = new Promise(r => { navigator.serviceWorker?.addEventListener("controllerchange", r, { once: true }); setTimeout(r, 15000); });
+    await reg?.update();
+    if (reg?.installing || reg?.waiting) await changed;
+  } catch (e) { console.warn("[update]", e); }
+  location.reload();
+}
+const reloadButton = (label = "Reload Lodestone") => el("button", { class: "btn ghost", type: "button", onclick: () => location.reload() }, label);
 
 // ─── Chrome ──────────────────────────────────────────────────────────────────
 
@@ -4385,7 +5050,8 @@ function openPage(d) {
   if (d.id === "drawerMe") refreshProfileView();
 }
 function pageSections(d) {
-  return [...d.querySelectorAll("section[data-nav]")].filter(s => !s.hidden && s.offsetParent !== null && s.parentElement.closest("section") === null);
+  // A group of sections (Settings, 1.14.1) is one item; a section inside it is not.
+  return [...d.querySelectorAll("[data-nav]")].filter(s => !s.hidden && s.offsetParent !== null && s.parentElement.closest("section, [data-nav]") === null);
 }
 function drawPageNav(d) {
   const box = d.querySelector(".page-nav-items"); if (!box) return;
@@ -4474,7 +5140,7 @@ function syncDock() {
 function setDock(on) { try { localStorage.setItem(DOCK_KEY, on ? "1" : "0"); } catch {} syncDock(); }
 wideMQ.addEventListener("change", syncDock);
 
-function autosize() { const t = $("#input"); t.style.height = "auto"; t.style.height = Math.min(180, t.scrollHeight) + "px"; }
+function autosize() { const t = $("#input"); t.style.height = "auto"; t.style.height = Math.min(240, t.scrollHeight) + "px"; }
 
 let toastT;
 // ─── Desktop: the model menu ────────────────────────────────────────────────
@@ -4494,9 +5160,37 @@ function modelLabelOf(q, withCount = false) {
   if (q.current.kind === "upstream") return q.current.label;
   return null;
 }
+/** This install as it stands, for the <lodestone_self> block: facts only, nothing of the conversation. */
+async function selfState() {
+  const out = [];
+  const ver = DESKTOP ? (S.desktopVersion ? `Lodestone Desktop ${S.desktopVersion}` : "Lodestone Desktop") : `Lodestone web app${vname(S.appVersion) ? " " + vname(S.appVersion) : ""}`;
+  out.push(`${ver}, on ${DESKTOP ? "a computer" : isHandheld() ? "a phone or tablet" : "a computer's browser"}${S.appReady ? "; a newer version is installed and runs after a reload" : ""}.`);
+  const label = currentModelLabel() || S.engine?.describe?.() || "";
+  const route = S.engine?.kind === "hosted" ? "the harmonism.io account" : S.engine?.kind === "openrouter" ? "OpenRouter, under the practitioner's own key" : S.where ? `${S.where}, rented under the practitioner's key` : "this device, offline";
+  out.push(`Thinking with: ${label || "no model chosen"}, through ${route}.`);
+  const art = S.pack?.corpus?.articles?.length, built = S.pack?.runtime?.pack?.built_at;
+  if (art) out.push(`Corpus on this device: ${art} articles${built ? `, built ${new Date(built).toLocaleDateString("en-GB")}` : ""}.`);
+  const v = voiceSettings();
+  out.push(`Answers are ${v.mode === "text" ? "written only, not read aloud" : `also read aloud (${v.gender} voice)`}; dictation ${S.settings.dictSource === "provider" ? "goes through OpenRouter" : "is transcribed on this device"}.`);
+  out.push(`Remembering earlier conversations: ${recallOn() ? "on" : "off"}.`);
+  const cap = Number(S.settings.spendCap) || 0;
+  if (cap > 0) out.push(`Monthly limit for rented models: ${fmtCost(cap)}.`);
+  if (lifeBookOn()) {
+    const es = await lifeBookEntries().catch(() => []);
+    const live = es.filter(e => !e.off), kept = es.filter(e => /^Kept\//i.test(e.rel));
+    out.push(es.length ? `Life book: ${live.length} note${live.length === 1 ? "" : "s"} read back (${live.slice(0, 14).map(e => e.rel.replace(/\.md$/i, "")).join(", ")}${live.length > 14 ? ", …" : ""})${kept.length ? `; ${kept.length} on the shelf of kept answers` : ""}.` : "Life book: empty so far.");
+  } else out.push("Life book: not set up (in Lodestone Desktop, choose the vault in Settings → Memory).");
+  const acct = !DESKTOP ? await Promise.race([hosted.account().catch(() => null), new Promise(r => setTimeout(() => r(null), 800))]) : null;
+  if (!DESKTOP) out.push(acct ? "Signed in to a harmonism.io account." : "Not signed in to a harmonism.io account.");
+  return out;
+}
+
+/** The model button's label: on a phone, the model alone; where it runs is in the menu (1.14.1). */
+const chipLabel = s => isHandheld() ? String(s || "").replace(/\s+·\s+(openrouter\.ai|harmonism\.io|OpenRouter)$/i, "") : s;
+
 function currentModelLabel() {
   if (DESKTOP) return modelLabelOf(S.models) || S.engine?.describe() || null;
-  if (S.engine?.kind === "openrouter") return `${RECOMMENDED.find(m => m.id === S.engine.model)?.label || S.engine.model} · OpenRouter`;
+  if (S.engine?.kind === "openrouter") return `${[...RECOMMENDED, ...OFFERED].find(m => m.id === S.engine.model)?.label || S.engine.model} · OpenRouter`;
   return S.engine?.describe() || null;
 }
 
@@ -4505,7 +5199,7 @@ async function refreshModelChip() {
   if (!q) return;
   S.models = q;
   const label = modelLabelOf(q, true) || "Choose a model";
-  $("#modelChipLabel").textContent = label;
+  $("#modelChipLabel").textContent = chipLabel(label);
   $("#modelChip").classList.toggle("rented", q.current.kind === "remote" || q.current.kind === "hosted");
   $("#modelRow").hidden = false;
 }
@@ -4536,6 +5230,7 @@ async function toggleModelMenu() {
     kids.push(el("div", { class: "model-group" }, `Rented from ${q.remote.host} — the provider reads each turn`));
     const seen = new Set();
     for (const m of q.recommended) { seen.add(m.id); kids.push(item(m.label, `${m.maker} · ${m.licence} · tested with Lodestone`, cur.kind === "remote" && cur.model === m.id, { kind: "remote", model: m.id })); }
+    for (const m of q.offered || []) { seen.add(m.id); kids.push(item(m.label, `${m.maker} · ${m.licence} · not recommended · doctrinal fidelity`, cur.kind === "remote" && cur.model === m.id, { kind: "remote", model: m.id })); }
     for (const id of q.recent) if (!seen.has(id)) { seen.add(id); kids.push(item(id, q.assess?.[id]?.note || "not tested against the doctrine", cur.kind === "remote" && cur.model === id, { kind: "remote", model: id })); }
     const inp = el("input", { type: "text", placeholder: "Any other model id", spellcheck: "false", "aria-label": "Another model id" });
     const go = () => { const id = inp.value.trim(); if (id) switchModelTo({ kind: "remote", model: id }, id); };
@@ -4545,6 +5240,7 @@ async function toggleModelMenu() {
     kids.push(el("p", { class: "model-note" }, q.hosted ? "A model rented under your own key (OpenRouter, Venice…) is set up in Model…" : "Ten free messages a day with your harmonism.io account, or a model rented under your own key: both in Model…"));
   }
   kids.push(el("button", { class: "model-manage", type: "button", onclick: () => { closeModelMenu(); DESKTOP.openModels(); } }, "Models and keys…"));
+  costInMenu(kids);
   menu.replaceChildren(...kids);
   menu.hidden = false; $("#modelChip").setAttribute("aria-expanded", "true");
 }
@@ -4558,7 +5254,7 @@ async function switchModelTo(choice, label) {
   $("#modelChipLabel").textContent = choice.kind === "local" ? `Waking ${label}…` : `Switching to ${label}…`;
   try {
     await DESKTOP.switchModel(choice);
-    S.where = (await DESKTOP.info().catch(() => ({}))).remote?.host || null;
+    { const r = (await DESKTOP.info().catch(() => ({}))).remote; S.where = r?.host || null; S.whereModel = r?.model || ""; }
     $("#chat").append(el("div", { class: "model-switch", role: "status" }, `Now thinking with ${choice.kind === "remote" ? recLabel(q, choice.model) : label}`));
     $("#chat").scrollTop = $("#chat").scrollHeight;
   } catch (e) {
@@ -4644,7 +5340,7 @@ async function addFiles(list) {
       }
       const canSee = vision === "yes" || vision === "maybe";
       if (item.kind === "image" && !canSee) throw new Error(vision === "download" ? "Not attached: the model cannot see images until its vision is downloaded." : `${info.label || "This model"} cannot see images. A Gemma model, or a rented model such as Claude, can.`);
-      const language = speechLanguage(S.settings.lang && S.settings.lang !== "auto" ? S.settings.lang : navigator.language);
+      const language = speechLanguage(dictCode());   // recordings, like dictation: heard, unless a language is set
       item.data = item.data || await readAttachment(file, { canSee, language, status: say, convert: convertFile });
       if (item.data.kind === "pdf" && item.data.scanned && !item.data.images?.length && !item.data.text) throw new Error("This PDF is pictures of pages, and the model in use cannot see. Attach it with a model that can see.");
       if (!item.data.text?.trim() && !item.data.images?.length) throw new Error(item.kind === "audio" ? "Nothing was heard in it." : "Nothing readable in it.");
@@ -4685,17 +5381,17 @@ async function droppedFiles(dt) {
 }
 
 // ─── Voice through a provider ─────────────────────────────────────────
-// Recordings are written out through OpenRouter whenever an OpenRouter key is
-// saved, on the desktop too, whatever model the conversation uses (1.13.2:
-// Whisper small on the computer was too slow); else through the conversation's
-// own provider (harmonism.io's hosted models). Whisper on the device is chosen
-// in Settings → Dictation ("On this device"), or used where no provider is.
+// A provider writes recordings out only once the practitioner has chosen it
+// (October 23, 2026): asked once where one can be reached, or in Settings →
+// Dictation. It is OpenRouter when an OpenRouter key is saved, on the desktop
+// too; else the conversation's own provider (harmonism.io's hosted models).
+// Until then Whisper writes them out on the device.
 const voiceProvider = () => (S.orVoiceKey || providerOf(S.engine) === "openrouter" ? "openrouter" : DESKTOP ? null : providerOf(S.engine));
 const orKeyNow = async () => (DESKTOP ? await DESKTOP.syncKeyGet?.().catch(() => null) : null) || await secrets.get("openrouter").catch(() => null);
 /** Whether an OpenRouter key is saved, for voiceProvider(); asked again before each recording. */
 async function refreshVoiceKey() { S.orVoiceKey = !!(await orKeyNow()); return S.orVoiceKey; }
 async function voiceCtx(p) { return p === "openrouter" ? { key: await orKeyNow() } : { call: (u, i) => hosted.call(u, i) }; }
-const dictViaProvider = () => !!voiceProvider() && S.settings.dictSource !== "device";
+const dictViaProvider = () => !!voiceProvider() && S.settings.dictSource === "provider";
 const speakViaProvider = () => !!voicePlanCache;
 
 // ─── Natural voices ─────────────────────────────────────────────────
@@ -4732,7 +5428,8 @@ async function voicePlan() {
   const v = voiceSettings();
   const c = await voiceCreds();
   if (v.source === "device") return (voicePlanCache = null);
-  if (v.source !== "provider" && convLocal() && !c.voiceKey) return (voicePlanCache = null);
+  // A natural voice reads only once chosen, or once a key was given for voice alone (October 23, 2026).
+  if (v.source !== "provider" && !c.voiceKey) return (voicePlanCache = null);
   const have = { openrouter: !!c.keys.openrouter, xai: !!c.keys.xai, openai: !!c.keys.openai, account: c.account };
   const r = chooseRoute(v.family, have, c.conv);
   if (!r) return (voicePlanCache = null);
@@ -4748,8 +5445,12 @@ function voicePlanLine(plan) {
     : c.own?.[plan.route] ? `${ROUTE_LABEL[plan.route]}, on the key you gave for voice` : `${ROUTE_LABEL[plan.route]}, on your key`;
   return `Read by ${f.label}'s ${f.voices}, through ${via}: the text of each answer goes to ${ROUTE_LABEL[plan.route]} to be read.${plan.zdr ? " (Your OpenRouter account accepts only providers that keep nothing, and Grok's voice is not one: allow it at openrouter.ai/settings/privacy, or paste an xAI key, to hear Ara and Rex.)" : ""}${plan.instead ? ` (${FAMILIES[voiceSettings().family]?.label || "The voice chosen"} needs an OpenRouter key.)` : ""} Answers to someone in distress are never read unasked.`;
 }
-/** The language to tell the provider: the one set for dictation or replies, else let it hear. */
-const dictCode = () => { const l = S.settings.dictLang && S.settings.dictLang !== "auto" ? S.settings.dictLang : S.settings.lang && S.settings.lang !== "auto" ? S.settings.lang : ""; return l ? l.slice(0, 2) : null; };
+/**
+ * The language set for dictation, as a two-letter code, or null for Whisper to hear it.
+ * Never the reply language or the device's: naming English to Whisper while French is
+ * spoken makes it translate into English instead of writing down what was said.
+ */
+const dictCode = () => { const l = S.settings.dictLang && S.settings.dictLang !== "auto" ? S.settings.dictLang : ""; return l ? l.slice(0, 2) : null; };
 
 /**
  * How a recording is written out on the web: "provider", "device" (the speech
@@ -4758,7 +5459,7 @@ const dictCode = () => { const l = S.settings.dictLang && S.settings.dictLang !=
 async function chooseSpeechRoute(why, dictating = false) {
   await refreshVoiceKey();
   const p = voiceProvider();
-  if (p && S.settings.dictSource !== "device") return "provider";
+  if (p && S.settings.dictSource === "provider") return "provider";
   if (S.settings.dictSource !== "provider" && await speechWeb.speechReady()) return "device";
   if (p && !S.settings.dictSource) {
     const viaP = confirm(`${why}: write it out through ${PROVIDER_LABEL[p]}?\n\nOK — the recording is sent to ${PROVIDER_LABEL[p]}${p === "account" ? " and the transcription service it uses" : ""}, which writes it out. Nothing to download.\nCancel — download the speech model once (about ${speechWeb.MB} MB); your voice then stays on this device.\n\nSettings → Dictation changes this at any time.`);
@@ -4807,8 +5508,7 @@ async function ensureWebSpeech(why, dictating = false) {
 
 const D = { rec: null, timer: null, start: 0, working: false };
 const canRecord = () => !!((DESKTOP ? DESKTOP.asrDownload : (speechWeb.speechStorable() && window.Worker) || voiceProvider()) && navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
-const dictLanguage = () => speechLanguage(S.settings.dictLang && S.settings.dictLang !== "auto" ? S.settings.dictLang
-  : S.settings.lang && S.settings.lang !== "auto" ? S.settings.lang : navigator.language);
+const dictLanguage = () => speechLanguage(dictCode());
 
 function setMic() {
   const b = $("#micBtn"); if (!b) return;
@@ -4957,6 +5657,13 @@ function talkEnd(why = "") {
 async function ensureSpeechModel(local = false) {
   if (!DESKTOP) return (await chooseSpeechRoute("To dictate", true)) !== null;
   if (!local && (await refreshVoiceKey(), dictViaProvider())) return true;
+  // A provider can be reached and none was chosen: asked once, before anything is sent.
+  const vp = voiceProvider();
+  if (!local && vp && !S.settings.dictSource) {
+    const viaP = confirm(`To dictate: write it out through ${PROVIDER_LABEL[vp]}?\n\nOK — each recording is sent to ${PROVIDER_LABEL[vp]}, which writes it out.\nCancel — Lodestone writes it out on this computer: your voice goes nowhere.`);
+    S.settings.dictSource = viaP ? "provider" : "device"; await store.kv.set("settings", S.settings);
+    if (viaP) return true;
+  }
   const info = await DESKTOP.info().catch(() => ({}));
   if (info.asr) return true;
   if (!confirm(`To dictate, Lodestone needs its speech model (${info.asrLabel || "Whisper"}, about ${info.asrMB || 250} MB). It is downloaded once and runs on this computer: your voice goes nowhere. Download it now?`)) return false;
@@ -5123,7 +5830,7 @@ async function renderDictation() {
   if (!DESKTOP && !canRecord()) kv.append(el("div", { class: "fine" }, "This browser cannot record or keep the speech model here."));
   // Through the provider, where the route has one.
   await refreshVoiceKey();
-  const p = voiceProvider(), src = S.settings.dictSource !== "device" && p ? "provider" : "device";
+  const p = voiceProvider(), src = S.settings.dictSource === "provider" && p ? "provider" : "device";
   $("#setDictSource").hidden = $("#setDictSourceHint").hidden = !p;
   if (p) {
     [...$("#setDictSource").children].forEach(b => { b.setAttribute("aria-pressed", String(b.dataset.v === src)); if (b.dataset.v === "provider") b.textContent = `Through ${PROVIDER_LABEL[p]}`; });
@@ -5363,10 +6070,12 @@ function bindChrome() {
     S.settings.theme = v; applyTheme(v); await store.kv.set("settings", S.settings); renderSettings();
   };
   $("#setLang").onchange = async e => { S.settings.lang = e.target.value; await store.kv.set("settings", S.settings); };
-  if (DESKTOP?.foldersAdd) {
-    $("#setFolderAdd").onclick = async () => { try { renderFolders(await DESKTOP.foldersAdd()); } catch (e) { toast(String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ""), 6000); } };
-    $("#setFolderReread").onclick = async () => { $("#setFoldersStats").textContent = "Reading…"; renderFolders(await DESKTOP.foldersReread()); };
+  if (FOLDERS?.foldersAdd) {
+    $("#setFolderAdd").onclick = async () => { try { if (!DESKTOP) $("#setFoldersStats").textContent = "Reading…"; renderFolders(await FOLDERS.foldersAdd()); } catch (e) { toast(String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ""), 6000); } };
+    $("#setFolderReread").onclick = async () => { $("#setFoldersStats").textContent = "Reading…"; renderFolders(await FOLDERS.foldersReread()); };
+    if (FOLDERS.foldersAllow) $("#setFolderAllow").onclick = async () => { $("#setFoldersStats").textContent = "Reading…"; renderFolders(await FOLDERS.foldersAllow()); };
   }
+  $("#setLbOrganize").onclick = () => organizeLifeBook();
   if (DESKTOP?.lifebookChoose) {
     $("#setLbChoose").onclick = async () => { try { S.lifeBook = await DESKTOP.lifebookChoose(); lbCache.at = 0; renderLifeBook(); renderChat(); renderVault(); } catch (e) { toast(String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ""), 7000); } };
     $("#setLbForget").onclick = async () => { S.lifeBook = await DESKTOP.lifebookForget(); lbCache = { at: 0, entries: [] }; renderLifeBook(); renderChat(); renderVault(); };
@@ -5381,10 +6090,19 @@ function bindChrome() {
     const m = $("#setUpdateMsg");
     if (DESKTOP) return DESKTOP.openUpdates();
     m.textContent = "Asking…";
+    // Lodestone itself first: the newest published version against the one running here.
+    const app = el("p", {});
+    try {
+      const latest = await latestAppVersion();
+      const here = S.appReady || S.appVersion;
+      if (latest && vnum(latest) > vnum(here)) app.append(`Lodestone ${vname(latest)} is available${vname(here) ? ` (this is ${vname(here)})` : ""}. `, el("button", { class: "btn ghost", type: "button", onclick: () => updateAndReload(app) }, "Update and reload"));
+      else if (S.appReady) app.append(`Lodestone ${vname(S.appReady)} is installed and runs after a reload. `, reloadButton());
+      else app.append(`Lodestone is current${vname(here) ? ` (${vname(here)})` : ""}. `, reloadButton());
+    } catch (e) { app.append(`Could not ask harmonism.io for the newest Lodestone (${e.message}). `, reloadButton()); }
     try {
       const r = await corpusPack.checkForUpdate();
-      if (!r.newer) { m.textContent = "This device holds the current corpus."; return; }
-      m.textContent = `A newer pack exists (${r.remote.articles} articles, built ${new Date(r.remote.built_at).toLocaleDateString()}).`;
+      if (!r.newer) { m.replaceChildren(app, el("p", {}, "This device holds the current corpus.")); return; }
+      m.replaceChildren(app, el("p", {}, `A newer corpus exists (${r.remote.articles} articles, built ${new Date(r.remote.built_at).toLocaleDateString()}).`));
       m.append(" ", el("button", { class: "btn ghost", type: "button", onclick: async () => {
         m.textContent = "Downloading…";
         await corpusPack.install({ semantic: S.settings.semantic !== false, onProgress: (k, f) => (m.textContent = `Downloading ${k}… ${Math.round(f * 100)}%`) });
@@ -5395,7 +6113,7 @@ function bindChrome() {
         if (eq && embeddings) S.retriever.embedQuery = eq;
         m.textContent = "Corpus updated."; renderSettings(); updateBadge();
       } }, "Update now"));
-    } catch (e) { m.textContent = `No answer from the corpus origin (${e.message}). Offline is fine; try again when connected.`; }
+    } catch (e) { m.replaceChildren(app, el("p", {}, `No answer from the corpus origin (${e.message}). Offline is fine; try again when connected.`)); }
   };
   $("#setExport").onclick = async () => {
     const data = await store.exportAll();

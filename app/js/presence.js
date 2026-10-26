@@ -42,14 +42,23 @@ export function bellText(lang, sinceMs) {
   return (BELL[lang] || BELL.en)(hours);
 }
 
+/**
+ * The care mark (1.13.2): on a moment care.js only suspects (level "ask"), the
+ * model ends its reply with it when the moment is real, and the app shows the
+ * crisis line in its place. It never reaches the reader (stripRetrievalNote,
+ * prompt.js, removes it from every reply shown, spoken, stored or sent).
+ */
+export const CARE_MARK = "[[care]]";
+export const hasCareMark = s => /\[\[\s*care\s*\]\]/i.test(String(s || ""));
+
 /** What the model is told on a care moment (care.js). */
 export function careBlock(care) {
   if (!care) return "";
   const shown = care.level === "refer";
   return `<care_check level="${care.level}">
-This message may carry thoughts of not wanting to live, or of harming oneself, said indirectly; or it may not. Read it closely.
-If it does: before anything else, ask plainly and gently whether they are thinking of ending their life or of hurting themselves. Stay with them; take what they say seriously; give no detail of any means. Say that a human being should hear this now, a person they trust and a crisis line${shown ? " (the app shows the line for their country beneath your answer)" : ""}. Do not lecture, do not leave, do not hand them doctrine.
-If it plainly does not (work, a task, a loss told calmly, a practice, a figure of speech): answer what was asked and say nothing about safety.
+This message may carry thoughts of not wanting to live, or of harming oneself, said indirectly; or it may not. Read it closely, in the light of the whole conversation.
+If it does: before anything else, ask plainly and gently whether they are thinking of ending their life or of hurting themselves. Stay with them; take what they say seriously; give no detail of any means. Say that a human being should hear this now, a person they trust and a crisis line${shown ? " (the app shows the line for their country beneath your answer)" : `. Then end your reply with ${CARE_MARK} on a line of its own: the app replaces it with the crisis line for their country`}. Do not lecture, do not leave, do not hand them doctrine.
+If it plainly does not (work, a task, a loss told calmly, a practice, a figure of speech, a short reply in an ordinary conversation): answer what was asked and say nothing about safety${shown ? "" : `; write no ${CARE_MARK}`}.
 </care_check>`;
 }
 

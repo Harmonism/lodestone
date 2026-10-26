@@ -5,7 +5,7 @@
 // computer behind it can still speak with Lodestone:
 //
 //   HostedEngine      harmonism.io's hosted models, under the practitioner's
-//                     harmonism.io account: ten messages a day in total across
+//                     harmonism.io account: ten messages a day the first month, then five, in total across
 //                     the website, Telegram and Lodestone's apps. The turn
 //                     goes to lodestone-desktop-api.php on this same origin, which
 //                     puts the server's own doctrinal backbone in place and
@@ -206,7 +206,7 @@ export class HostedEngine {
     hosted.cached = null;
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
-      throw new Error(j.error?.message || `harmonism.io answered ${res.status}.`);
+      throw Object.assign(new Error(j.error?.message || `harmonism.io answered ${res.status}.`), { code: j.error?.code || null });
     }
     yield* readSSE(res, u => { if (background) this.bgUsage = u; else this.lastUsage = u; });
   }
@@ -230,17 +230,32 @@ export const OPENROUTER_KEYS_URL = "https://openrouter.ai/settings/keys";
 // newer one is read from this site's published model catalog when the
 // practitioner opens the OpenRouter setup.
 //   reasoning "none" asks the provider to answer without deliberating;
+//   "low" / "medium" / "high" ask for that much deliberation;
 //   ""  leaves reasoning on where the provider makes it mandatory, with
 //       minTokens as the floor so the reasoning does not eat the answer.
 // The default wherever Lodestone runs: on the account or under the practitioner's own key.
-export const DEFAULT_REMOTE = "deepseek/deepseek-v4.1-flash";
+export const DEFAULT_REMOTE = "deepseek/deepseek-v4.1-flash-1017";
 export const RECOMMENDED = [
-  { id: "deepseek/deepseek-v4.1-flash", label: "DeepSeek V4.1 Flash", maker: "DeepSeek", licence: "MIT", reasoning: "none", minTokens: 0, note: "The default on harmonism.io" },
+  { id: "deepseek/deepseek-v4.1-flash-1017", label: "DeepSeek V4.1 Flash", maker: "DeepSeek", licence: "MIT", reasoning: "medium", minTokens: 4000, note: "The default on harmonism.io" },
   { id: "z-ai/glm-5.3-flash", label: "GLM-5.3 Flash", maker: "Zhipu", licence: "MIT", reasoning: "", minTokens: 8000, note: "Reasons before every answer" },
   { id: "qwen/qwen3.5-397b-a17b", label: "Qwen 3.5 397B", maker: "Alibaba", licence: "Apache 2.0", reasoning: "none", minTokens: 0, note: "" },
   { id: "nvidia/nemotron-3-ultra-550b-a55b", label: "Nemotron 3 Ultra", maker: "NVIDIA", licence: "OpenMDW 1.1", reasoning: "none", minTokens: 0, note: "" },
 ];
-const recommendedFor = id => RECOMMENDED.find(m => m.id === id) || null;
+// Ids that left the tested list for a successor; the same table as desktop/src/remote.js.
+const RETIRED = { "deepseek/deepseek-v4.1-flash": "deepseek/deepseek-v4.1-flash-1017" };
+const current = id => RETIRED[String(id || "").trim()] || id;
+const recommendedFor = id => RECOMMENDED.find(m => m.id === current(id)) || null;
+
+// Frontier models offered under the practitioner's own key, and not recommended:
+// the strongest models for most things, but not the ones for doctrinal fidelity.
+// Never offered on the harmonism.io account. The same list as desktop/src/remote.js.
+export const OFFERED = [
+  { id: "anthropic/claude-opus-5.5", label: "Claude Opus 5.5", maker: "Anthropic", licence: "closed weights", reasoning: "medium", minTokens: 4000, note: "Not recommended · doctrinal fidelity" },
+  { id: "openai/gpt-6-astra", label: "GPT-6 Astra", maker: "OpenAI", licence: "closed weights", reasoning: "medium", minTokens: 4000, note: "Not recommended · doctrinal fidelity" },
+];
+const offeredFor = id => OFFERED.find(m => m.id === String(id || "").trim()) || null;
+// How a turn is run: a recommended model's settings, else an offered one's.
+const profileFor = id => recommendedFor(id) || offeredFor(id);
 
 /** Take the recommended list from the published catalog, if it can be read. */
 export async function refreshRecommended() {
@@ -263,7 +278,8 @@ export function assess(id) {
   id = String(id || "").trim();
   const tested = RECOMMENDED.some(m => m.id === id);
   const closed = CLOSED_ID.test(id);
-  return { tested, closed, note: tested ? "tested with Lodestone" : closed ? "closed weights · not tested against the doctrine" : "not tested against the doctrine" };
+  const offered = !tested && !!offeredFor(id);
+  return { tested, closed, offered, note: tested ? "tested with Lodestone" : offered ? "not recommended · doctrinal fidelity" : closed ? "closed weights · not tested against the doctrine" : "not tested against the doctrine" };
 }
 
 const orHeaders = key => ({ "Content-Type": "application/json", Authorization: `Bearer ${key}`, "HTTP-Referer": "https://harmonism.io/lodestone", "X-Title": "Lodestone" });
@@ -295,13 +311,14 @@ export class OpenRouterEngine {
     if (!this.key) await this.load();
     const ctrl = new AbortController(); if (background) this.bgUsage = null; else { this.ctrl = ctrl; this.lastUsage = null; }   // a background call (learning, a summary) is not what Stop stops (1.13.1)
     // usage.include: OpenRouter ends the stream with the turn's tokens and its cost in dollars.
-    const body = { model: this.model, messages, stream: true, temperature, max_tokens: maxTokens, usage: { include: true } };
+    const body = { model: current(this.model), messages, stream: true, temperature, max_tokens: maxTokens, usage: { include: true } };
     // A recommended model runs as hosted Lodestone runs it: reasoning off where the
     // provider allows it, a token floor where reasoning is mandatory, and only
     // providers that do not keep the conversation for training.
-    const r = recommendedFor(this.model);
+    const r = profileFor(this.model);
     if (r) {
-      body.reasoning = r.reasoning === "none" ? { effort: "none", exclude: true } : { exclude: true };
+      body.reasoning = r.reasoning === "none" ? { effort: "none", exclude: true }
+        : /^(low|medium|high)$/.test(r.reasoning) ? { effort: r.reasoning, exclude: true } : { exclude: true };
       if (r.minTokens && (body.max_tokens || 0) < r.minTokens) body.max_tokens = r.minTokens;
       body.provider = { data_collection: "deny" };
     }
@@ -312,5 +329,5 @@ export class OpenRouterEngine {
     yield* readSSE(res, u => { if (background) this.bgUsage = u; else this.lastUsage = u; });
   }
   interrupt() { try { this.ctrl?.abort(); } catch {} }
-  describe() { return `${recommendedFor(this.model)?.label || this.model} · openrouter.ai`; }
+  describe() { return `${profileFor(this.model)?.label || this.model} · openrouter.ai`; }
 }

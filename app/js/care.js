@@ -15,8 +15,16 @@
 //
 // A care moment is not the crisis template (the keyword gate's answer, which no
 // model writes): the model answers, told to ask plainly and gently about safety
-// and to stay (prompt: <care_check>), and the app itself adds the crisis line
-// beneath the answer, so the referral never depends on the model.
+// and to stay (prompt: <care_check>). Who shows the crisis line (1.13.2):
+//   refer   a PLAIN phrase, said outright: the app adds the line beneath the
+//           answer whatever the model writes, so that referral never depends on it
+//   ask     an INDIRECT phrase or the meaning layer: neither is sure enough to
+//           put a crisis line under a reader's answer on its own ("I already
+//           know them", at a dinner with the wife's friends, read 0.98). The
+//           model, which reads the whole conversation, decides: if the moment
+//           is real it ends its reply with the care mark ([[care]], presence.js)
+//           and the app puts the line for their country in its place; if not,
+//           it answers as asked and nothing about safety is shown.
 
 import { normalize as norm } from "./safety.js";
 
@@ -24,19 +32,18 @@ import { normalize as norm } from "./safety.js";
 //   PLAIN      said outright, unambiguous: the crisis line is shown (refer);
 //   INDIRECT   said around it, and sometimes about something else ("tired of
 //              living in Paris", "end it all with this company"): the model is
-//              told to ask (ask), and the line is shown only if the meaning
-//              layer also reads it so.
+//              told to read it (ask), and the line is shown only if the model
+//              marks the moment as real (1.13.2).
 export const PLAIN = {
   ideation: [
     "i want to die", "i wanna die", "want to be dead", "wish i was dead", "wish i were dead", "thinking about suicide", "thinking of suicide", "thought about suicide",
     "i am suicidal", "i'm suicidal", "im suicidal", "i feel suicidal", "feeling suicidal", "want to kill myself", "wanna kill myself", "going to kill myself", "gonna kill myself", "i will kill myself", "i'll kill myself",
     "want to end my life", "going to end my life", "thinking of ending my life", "thinking about ending my life", "want to take my own life", "je suis suicidaire",
     "don't want to live anymore", "dont want to live anymore", "don't want to be alive", "dont want to be alive",
-    "better off without me", "better off if i was gone", "better off if i were gone", "better off if i wasn't here", "better off if i weren't here", "nobody would miss me if i",
     "wish i had never been born", "wish i was never born", "nothing to live for", "can't go on living", "cant go on living", "goodbye letters to everyone",
-    "je veux mourir", "me suicider", "je pense au suicide", "mettre fin à mes jours", "en finir avec la vie", "envie d'en finir", "je veux en finir", "mieux sans moi", "plus envie de vivre",
-    "quiero morir", "quiero morirme", "me quiero matar", "quiero matarme", "pienso en el suicidio", "quitarme la vida", "todos estarían mejor sin mí", "estarían mejor sin mí", "no quiero vivir más", "no quiero seguir viviendo",
-    "أريد أن أموت", "اريد ان اموت", "أفكر في الانتحار", "افكر في الانتحار", "أريد الانتحار", "اريد الانتحار", "سأنتحر", "أفضل بدوني", "لا أريد أن أعيش",
+    "je veux mourir", "me suicider", "je pense au suicide", "mettre fin à mes jours", "en finir avec la vie", "envie d'en finir", "je veux en finir", "plus envie de vivre",
+    "quiero morir", "quiero morirme", "me quiero matar", "quiero matarme", "pienso en el suicidio", "quitarme la vida", "no quiero vivir más", "no quiero seguir viviendo",
+    "أريد أن أموت", "اريد ان اموت", "أفكر في الانتحار", "افكر في الانتحار", "أريد الانتحار", "اريد الانتحار", "سأنتحر", "لا أريد أن أعيش",
   ],
   self_harm: [
     "been cutting myself", "keep cutting myself", "started cutting myself", "cutting myself again", "cut myself again", "cut myself on purpose",
@@ -53,6 +60,8 @@ export const INDIRECT = {
     "ne plus me réveiller", "ne jamais me réveiller", "fatigué de vivre", "fatiguée de vivre", "disparaître pour toujours",
     "mejor sin mí", "mejor sin mi", "no despertar nunca", "no despertar más", "acabar con todo", "no quiero vivir", "cansado de vivir", "cansada de vivir",
     "إنهاء كل شيء", "تعبت من الحياة",
+    // Plain once, moved here (1.13.2): said of a team or a meeting as well ("the team is better off without me on this").
+    "better off without me", "better off if i was gone", "better off if i were gone", "better off if i wasn't here", "better off if i weren't here", "nobody would miss me if i", "mieux sans moi", "todos estarían mejor sin mí", "estarían mejor sin mí", "أفضل بدوني",
     // Plain once, moved here (1.13.1): each is also said of someone else, or as a figure of speech
     // ("my brother is suicidal", "I could kill myself laughing", "envie de mourir de rire").
     "suicidal", "kill myself", "end my life", "ending my life", "take my own life", "no reason to live", "j'ai envie de mourir", "envie de mourir",
@@ -85,12 +94,15 @@ export function indirectCare(text) {
 // job, a grandmother's death, killing a process, the ego's death in practice,
 // burning the toast). Left-one-out it caught 75 of 78 and mistook 8 of 74 hard
 // ordinary sentences at 0.5; at 0.8, 3 of 74 (the data, the fit and the
-// leave-one-out run in tools/care-fit/). Two levels:
-//   ASK    (0.5) the model is told to ask plainly about safety, if the message
-//          is about that, and otherwise answer as asked
-//   REFER  (0.8, or a phrase) the app also adds the crisis line under the answer
-export const ASK = 0.5, REFER = 0.8;
-const MODEL = {"w": [0.38773, -0.71199, 2.07421, -0.93759, -0.57054, 3.47491, 2.97745, -3.32208, -2.79858, -1.45795, -5.59751, 1.63135, -1.92998, 5.71112, -6.8122, -8.58403, 6.81551, 1.07704, -4.24474, 1.64887, 10.78422, -1.29934, -4.4598, -3.78087, 9.41825, 9.69861, -0.19695, 12.68745, 1.94967, 3.82302, -0.05694, 4.63845, -8.86399, -2.10467, 13.54964, 4.40657, -1.24424, 4.0274, 5.26613, 12.49736, 1.14183, -3.04927, 1.65887, 2.25188, 4.82107, -6.77596, -9.88201, -2.56265, -0.25963, 1.69033, 1.90796, -8.38747, 7.63046, 0.09572, 1.72759, -6.50005, -8.79019, -8.69891, 1.59458, -6.86695, 9.104, 4.53874, -2.80993, 0.70964, -2.60733, 1.74224, 3.09687, -2.01924, 8.16648, 2.93811, 4.39901, 2.57813, -1.32474, 2.592, -7.4742, -5.78223, -1.55598, 6.25845, 3.94573, -7.88085, 7.90693, -6.11068, 1.22424, -5.59605, 4.23768, 8.36979, 11.64759, 4.94402, 0.39146, -6.5323, 6.81442, -0.68118, -5.54121, 2.03737, -3.50618, 3.53605, 15.56412, -5.5156, -2.70911, -13.30508, 1.82713, 2.10879, 3.43449, -0.07797, 2.83959, 0.04921, 1.71537, 0.44964, -2.47697, 4.6826, -1.84325, -4.63296, -7.57094, -2.65607, 1.53351, 7.41596, 1.73854, 5.16621, -6.3006, -8.09759, 0.76024, 5.52383, -6.06652, -4.20439, -4.57468, 0.39442, 5.47191, 3.14492, 4.23882, -1.87546, 9.48457, -3.78503, -8.18968, 3.81251, 11.50808, -7.23017, -8.00822, -1.49151, -1.78871, -3.79875, 0.26519, 0.81862, -4.39763, 1.67918, -4.78616, -7.46547, -0.01489, 3.28031, -10.65241, -4.289, 1.64328, -5.42747, 5.13295, -8.44092, 6.53186, 11.05424, 0.87384, 4.10071, 4.42238, 2.85812, -4.02247, -1.71663, -7.84339, 5.42694, -4.2331, 1.31225, -0.98086, 1.90996, 4.46988, -7.89725, 0.27619, 0.26196, -0.27866, -4.99158, -7.13692, 4.6004, -12.72013, 1.37406, -8.26585, -3.90312, -9.40481, -3.69896, -4.50916, 1.90223, 8.05197, -0.99207, 8.04161, -5.8577, 1.82047, 6.59082, 1.31208, -1.71334, 3.3719, 6.52355, 1.73978, -4.03645, -5.18834, -7.65163, 7.90988, 2.04701, 9.77229, -6.80373, -5.83903, -9.62602, -0.25273, -3.1132, -0.72218, -1.14751, 1.75456, 6.75024, -6.12393, 0.06152, -0.58524, 4.87596, -4.30597, -11.20446, 4.77968, 5.2432, 4.41553, -0.48956, 1.69206, 3.62441, 1.6756, 13.43964, -7.12254, 1.48808, 5.4873, 0.54028, -8.77635, -1.93061, -6.42161, 5.04406, -6.95886, -1.92547, 3.1813, -7.58077, -3.49737, -8.3751, 7.04883, 6.97456, 5.3224, -4.79311, -5.06637, 6.35748, -0.70884, 0.37125, -8.34513, 2.04726, 7.975, 1.84437, -2.1622, -3.57113, -5.42645, -0.52229, -7.22791, -1.24338, -0.4255, 3.36956, -3.63771, -6.35193, 5.32747, -2.28351, -3.69241, -4.20907, -5.78268, 2.15352, 3.39897, 9.78969, -3.54905, 8.57489, -1.13781, 1.53362, -0.2632, 6.18606, -5.66081, 7.99624, 2.54579, -5.49459, -5.60609, -1.82277, 4.73581, 0.28612, -2.56649, 4.1366, 0.70294, 2.99298, -2.3715, -2.49089, 0.47245, -2.75473, 4.51736, 2.67486, 4.04465, -0.7301, -1.03748, 3.14331, 2.62173, -5.94184, -0.54417, 3.35599, 0.70878, 3.12524, 6.18028, 3.6204, -0.42816, -3.9112, -2.04327, -7.97317, -0.76861, -9.92759, 1.95513, -6.95777, -9.88451, 4.89552, 2.16613, 5.12453, 3.07328, -0.1711, -0.88106, 2.2583, 2.84601, 16.76758, -4.25107, 3.66327, 7.56847, -0.30063, 5.40053, -0.13422, 7.16488, -11.81149, -5.45216, 4.07211, -1.35564, -4.0274, -1.64132, 2.37424, -4.11359, -1.72981, 2.06421, -2.12491, 5.88883, 4.16316, -6.51879, -1.33425, -2.91433, 0.73476, 8.5277, -3.24518, -1.08734, -8.13039, -4.31577, 3.19009, -4.97444, -5.02076, -6.19558, -1.30729, -2.0636, 3.83719, -1.28688, 3.80132, -0.79763, 2.69863, 3.99953, -0.72946, 4.70205, -6.29524, -2.98953, 7.07, 4.37175, 3.26984, 15.93356, -8.8838, -1.19514, 6.2665, 2.7705, 6.07598, -7.81193, 0.57276, -5.25839, -2.72917, -2.76956, -0.96221, -4.39176, 6.22494], "b": -5.79432};
+// leave-one-out run in tools/care-fit/).
+// Refitted in 1.13.2 with 111 short replies of ordinary conversation ("nothing
+// much", "I already know them", "on est au restaurant"), which the first fit had
+// none of: leave-one-out at 0.5, 72 of 78 caught and 13 of 185 ordinary
+// sentences mistaken. A reading this loose only ever asks:
+//   ASK    (0.5) the model is told to read the moment, and to mark it if real;
+//          the app shows the line only on the mark (careBlock, presence.js)
+export const ASK = 0.5;
+const MODEL = {"w": [-3.56196, -0.82955, 3.76125, 0.36758, 0.78508, 4.75538, 3.08309, -9.13922, -4.77406, -1.26005, -6.05743, -3.08802, -0.76157, 8.61088, -7.91455, -12.68347, 9.87143, -0.48357, -2.95867, 2.93182, 9.9037, -1.2818, -3.50632, -3.55982, 4.02344, 11.94009, -0.83087, 9.38807, 1.63234, 4.71865, 0.6845, 3.23416, -9.87414, -4.0665, 12.63078, 2.6731, -1.62486, 3.61658, 5.84991, 12.82381, 2.61919, -2.29911, 0.43071, 5.35207, -2.84017, -5.39446, -8.58796, -1.27262, 1.21417, 0.53012, -2.76424, -10.59307, 5.59772, 3.13209, 0.44299, -8.42897, -10.19622, -6.34248, 3.00828, -4.09219, 5.40592, 6.76993, -2.73965, 4.11944, -2.15094, 3.65027, 3.07506, -0.51323, 8.68138, 1.27712, 1.08238, -3.57947, -4.77154, 3.1373, -6.9293, -7.30036, -2.41745, 2.33841, 3.57822, -5.10875, 9.37108, -8.03002, 0.5937, 1.2515, 1.13731, 9.29807, 14.98661, 9.53185, -2.31611, -2.92361, 4.22278, -2.88143, -5.31991, -1.96377, -3.82367, 1.99292, 10.10911, -6.00953, 0.8225, -12.55519, -1.09729, 6.65796, 1.12257, 1.85944, -3.42279, -0.74213, 3.45374, 1.26367, -2.4631, 2.72645, -3.7533, -6.14962, -6.47064, -4.35064, 3.31264, 7.87625, 2.26023, 6.24345, -9.36987, -3.85983, 1.62629, 0.64938, -4.71027, 0.0613, -5.68918, -2.34813, 0.6012, 0.08454, 5.13524, -1.11102, 7.85006, -6.1741, -5.9389, 3.61325, 8.73833, 0.07184, -8.9868, -3.88494, -5.36977, -5.19035, -3.15637, -1.84983, -5.82267, 0.3981, -2.49996, -5.00047, 1.06737, 3.76555, -12.65619, -1.93859, 1.25594, -4.61824, 3.40741, -11.71559, 8.17643, 4.96836, 0.47218, 0.60894, 3.68562, -2.1466, -3.99003, -2.97699, -5.1027, 8.25382, -3.47958, 1.4787, 1.52226, 3.48278, 4.61084, -7.07736, -1.2279, 0.99046, 2.12495, -2.16011, -4.08961, 4.82008, -9.39172, 7.51571, -6.19488, -2.69312, -8.69746, -3.3509, -1.39916, 2.27882, 4.36025, -3.27031, 7.97451, -9.49467, 5.85809, 7.46053, 1.10229, -0.32943, 1.57552, 6.46777, 2.78574, -5.00503, -0.35386, -10.59649, 5.22054, 4.89006, 9.76873, -5.09888, -4.87154, -3.79272, -4.24221, -4.72526, -2.71626, 5.25451, -0.89738, 7.8999, -4.60866, -1.21092, -0.31413, 3.38538, -1.95388, -7.93017, 6.18052, 7.62402, 3.73161, 3.28774, 0.84195, 1.3114, -0.30454, 7.63879, -3.52483, 1.64125, 5.57594, -1.65473, -6.4115, -7.28153, -2.85938, 7.5946, -8.72516, -2.98418, -2.9798, -5.0415, -2.60586, -5.69635, 6.84569, 5.98134, 3.57138, -4.78902, -4.49689, 8.34323, 3.76699, -4.09592, -3.03821, 4.40117, 4.13856, -1.04777, 0.78729, 0.03479, -8.96158, -1.27851, -9.05363, -0.27626, -2.69415, 2.08871, -4.04891, -8.3788, 5.28216, -1.55722, -1.1528, -4.27481, -4.51981, -0.07277, -1.21353, 9.92924, -7.12413, 4.2081, 0.56732, -0.06663, -4.90828, 3.62781, -5.39756, 8.06636, -1.03889, -5.96785, -7.79381, -4.46772, 3.56464, -1.57432, 0.0545, 1.19846, 3.04295, 3.63462, 2.10654, -1.63617, -4.97901, -1.48978, 3.61077, 1.81447, 4.41647, 1.64882, -0.50094, 2.92804, 4.10141, -2.06842, 2.36386, 0.3002, 2.25838, 0.70444, 4.58484, 8.16704, -5.28554, -2.90829, -6.45452, -7.01787, 1.00703, -5.99029, 2.38522, -3.1924, -5.30844, 5.74231, 1.84416, 2.54119, 5.53854, -0.17895, -2.2857, -1.84238, -0.47435, 19.71624, -3.5181, -2.96679, 7.48326, 0.71341, 5.77441, 0.6224, 6.06597, -1.19181, -3.09032, 2.58438, 1.22989, -8.13965, -3.66012, 4.70558, -4.84795, 0.61901, 1.38717, -1.51775, 8.64669, 3.96697, -6.92869, 1.21272, -1.18296, -0.99764, 13.4057, -6.11317, -0.52387, -7.87441, 0.18978, -2.7085, -4.95742, -5.7023, -6.99196, 2.53865, 1.9134, 2.11055, -0.5548, -1.07485, -0.58032, 6.22189, 1.91413, -1.36958, 5.64029, -5.72301, 0.24225, 9.0896, 6.82485, 5.2983, 10.8709, -8.20131, 0.30381, 8.42023, 4.54106, 9.59623, -7.19185, 3.80399, -6.0414, -3.52057, -1.70906, 0.61265, -3.64917, 12.54124], "b": -9.92837};
 
 export function careScore(vec) {
   let z = MODEL.b;
@@ -98,7 +110,7 @@ export function careScore(vec) {
   return 1 / (1 + Math.exp(-z));
 }
 
-/** The meaning layer: { level: "ask" | "refer", how: "meaning", score } or null. `embed`: text → normalised vector (embedder.js). */
+/** The meaning layer: { level: "ask", how: "meaning", score } or null. `embed`: text → normalised vector (embedder.js). */
 export async function meaningCare(text, embed) {
   if (!embed || !text || text.length < 12) return null;
   // A long message is read in its parts (the model sees 512 tokens at most): the
@@ -107,19 +119,17 @@ export async function meaningCare(text, embed) {
   let score = 0;
   for (const p of parts) score = Math.max(score, careScore(await embed(p)));
   if (score < ASK) return null;
-  return { level: score >= REFER ? "refer" : "ask", how: "meaning", score: Math.round(score * 1000) / 1000 };
+  return { level: "ask", how: "meaning", score: Math.round(score * 1000) / 1000 };
 }
 
 /**
- * Both layers: a plain phrase refers at once; an indirect one asks, and refers
- * if the meaning agrees, or if there is no meaning layer to ask (no embedder, or
- * it failed): unsure, the line is shown.
+ * Both layers: a plain phrase refers at once; an indirect phrase or the meaning
+ * layer asks (1.13.2), and the model's mark decides whether the line is shown.
  */
 export async function careCheck(text, embed) {
   const p = indirectCare(text);
   if (p?.level === "refer") return p;
-  let failed = !embed;
-  const m = embed ? await meaningCare(text, embed).catch(() => { failed = true; return null; }) : null;
-  if (p) return m?.level === "refer" ? { ...p, level: "refer", score: m.score } : failed ? { ...p, level: "refer" } : p;
+  const m = embed ? await meaningCare(text, embed).catch(() => null) : null;
+  if (p) return m ? { ...p, score: m.score } : p;
   return m;
 }

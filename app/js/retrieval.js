@@ -6,6 +6,15 @@
 
 const K1 = 1.2, B = 0.75;
 const SEM_W = 0.7, KW_W = 0.3, RRF_K = 60;
+// Tuned on a 59-question set (tools/eval-retrieval.mjs; Oct 25, 2026):
+// AGG — an article that several passages point to is likelier the topic than a lone passage;
+//   each chunk is lifted by its article's best score plus AGG × its second (AGG/2 × third).
+// CUT — a passage stays only within this fraction of the best fused score, so the slots
+//   after the topic's own passages are not filled with whatever ranked sixth.
+// FLOOR — the best semantic match below this means the corpus does not treat the question
+//   (a pizzeria, a capital city, a country it has no article on): nothing is retrieved.
+// CONT — a follow-up that borrows the previous question lifts the articles the last reply drew on.
+const AGG = 0.5, CUT = 0.8, FLOOR = 0.80, CONT = 0.3;
 
 const norm = s => s.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
 const words = s => norm(s).split(/[^\p{L}\p{N}]+/u).filter(Boolean).join(" ");
@@ -25,8 +34,9 @@ function stem(w) {
 export const wantsWhole = text =>
   /\b(whole|entire|full|complete)\s+(text|article|paper|piece|essay|thing)\b|\b(read|show|give|bring|pull)\b[^.?!]{0,40}\b(in full|in its entirety|end to end|from start to finish|all of it)\b|\bin full\b|\bend to end\b/i.test(text || "");
 
-/** Does the message point back at the conversation rather than name a topic ("your last message", "that article", "review it")? */
+/** Does the message point back at the conversation rather than name a topic ("your last message", "that article", "review it"), or open on a short continuation ("and for women?", "why?", "what about the evening?")? */
 export const isFollowUp = text =>
+  /^\s*(and|but|so|or|also|then|what about|how about|why|why not|same|and if|what if)\b[^.?!]{0,40}[.?!]?\s*$/i.test(text || "") ||
   /\b(your|the)\s+(last|previous|earlier|above)\s+(message|reply|answer|response)\b|\b(that|this|the)\s+(article|piece|paper|passage|section)\b|\b(review|revise|redo|rewrite|continue|elaborate|expand)\s+(on\s+)?(that|it|this|your|the)\b/i.test(text || "") || wantsWhole(text);
 
 export class Retriever {
@@ -146,6 +156,42 @@ export class Retriever {
     return false;
   }
 
+  /**
+   * The names in a query: terms rare enough to stand on their own (the test
+   * _isSpecific applies) that the corpus mostly writes with a capital — Tawhid,
+   * Saudi, Naples — as against rare common words such as "fix" or "issue".
+   */
+  _names(query) {
+    const N = this.chunks.length, out = new Set();
+    this._cap = this._cap || new Map();
+    for (const t of this.tokens(query)) {
+      const p = this.post.get(t);
+      if (!p || p.length / 2 > N * 0.02) continue;
+      if (!this._cap.has(t)) {
+        let up = 0, all = 0;
+        for (let j = 0; j < p.length; j += 2) {
+          const [a, h, s, e] = this.chunks[p[j]];
+          for (const w of (h + " " + this.articles[a].x.slice(s, e)).match(/[\p{L}\p{M}\p{N}]+/gu) || []) {
+            if (w.length < 3 || stem(norm(w)) !== t) continue;
+            all++; if (/^\p{Lu}/u.test(w)) up++;
+          }
+        }
+        this._cap.set(t, all ? up / all : 0);
+      }
+      if (this._cap.get(t) >= 0.7) out.add(t);
+    }
+    return out;
+  }
+
+  /** How often a chunk's own text and heading use any of `terms` (title doubling left out). */
+  _count(i, terms) {
+    if (!terms.size) return 0;
+    const [a, h, s, e] = this.chunks[i];
+    let n = 0;
+    for (const t of this.tokens(h + " " + this.articles[a].x.slice(s, e))) if (terms.has(t)) n++;
+    return n;
+  }
+
   async semantic(query, limit = 60) {
     if (!this.emb || !this.embedQuery) return [];
     const qv = await this.embedQuery(query);
@@ -164,38 +210,73 @@ export class Retriever {
   /**
    * Retrieve for a practitioner turn.
    * @param {string} query current message
-   * @param {object} opt { k, maxChars, perArticle, context } context = previous user message, used when the
-   *   current one is a short follow-up with no topic words (production's conversation-continuity gap).
+   * @param {object} opt { k, maxChars, perArticle, context, follow, prior } context = previous user message, used when
+   *   the current one is a follow-up with no topic words of its own (production's conversation-continuity gap);
+   *   prior = article indexes the previous reply was given, lifted when context is carried.
+   * @returns {{hits: object[], mode: string, none: boolean}} none: the corpus holds nothing close to the question.
    */
-  async retrieve(query, { k = 3, maxChars = 4200, perArticle = 2, context = "", follow = false } = {}) {
+  async retrieve(query, { k = 3, maxChars = 4200, perArticle = 2, context = "", follow = false, prior = [] } = {}) {
     // A short question is usually a follow-up ("why?", "and then?") that only
     // makes sense with the previous turn attached. But a short question can also
     // be completely specific — "Explain Tawhid." is two tokens — and attaching
     // the previous turn then hands the whole query to the previous topic: asked
     // after a question about hydration, "Explain Tawhid." retrieved five
     // hydration passages and nothing about Tawhid. So context is attached only
-    // when the query carries no distinctive term of its own.
-    let q = query;
-    if (context && (follow || (this.tokens(query).length < 3 && !this._isSpecific(query)))) q = context + " " + query;
+    // when the query carries no distinctive term of its own, or opens as a
+    // continuation (isFollowUp, passed as `follow`).
+    let q = query, carried = false;
+    if (context && (follow || (this.tokens(query).length < 3 && !this._isSpecific(query)))) { q = context + " " + query; carried = true; }
     const [kw, sem] = await Promise.all([
       this.bm25(q),
       this.semantic(q).catch(e => { this.semanticError = String(e && e.message || e); return []; }),
     ]);
+    const asked = this.asked(query).slice(0, 2);
+    // Nothing in the corpus is close: say so rather than hand over the least-distant passages.
+    if (sem.length && sem[0][1] < FLOOR && !asked.length) return { hits: [], mode: "hybrid", none: true };
+
     const fused = new Map();
     kw.forEach(([i], r) => fused.set(i, (fused.get(i) || 0) + KW_W / (RRF_K + r)));
     sem.forEach(([i], r) => fused.set(i, (fused.get(i) || 0) + SEM_W / (RRF_K + r)));
-    // keyword-only mode: fall back to raw BM25 order
-    let ranked = [...fused].sort((a, b) => b[1] - a[1]).map(([i]) => i);
+    const byArt = new Map();
+    for (const [i, v] of fused) { const a = this.chunks[i][0]; (byArt.get(a) || byArt.set(a, []).get(a)).push(v); }
+    const artScore = new Map();
+    for (const [a, l] of byArt) { l.sort((x, y) => y - x); artScore.set(a, l[0] + AGG * (l[1] || 0) + AGG / 2 * (l[2] || 0)); }
+    for (const [i, v] of fused) fused.set(i, v + artScore.get(this.chunks[i][0]));
+    if (carried && prior.length) {
+      const pr = new Set(prior), top = Math.max(...fused.values());
+      for (const [i, v] of fused) if (pr.has(this.chunks[i][0])) fused.set(i, v + CONT * top);
+    }
+    let scored = [...fused].sort((a, b) => b[1] - a[1]);
+    if (scored.length) { const top = scored[0][1]; scored = scored.filter(([, v]) => v >= CUT * top); }
+    let ranked = scored.map(([i]) => i);
 
     // An article asked for by name opens the list with its own opening passage;
     // the longest title named wins, at most two articles.
-    const asked = this.asked(query).slice(0, 2);
     if (asked.length) ranked = [...asked.map(a => this.first.get(a)), ...ranked];
+
+    // A rare term in the question ("Tawhid", "Saudi") is what it is about. A
+    // passage that names it once in passing, or not at all, is not about it, and
+    // handed to the model it becomes "what the corpus says": asked the root issue
+    // in a country the corpus has no article on, the fifth slot went to a sleep
+    // article's aside on that country's clock, and the reply called the
+    // timezone a second root. So when the
+    // question carries a name, a passage stays only if it uses it twice or
+    // more, or once while being among the three closest in meaning. Only names
+    // count (_names): rare common words such as "fix" or "issue" open no gate. An
+    // article asked for by name is exempt.
+    const names = this._names(query);
+    const semTop = new Set(sem.slice(0, 3).map(([i]) => i));
+    const about = i => {
+      if (!names.size || asked.includes(this.chunks[i][0])) return true;
+      const n = this._count(i, names);
+      return n >= 2 || n === 1 && semTop.has(i);
+    };
 
     const perArt = new Map(); const seen = new Set(); const picked = []; let chars = 0;
     for (const i of ranked) {
       if (seen.has(i)) continue;
       seen.add(i);
+      if (!about(i)) continue;
       const [a, h, s, e] = this.chunks[i];
       if ((perArt.get(a) || 0) >= perArticle) continue;
       if (this._stub(i)) continue;
@@ -206,7 +287,12 @@ export class Retriever {
       chars += text.length;
       if (picked.length >= k) break;
     }
-    return { hits: picked, mode: sem.length ? "hybrid" : "keyword" };
+    return { hits: picked, mode: sem.length ? "hybrid" : "keyword", none: false };
+  }
+
+  /** The <vault_knowledge> block when retrieval found nothing close to the question. */
+  formatNone() {
+    return `<vault_knowledge>\nNo passage in the Harmonism corpus stored on this device is close to the practitioner's latest message: the corpus does not treat it directly.\n</vault_knowledge>`;
   }
 
   /** Format hits as the <vault_knowledge> block. */
@@ -216,7 +302,7 @@ export class Retriever {
       const a = this.articles[h.article];
       return `[${n + 1}] "${a.t}"${h.heading ? ` — ${h.heading}` : ""}${a.l === "canon" ? " (canonical)" : ""}\nURL: ${a.u}\n${h.text.replace(/^#{1,6}\s+/gm, "")}`;
     });
-    return `<vault_knowledge>\nExcerpts from Harmonism articles stored on this device, retrieved for the practitioner's latest message. These articles exist; cite them by title.\n\n${parts.join("\n\n")}\n</vault_knowledge>`;
+    return `<vault_knowledge>\nExcerpts from Harmonism articles stored on this device, found by matching the practitioner's latest message. A passage can name the subject without treating it. These articles exist; cite by title those you draw on.\n\n${parts.join("\n\n")}\n</vault_knowledge>`;
   }
 
   /** Title search for the library. */
