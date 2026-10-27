@@ -77,6 +77,8 @@ export function speakable(md) {
     .replace(/(\*\*|__)(.+?)\1/g, "$2")
     .replace(/(^|[\s(])[*_]([^*_\n]+)[*_](?=[\s).,;:!?]|$)/g, "$1$2")
     .replace(/^-{3,}\s*$/gm, "")
+    // Emoji, read aloud, are noise or silence (October 26, 2026: Lodestone may mirror them in text).
+    .replace(/[\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}\u{1F1E6}-\u{1F1FF}\u{FE0F}\u{200D}\u{20E3}]/gu, "")
     .replace(/[ \t]+/g, " ")
     .replace(/\n{2,}/g, "\n")
     .trim();

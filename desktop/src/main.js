@@ -532,6 +532,13 @@ function showLauncher(screen = null, extra = {}) {
 }
 function openApp() { win?.loadURL(appURL()); }
 function openLibraryHome() { win?.loadURL(origin() + "/"); }
+/** Your path or the life book, in the app (October 26, 2026): at once when the app is open, else after it loads (?open=). */
+function openInApp(what) {
+  if (!win) return;
+  const cur = win.webContents.getURL();
+  if (cur.startsWith(appURL())) win.webContents.executeJavaScript(`window.lodestoneOpen && window.lodestoneOpen(${JSON.stringify(what)})`).catch(() => {});
+  else win.loadURL(appURL() + "?open=" + encodeURIComponent(what));
+}
 
 function openPhoneWindow() {
   if (phoneWin) return phoneWin.focus();
@@ -1204,6 +1211,8 @@ function buildMenu() {
   const lodestone = [
     { label: "Talk with Lodestone", accelerator: "CmdOrCtrl+1", click: ensure(openApp) },
     { label: "The Library", accelerator: "CmdOrCtrl+2", click: ensure(openLibraryHome) },
+    { label: "Your Path", accelerator: "CmdOrCtrl+3", click: ensure(() => openInApp("path")) },
+    { label: "Life Book", accelerator: "CmdOrCtrl+4", click: ensure(() => openInApp("lifebook")) },
     { type: "separator" },
     { label: "Model…", click: ensure(() => showLauncher("models")) },
     { label: "Library Languages and Updates…", click: ensure(() => showLauncher("library")) },

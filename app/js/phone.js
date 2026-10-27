@@ -237,8 +237,6 @@ export const OPENROUTER_KEYS_URL = "https://openrouter.ai/settings/keys";
 export const DEFAULT_REMOTE = "deepseek/deepseek-v4.1-flash-1017";
 export const RECOMMENDED = [
   { id: "deepseek/deepseek-v4.1-flash-1017", label: "DeepSeek V4.1 Flash", maker: "DeepSeek", licence: "MIT", reasoning: "medium", minTokens: 4000, note: "The default on harmonism.io" },
-  { id: "z-ai/glm-5.3-flash", label: "GLM-5.3 Flash", maker: "Zhipu", licence: "MIT", reasoning: "", minTokens: 8000, note: "Reasons before every answer" },
-  { id: "qwen/qwen3.5-397b-a17b", label: "Qwen 3.5 397B", maker: "Alibaba", licence: "Apache 2.0", reasoning: "none", minTokens: 0, note: "" },
   { id: "nvidia/nemotron-3-ultra-550b-a55b", label: "Nemotron 3 Ultra", maker: "NVIDIA", licence: "OpenMDW 1.1", reasoning: "none", minTokens: 0, note: "" },
 ];
 // Ids that left the tested list for a successor; the same table as desktop/src/remote.js.
@@ -246,13 +244,11 @@ const RETIRED = { "deepseek/deepseek-v4.1-flash": "deepseek/deepseek-v4.1-flash-
 const current = id => RETIRED[String(id || "").trim()] || id;
 const recommendedFor = id => RECOMMENDED.find(m => m.id === current(id)) || null;
 
-// Frontier models offered under the practitioner's own key, and not recommended:
-// the strongest models for most things, but not the ones for doctrinal fidelity.
-// Never offered on the harmonism.io account. The same list as desktop/src/remote.js.
-export const OFFERED = [
-  { id: "anthropic/claude-opus-5.5", label: "Claude Opus 5.5", maker: "Anthropic", licence: "closed weights", reasoning: "medium", minTokens: 4000, note: "Not recommended · doctrinal fidelity" },
-  { id: "openai/gpt-6-astra", label: "GPT-6 Astra", maker: "OpenAI", licence: "closed weights", reasoning: "medium", minTokens: 4000, note: "Not recommended · doctrinal fidelity" },
-];
+// Closed-weight models are never listed (October 26, 2026): they drift from the
+// doctrine and their weights are not published. A practitioner may still type one
+// under their own key, and assess() labels it "closed weights · not tested
+// against the doctrine". Kept empty, and identical to desktop/src/remote.js.
+export const OFFERED = [];
 const offeredFor = id => OFFERED.find(m => m.id === String(id || "").trim()) || null;
 // How a turn is run: a recommended model's settings, else an offered one's.
 const profileFor = id => recommendedFor(id) || offeredFor(id);

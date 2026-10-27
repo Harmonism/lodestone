@@ -16,6 +16,17 @@
 import { PILLARS, LEVELS } from "./prompt.js";
 
 export const LEARN_EVERY = 10;          // practitioner messages between learning runs
+// The first run comes early, so a first conversation leaves something learned,
+// and leaving the app (the window hidden) runs it when a few messages are new,
+// at most once in LEAVE_GAP: a short visit is not lost waiting for the tenth
+// message (October 27, 2026).
+export const LEARN_FIRST = 3;
+export const LEARN_ON_LEAVE = 3;
+export const LEAVE_GAP = 30 * 60e3;
+/** Whether `fresh` new messages call for a run: the first, the regular, or on leaving. */
+export function learnDue(fresh, { ranBefore = false, leaving = false } = {}) {
+  return fresh >= (leaving ? LEARN_ON_LEAVE : ranBefore ? LEARN_EVERY : LEARN_FIRST);
+}
 export const LEVEL_NAMES = LEVELS;      // unknown … sovereign, 0–6
 export const MAX_SCORE = PILLARS.length * (LEVELS.length - 1);   // 48
 
@@ -330,6 +341,8 @@ export function contextBlocks(ctx) {
 export function learnedLines(learned) {
   if (!learned) return [];
   const lines = [];
+  // v92: the practitioner's own corrections stand over everything Lodestone inferred.
+  if (learned.corrections?.trim()) lines.push(`The practitioner's own corrections to what Lodestone has learned. These are true, and override any note below and anything inferred from the conversation:\n${learned.corrections.trim().slice(0, 2000)}`);
   if (learned.summary?.trim()) lines.push(`What Lodestone has learned from your conversations (its own notes, which the practitioner can read and correct):\n${learned.summary.trim().slice(0, 4000)}`);
   const w = PILLARS.map(([k, n]) => {
     const p = learned.wheel?.[k]; if (!p) return "";

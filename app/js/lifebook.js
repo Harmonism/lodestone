@@ -19,7 +19,7 @@
 //   selectEntries(entries, texts, state, opts)   which notes this turn, in order
 //   lifeBookBlock(selected, budgetTokens)        the <life_book> block
 //   PROPOSE_PROMPT, proposeRequest(), parseProposals()   what the learning
-//       cadence suggests keeping, shown as cards the practitioner confirms
+//       cadence keeps, quietly (readable and correctable in Settings → Life book)
 
 export const SCAN_DEPTH = 4, STICKY_TURNS = 3, MAX_ENTRIES = 12, BUDGET_SHARE = 0.12;
 

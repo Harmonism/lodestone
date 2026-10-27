@@ -12,7 +12,7 @@ async function render(st) {
     const li = document.createElement("li");
     li.textContent = `${d.name} — paired ${new Date(d.created).toLocaleDateString()}, last seen ${new Date(d.seen).toLocaleString()} `;
     const b = document.createElement("button"); b.className = "link"; b.textContent = "Forget";
-    b.onclick = async () => { if (confirm(`Forget ${d.name}? It will no longer reach this computer until paired again.`)) render(await D.unpair(d.id)); };
+    b.onclick = async () => { if (await ask(`Forget ${d.name}? It will no longer reach this computer until paired again.`)) render(await D.unpair(d.id)); };
     li.append(b); ul.append(li);
   }
   clearTimeout(pairTimer);
@@ -50,5 +50,5 @@ $("#tgConnect").onclick = async () => {
   finally { b.disabled = false; b.textContent = "Connect"; }
 };
 $("#tgOutreach").onchange = async e => tgRender(await D.tgOutreach(e.target.checked));
-$("#tgForget").onclick = async () => { if (confirm("Disconnect the Telegram bot from Lodestone?")) tgRender(await D.tgForget()); };
+$("#tgForget").onclick = async () => { if (await ask("Disconnect the Telegram bot from Lodestone?")) tgRender(await D.tgForget()); };
 D.tgStatus().then(tgRender);

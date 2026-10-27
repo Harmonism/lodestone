@@ -44,6 +44,9 @@ const el = (tag, attrs = {}, ...kids) => {
   for (const k of kids.flat()) if (k != null) n.append(k.nodeType ? k : document.createTextNode(k));
   return n;
 };
+// v89: one icon set. The few marks drawn inline in lists and chips, in the same line style as the rest.
+const ICO = { x: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>', back: '<path d="M15 5.5L8.5 12l6.5 6.5"/>', page: '<path d="M7 3.5h7l4 4V20.5H7z"/><path d="M14 3.5v4h4M9.5 12h6M9.5 15.5h6"/>', clip: '<path d="M20.5 11.5l-8.2 8.2a5 5 0 0 1-7.1-7.1l8.6-8.6a3.4 3.4 0 0 1 4.8 4.8l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9"/>', thread: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4"/>', folder: '<path d="M3.5 6.5a1.5 1.5 0 0 1 1.5-1.5h4l2 2h8a1.5 1.5 0 0 1 1.5 1.5v9.5a1.5 1.5 0 0 1-1.5 1.5H5a1.5 1.5 0 0 1-1.5-1.5z"/>', out: '<path d="M13.5 5.5h5v5M18.5 5.5l-8 8M16.5 13.5v5h-11v-11h5"/>', book: '<path d="M12 6.5C10 5 7 4.5 3.5 5v13c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5C17 4.5 14 5 12 6.5zM12 6.5v13"/>', dots: '<circle cx="5.5" cy="12" r="1.2" style="fill:currentColor"/><circle cx="12" cy="12" r="1.2" style="fill:currentColor"/><circle cx="18.5" cy="12" r="1.2" style="fill:currentColor"/>' };
+function ico(name) { const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s.setAttribute("class", "ico"); s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("aria-hidden", "true"); s.innerHTML = ICO[name]; return s; }
 // The sprite is an inline <symbol> in index.html rather than a fetched file:
 // production rewrites .svg requests to .png, so a fetched sprite 404s there.
 const sprite = (cls) => {
@@ -136,7 +139,7 @@ function setWebNext(on) {
   S.webNext = !!on;
   $("#webBtn")?.setAttribute("aria-pressed", String(S.webNext));
   $("#composer")?.classList.toggle("web-armed", S.webNext);
-  const i = $("#input"); if (i) i.placeholder = S.webNext ? "Ask — Lodestone will also look online…" : "Speak from where you are…";
+  const i = $("#input"); if (i) i.placeholder = S.webNext ? "Ask — Lodestone will also look online…" : "What is present for you?";
 }
 
 // ─── The move from /munai-offline/ to /lodestone-app/ ───────────────────
@@ -260,6 +263,9 @@ async function boot() {
     } catch (e) { console.warn("[corpus refresh]", e); }
     await startMain();
     if (refreshed) toast("The corpus has been updated.", 5000);
+    // The desktop menu's Your Path and Life Book, when the window was elsewhere (the Library): ?open=…
+    const want = new URLSearchParams(location.search).get("open");
+    if (want) { try { history.replaceState(null, "", location.pathname); } catch {} openFromDesktop(want); }
     return;
   }
   if (S.settings.tier === "standard") toast("Lodestone no longer thinks inside the browser: no model a browser can hold carries its whole doctrine and a conversation beside it. Choose where it thinks; your conversations and memory are kept.", 9000);
@@ -289,7 +295,7 @@ async function reloadForBridge() {
 async function handleAppLink(link) {
   const r = parsePairLink(link);
   if (!r) return;
-  if (!confirm(`Pair this phone with ${r.name || "Lodestone Desktop"} at ${r.base}?`)) return;
+  if (!await ask(`Pair this phone with ${r.name || "Lodestone Desktop"} at ${r.base}?`)) return;
   try {
     const p = await pairWith(r.base, r.code);
     // The link that opened the app arrives before setup is shown: the choice of the computer
@@ -330,6 +336,11 @@ function routeLine() {
 }
 
 async function showSetup() {
+  // Back (#setup-back): opened over a running Lodestone, setup is a layer like any
+  // other, held in the page's history; settled below once the saved route is known.
+  S.setupBack = !!S.mainStarted; S.setupRestore = null;
+  if (!S.setupBack) S.setupFrom = null;
+  $("#setupTopBack").hidden = true;
   $("#main").hidden = true; $("#setup").hidden = false; syncDock();
   S.gpu = await probeWebGPU();
   const served = await detectLocalServer();
@@ -369,6 +380,21 @@ async function showSetup() {
   if (nativePair && S.preferComputer) { chosen = "server"; S.preferComputer = false; }
   const ORDER = phoneOk ? ["hosted", "openrouter", "server", "reader"] : ["server", "reader"];
   const tierList = [...ORDER.filter(k => TIERS[k]), ...Object.keys(TIERS).filter(k => !ORDER.includes(k))].map(k => [k, TIERS[k]]);
+  // The web app is for phones and for computers without Lodestone Desktop: the
+  // account and OpenRouter come first, and the routes that think on one's own
+  // hardware (a model server, a model in this browser) fold under one line that
+  // points to Lodestone Desktop, which does that with nothing to set up. Not
+  // folded on a page served by one's own computer, nor in the Android app, where
+  // pairing with the computer is the point.
+  const fold = phoneOk && !served && !nativePair;
+  const LOCAL = new Set(["server", "standard"]);
+  let more = null;
+  if (fold) {
+    more = el("details", { class: "choices-more" },
+      el("summary", {}, "On your own computer"),
+      el("p", { class: "hint" }, "On a computer, ", el("a", { href: "https://harmonism.io/lodestone-desktop", target: "_blank", rel: "noopener" }, "Lodestone Desktop"), " runs a model on it with nothing to set up, and nothing you say leaves it. The routes below are for a model server you already run, or a model downloaded into this browser."),
+      el("div", { class: "choices" }));
+  }
   for (const [key, t] of tierList) {
     const needsGpu = t.engine === "webllm";
     if (needsGpu && !localOk) continue;   // not offered on phones and tablets
@@ -382,9 +408,10 @@ async function showSetup() {
       // The tested models, by name: the same list the model menu offers.
       t.engine === "hosted" || t.engine === "openrouter" ? el("span", { class: "models" }, RECOMMENDED.map(m => m.id === DEFAULT_REMOTE ? `${m.label} (default)` : m.label).join(" · ")) : null,
     );
-    b.onclick = () => { chosen = key; try { localStorage.setItem(SETUP_PICK, key); } catch {} [...box.children].forEach(c => c.setAttribute("aria-pressed", "false")); b.setAttribute("aria-pressed", "true"); sync(); };
-    box.append(b);
+    b.onclick = () => { chosen = key; try { localStorage.setItem(SETUP_PICK, key); } catch {} box.querySelectorAll(".choice").forEach(c => c.setAttribute("aria-pressed", "false")); b.setAttribute("aria-pressed", "true"); sync(); };
+    (more && LOCAL.has(key) ? more.lastElementChild : box).append(b);
   }
+  if (more?.lastElementChild.children.length) { more.open = LOCAL.has(chosen); box.append(more); }
   const note = $("#gpuNote");
   if (!localOk) {
     note.hidden = false;
@@ -409,7 +436,7 @@ async function showSetup() {
       if (paired) {
         box.append(el("p", {}, "Paired with ", el("b", {}, paired.name), ` (${paired.base}). Lodestone thinks with that computer's model while it is awake, Lodestone Desktop is open on it, and this phone is on the same Wi-Fi. ${S.pairedWhere ? `That computer rents its model from ${HOST_LABEL[S.pairedWhere] || S.pairedWhere}, so each turn goes on to them.` : "Nothing leaves your network."}`),
           el("button", { class: "btn ghost", type: "button", id: "pairForget", onclick: async () => {
-            if (!confirm(`Forget ${paired.name} on this phone?`)) return;
+            if (!await ask(`Forget ${paired.name} on this phone?`)) return;
             await pairing.forget(); paired = null; drawPair(); sync();
           } }, "Forget this computer"));
         return;
@@ -523,18 +550,28 @@ async function showSetup() {
   const savedOk = !!(S.mainStarted && saved?.tier && TIERS[saved.tier]
     && (saved.tier !== "openrouter" || orKeySaved)
     && (saved.tier !== "hosted" || ready.hosted));
-  $("#setupBack").hidden = !savedOk;
-  $("#setupBack").onclick = async () => {
+  $("#setupBack").hidden = $("#setupTopBack").hidden = !savedOk;
+  S.setupBack = savedOk;
+  // The way back, reached by the buttons, a swipe, Esc and the system's back alike
+  // (goBack): the saved route again, and the page setup was opened from.
+  S.setupRestore = !savedOk ? null : async () => {
+    const from = S.setupFrom; S.setupFrom = null; S.setupBack = false; S.setupRestore = null;
     S.settings = saved;
     $("#setup").hidden = true; $("#main").hidden = false; syncDock();
     S.engine = makeEngine(); S.engineReady = false; updateBadge();
+    if (from === "#drawerSettings") { renderSettings(); openDrawer(from); }
     try { await S.engine.load((p, t) => engineStatus(shorten(t || "Loading the model…"), p)); S.engineReady = true; engineStatus(null); }
     catch (e) { toast(String(e.message || e), 6000); }
     await refreshWhere(); updateBadge(); refreshWebChip();
+    if (from === "#drawerSettings" && !$("#drawerSettings").hidden) renderSettings();
   };
+  try { navSync(); } catch {}
 
   $("#beginSetup").onclick = async () => {
     $("#beginSetup").disabled = true;
+    const keep = { back: S.setupBack, from: S.setupFrom };
+    S.setupBack = false; S.setupFrom = null; $("#setupTopBack").hidden = true;
+    try { navSync(); } catch {}
     try { localStorage.removeItem(SETUP_PICK); } catch {}
     const server = chosen !== "server" ? null
       : nativePair && phoneComputer && paired ? await computerServer(paired)
@@ -547,7 +584,10 @@ async function showSetup() {
     }
     S.engine = null; S.engineReady = false;
     const ok = await runSetup(chosen, $("#optSemantic").checked, server);
-    if (!ok) $("#beginSetup").disabled = false;
+    if (!ok) {
+      $("#beginSetup").disabled = false;
+      if (keep.back && S.setupRestore && !$("#setup").hidden) { S.setupBack = true; S.setupFrom = keep.from; $("#setupTopBack").hidden = false; try { navSync(); } catch {} }
+    }
   };
 }
 
@@ -668,6 +708,7 @@ function makeEngine() {
 async function startMain() {
   $("#setup").hidden = true; $("#main").hidden = false;
   S.mainStarted = true;
+  S.convCount = await conversationCount();   // v92: the four openings wait on this
   refreshVoiceKey().then(() => setMic()).catch(() => {});
   S.profile = (await store.kv.get("profile")) || {};
   S.wheel = (await store.kv.get("wheel")) || {};
@@ -678,6 +719,7 @@ async function startMain() {
   await loadLifeBookStatus();
   renderVault().catch(() => {});
   await loadLifeBookMirror();
+  renderVaultSide();
   applyLifeBookQueue().catch(e => console.warn("[life book queue]", e));
 
   engineStatus("Opening the corpus…", 0.05);
@@ -697,7 +739,7 @@ async function startMain() {
   syncDock();
   renderCheckins();
   await refreshWhere();
-  showHomeNote();
+  await showHomeNote();
   await takeAssessment();
   refreshWebChip();
   // Writing first, while Lodestone is open; and what the Telegram bridge learned meanwhile, when the window comes back.
@@ -707,7 +749,9 @@ async function startMain() {
   // Not awaited: the first sync of a new copy must not hold up the first question.
   const autoP = autoSync().catch(e => console.warn("[sync]", e?.message || e));
   // Not signed in (a new install, or an update that lost the sign-in): asked once, at the start.
-  autoP.then(() => setTimeout(() => askSignIn().catch(e => console.warn("[sign-in]", e?.message || e)), 600));
+  // v89: at the start only for an account whose sign-in was lost, or once someone has come back for a third conversation;
+  // otherwise when they first keep something (remember, keep in the life book), where an account is what keeps it.
+  autoP.then(() => setTimeout(() => askSignIn({ startup: true }).catch(e => console.warn("[sign-in]", e?.message || e)), 600));
   // Arrived from the dashboard's "Turn on Sync": open Settings at Sync.
   let resume = false; try { resume = sessionStorage.getItem("lodestone-resume-sync") === "1"; sessionStorage.removeItem("lodestone-resume-sync"); } catch {}
   if (resume && syncAvailable()) {
@@ -799,7 +843,9 @@ async function startMain() {
 // Safari deletes what a website stores after seven days of use without a visit
 // to it; a web app opened from the Home Screen is not subject to that. On an
 // iPhone or iPad opened in Safari, say so once, until dismissed.
-function showHomeNote() {
+/** v89: how many conversations this device holds; the asks wait for someone who has come back. */
+async function conversationCount() { try { return (await store.threads.list()).length; } catch { return 0; } }
+async function showHomeNote() {
   const n = $("#homeNote"); if (!n || DESKTOP) return;
   const standalone = navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
   let dismissed = false; try { dismissed = localStorage.getItem("munai-home-note") === "1"; } catch {}
@@ -813,7 +859,7 @@ function showHomeNote() {
     $("#homeNoteClose").onclick = () => { n.hidden = true; try { localStorage.setItem("munai-moved-note", "1"); } catch {} };
     return;
   }
-  n.hidden = !isIOS() || standalone || dismissed;
+  n.hidden = !isIOS() || standalone || dismissed || (await conversationCount()) < 3;   // v89: after the third conversation, not on the first screen
   $("#homeNoteClose").onclick = () => { n.hidden = true; try { localStorage.setItem("munai-home-note", "1"); } catch {} };
 }
 
@@ -895,6 +941,7 @@ async function openLatestThread() {
   const list = await store.threads.list();
   let id = null; try { id = sessionStorage.getItem(OPEN_KEY); } catch {}
   S.thread = (id && list.find(t => t.id === id)) || list[0] || null;
+  S.convCount = list.length;
   await loadThread();
 }
 
@@ -944,8 +991,10 @@ async function usageByThread(threads) {
 
 let threadQuery = "";
 async function renderThreadList() {
+  renderVaultSide();
   const ul = $("#threadList");
   const all = await store.threads.list();
+  S.convCount = all.length;
   const q = threadQuery.trim().toLowerCase();
   const usage = await usageByThread(all);
   const pages = await pagesOf(all);
@@ -979,12 +1028,12 @@ function threadRow(t, u, hit, q, pg) {
   const today = new Date().toDateString() === when.toDateString();
   const date = today ? when.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : when.toLocaleDateString(undefined, { day: "numeric", month: "short", year: when.getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
   const cost = u?.priced && u.cost > 0 ? fmtCost(u.cost) : "";
-  const more = el("button", { class: "more", type: "button", title: "Rename, pin, export or delete", "aria-label": "Conversation actions", "aria-haspopup": "menu", "aria-expanded": "false" }, "⋯");
+  const more = el("button", { class: "more", type: "button", title: "Rename, pin, export or delete", "aria-label": "Conversation actions", "aria-haspopup": "menu", "aria-expanded": "false" }, ico("dots"));
   const li = el("li", { class: "row" + (S.thread && S.thread.id === t.id ? " active" : "") + (t.pinned ? " pinned" : "") },
     el("button", { class: "t", type: "button", onclick: async () => { if (await openThread(t)) closeDrawers(); } },
       el("span", {}, t.pinned ? el("span", { class: "pin-dot", "aria-label": "Pinned" }, "●") : null, t.title || "Untitled"),
       hit && q ? snippet(hit, q) : null,
-      el("small", {}, el("span", {}, date), pg ? el("span", { class: "pg", title: pg.url ? `Read with the browser extension: ${pg.url}` : "Read with the browser extension" }, "⧉ " + (pg.domain || "a page")) : null, cost ? el("span", { class: "c", title: "What this conversation has cost" }, cost) : null)),
+      el("small", {}, el("span", {}, date), pg ? el("span", { class: "pg", title: pg.url ? `Read with the browser extension: ${pg.url}` : "Read with the browser extension" }, ico("page"), pg.domain || "a page") : null, cost ? el("span", { class: "c", title: "What this conversation has cost" }, cost) : null)),
     more);
   more.onclick = e => { e.stopPropagation(); threadMenu(t, more); };
   li.oncontextmenu = e => { e.preventDefault(); threadMenu(t, more, e.clientX, e.clientY); };
@@ -1142,7 +1191,7 @@ async function togglePin(t) {
 
 async function deleteThread(t) {
   if (S.busy && S.thread?.id === t.id) { toast("Wait for the answer to finish before deleting this conversation."); return; }
-  if (!confirm(`Delete “${t.title || "this conversation"}” from this device?`)) return;
+  if (!await ask(`Delete “${t.title || "this conversation"}” from this device?`)) return;
   await store.threads.remove(t.id);
   recallDropThread(t.id);
   if (S.thread && S.thread.id === t.id) { S.thread = null; await openLatestThread(); }
@@ -1158,7 +1207,35 @@ const ACT_SVG = {
   stop: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>',
   save: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5v10M7.5 10.5l4.5 4.5 4.5-4.5M5 19.5h14"/></svg>',
   retry: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4"/></svg>',
+  edit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>',
+  more: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="12" r="1.2" style="fill:currentColor"/><circle cx="12" cy="12" r="1.2" style="fill:currentColor"/><circle cx="18.5" cy="12" r="1.2" style="fill:currentColor"/></svg>',
+  remember: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>',
+  keep: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5h10.5a2 2 0 0 1 2 2v13H7a2 2 0 0 1-2-2z"/><path d="M5 17.5a2 2 0 0 1 2-2h10.5"/></svg>',
+  practice: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.2"/><path d="M12 3.5v6.3M12 14.2v6.3M3.5 12h6.3M14.2 12h6.3"/></svg>',
 };
+
+/** ⋯ under a message: the actions that are Lodestone's own, and a line of detail (the model, its cost). */
+function moreButton(items, info = "") {
+  const b = actIcon("more", "More", e => { e.stopPropagation(); popMenu(b, items.filter(Boolean), info); });
+  b.setAttribute("aria-haspopup", "menu"); b.setAttribute("aria-expanded", "false");
+  return b;
+}
+/** A small menu at an anchor, kept inside the screen; closed by a click elsewhere or Escape (closeThreadMenu). */
+function popMenu(anchor, items, info = "") {
+  const was = anchor.getAttribute("aria-expanded") === "true";
+  closeThreadMenu(); document.querySelectorAll('[aria-expanded="true"].act-icon').forEach(x => x.setAttribute("aria-expanded", "false"));
+  if (was) return;
+  const m = el("div", { class: "row-menu", role: "menu" }, items.map(([icon, label, fn]) => {
+    const b = el("button", { type: "button", role: "menuitem", onclick: e => { e.stopPropagation(); closeThreadMenu(); anchor.setAttribute("aria-expanded", "false"); fn(); } });
+    b.innerHTML = ACT_SVG[icon] || ""; b.append(label); return b;
+  }), info ? el("div", { class: "row-menu-info" }, info) : null);
+  document.body.append(m);
+  const r = anchor.getBoundingClientRect(), w = m.offsetWidth, h = m.offsetHeight;
+  m.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + "px";
+  m.style.top = (r.bottom + 4 + h > innerHeight - 8 ? Math.max(8, r.top - h - 4) : r.bottom + 4) + "px";
+  anchor.setAttribute("aria-expanded", "true");
+  m.querySelector("button")?.focus({ preventScroll: true });
+}
 function actIcon(name, label, onclick) {
   const b = el("button", { type: "button", class: "act-icon", title: label, "aria-label": label, onclick });
   b.innerHTML = ACT_SVG[name]; return b;
@@ -1287,6 +1364,24 @@ function openUsage() { renderUsage(); openDrawer("#drawerUsage"); }
 function renderChat() {
   const chat = $("#chat"); chat.innerHTML = "";
   if (!S.history.length) {
+    // v93: a new conversation is met as someone who has come back: by name and the
+    // hour, with what was left open last time a tap away (put in the box, not sent,
+    // so it can be changed). The four openings are for a first conversation only.
+    if ((S.convCount ?? 0) > 0) {
+      const h = new Date().getHours();
+      const part = h < 5 ? "Good night" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+      const first = String(S.profile?.name || "").trim().split(/\s+/)[0];
+      const st = S.learned?.context?.state || {};
+      const open = [...(st.open_commitments || []), ...(st.pending_threads || [])].map(x => String(x).trim()).filter(Boolean).slice(0, 3);
+      chat.append(el("div", { class: "empty greet" },
+        sprite("empty-sprite"),
+        el("h2", {}, first ? `${part}, ${first}.` : `${part}.`),
+        el("p", {}, "What is present for you today?"),
+        open.length ? el("div", { class: "greet-open" }, el("p", { class: "sub-h" }, "Left open"),
+          el("div", { class: "starters" }, open.map(t => el("button", { type: "button", onclick: () => { const i = $("#input"); i.value = `Let's come back to ${t.replace(/[.;]+$/, "")}.`; autosize(); i.focus(); } }, t)))) : null,
+        S.assessment ? null : el("p", { class: "hint" }, el("a", { href: "#", onclick: e => { e.preventDefault(); openMe(); } }, "Take the Harmonic Profile assessment"), " and Lodestone reads you through it.")));
+      return;
+    }
     const starters = [
       "What is the purpose of a human life?",
       "My sleep is broken. Where do I begin?",
@@ -1295,8 +1390,8 @@ function renderChat() {
     ];
     chat.append(el("div", { class: "empty" },
       sprite("empty-sprite"),
-      el("h2", {}, "Speak from where you are."),
-      el("p", {}, "Lodestone reads Harmonism against your situation, from the corpus on this device. Tell it where you stand, or begin with one of these."),
+      el("h2", {}, "Welcome to Lodestone."),
+      el("p", {}, "Bring it what is happening in your life, or a question about Harmonism itself; it answers from the corpus on this device. Or begin with one of these."),
       el("div", { class: "starters" }, starters.map(s => el("button", { type: "button", onclick: () => { $("#input").value = s; send(); } }, s))),
       S.assessment ? null : el("p", { class: "hint" }, el("a", { href: "#", onclick: e => { e.preventDefault(); renderMe(); openDrawer("#drawerMe"); } }, "Take the Harmonic Profile assessment"), " and Lodestone reads you through it.")));
     return;
@@ -1335,15 +1430,20 @@ function msgNode(m) {
     row._msg = m;
     col.prepend(row);
   }
-  if (isUser && m.meta?.files?.length) col.prepend(el("div", { class: "msg-files" }, m.meta.files.map(f => el("span", { title: f.note || f.kind }, `📎 ${f.name}${f.images ? ` · ${f.images} image${f.images > 1 ? "s" : ""}` : ""}`))));
+  if (isUser && m.meta?.files?.length) col.prepend(el("div", { class: "msg-files" }, m.meta.files.map(f => el("span", { title: f.note || f.kind }, ico("clip"), `${f.name}${f.images ? ` · ${f.images} image${f.images > 1 ? "s" : ""}` : ""}`))));
   if (!isUser && m.meta?.recalled?.length) col.append(recalledNode(m));
   // The corpus articles a reply drew on are kept in its record (the next turn reads them), not shown under it (1.14.1).
   if (!isUser && (m.meta?.web?.length || m.meta?.yours?.length)) col.append(sourcesNode([], m.meta.web || [], m.meta.yours || []));
   const actions = el("div", { class: "actions" });
   if (isUser) {
-    actions.append(el("button", { type: "button", onclick: () => remember(m.content) }, "Remember this about me"));
-    if (lifeBookOn()) actions.append(el("button", { type: "button", title: "A card opens to choose the note; nothing is written until you keep it", onclick: () => keepFromMessage(m.content) }, "Keep in my life book"));
-    if (isLastPair(m) && !m.meta?.files?.length) actions.append(el("button", { type: "button", class: "last-only", title: "Take this message and its answer back into the message box, to change and send again", onclick: () => editLast() }, "Edit"));
+    // v89: icons, revealed with the message (hover, focus, a tap on a phone); the rest under ⋯.
+    const cp = actIcon("copy", "Copy this message", () => copyAnswer(m.content, cp));
+    actions.append(cp);
+    if (isLastPair(m) && !m.meta?.files?.length) { const ed = actIcon("edit", "Edit: take this message and its answer back into the box, to change and send again", () => editLast()); ed.classList.add("last-only"); actions.append(ed); }
+    actions.append(moreButton([
+      ["remember", "Remember this about me", () => remember(m.content)],
+      lifeBookOn() ? ["keep", "Keep in my life book", () => keepFromMessage(m.content)] : null,
+    ]));
   } else if (!m.meta?.crisis) {
     // 1.14.1: the common actions as icons (copy, listen, save, retry), the two
     // that are Lodestone's own in words.
@@ -1351,19 +1451,26 @@ function msgNode(m) {
     actions.append(cp);
     if (voice.available() && m.content) actions.append(listenButton(m));
     actions.append(actIcon("save", "Save this answer as a Markdown file", () => saveAnswer(m)));
-    if (lifeBookOn()) actions.append(el("button", { type: "button", title: "Kept with your answers, under the pillar of the Wheel it concerns; nothing is written until you keep it", onclick: () => keepFromMessage(m.content, "answer") }, "Keep in my life book"));
-    actions.append(el("button", { type: "button", onclick: () => { openDrawer("#drawerMe"); renderMe(); $("#prText").focus(); } }, "Make a practice of this"));
+    const u = m.meta?.usage, who = m.meta?.modelLabel || "";
+    const usage = u ? [who.split(" · ")[0], u.cost != null ? fmtCost(u.cost) : "", `${kTok(u.in)} in · ${kTok(u.out)} out`].filter(Boolean).join(" · ") : "";
+    actions.append(moreButton([
+      lifeBookOn() ? ["keep", "Keep in my life book", () => keepFromMessage(m.content, "answer")] : null,
+      ["practice", "Make a practice of this", () => { openDrawer("#drawerMe"); renderMe(); $("#prText").focus(); }],
+    ], usage));
     if (m.meta?.stopped) actions.append(el("span", { class: "meta stopped" }, "stopped"));
-    const u = m.meta?.usage;
-    if (u) {
-      const who = m.meta.modelLabel || "";
-      actions.append(el("span", { class: "meta", title: `${who ? who + " · " : ""}${u.in.toLocaleString()} tokens in, ${u.out.toLocaleString()} out${u.cost != null ? ` · ${fmtCost(u.cost)}` : ""}` },
-        [who.split(" · ")[0], u.cost != null ? fmtCost(u.cost) : "", `${kTok(u.in)} in · ${kTok(u.out)} out`].filter(Boolean).join(" · ")));
-    }
+    // The model and its cost under each answer only when asked for (Settings → Display).
+    if (u && S.settings.showCost) actions.append(el("span", { class: "meta", title: `${who ? who + " · " : ""}${u.in.toLocaleString()} tokens in, ${u.out.toLocaleString()} out${u.cost != null ? ` · ${fmtCost(u.cost)}` : ""}` }, usage));
   }
   col.append(actions);
   wrap.append(col);
   body.addEventListener("click", onLinkClick);
+  // On a touch screen, a tap on a message shows its actions (a hover does it elsewhere).
+  wrap.addEventListener("click", e => {
+    if (!matchMedia("(hover: none)").matches || e.target.closest("a, button, summary, details, input, textarea") || String(getSelection() || "")) return;
+    const on = !wrap.classList.contains("show-actions");
+    document.querySelectorAll("#chat .msg.show-actions").forEach(x => x.classList.remove("show-actions"));
+    wrap.classList.toggle("show-actions", on);
+  });
   return wrap;
 }
 
@@ -1372,7 +1479,7 @@ function recalledNode(m) {
   const box = el("div", { class: "sources recalled" }, el("span", { class: "rc-label" }, "Remembered from:"));
   for (const r of m.meta.recalled) {
     const chip = el("span", { class: "rc" },
-      el("button", { type: "button", title: "Open that conversation", onclick: async () => { const t = await store.threads.get(r.th); if (!t) { toast("That conversation is no longer here."); return; } await openThread(t); } }, `↺ ${r.title} · ${r.date}`),
+      el("button", { type: "button", title: "Open that conversation", onclick: async () => { const t = await store.threads.get(r.th); if (!t) { toast("That conversation is no longer here."); return; } await openThread(t); } }, ico("thread"), `${r.title} · ${r.date}`),
       el("button", { type: "button", class: "rc-forget", title: "Lodestone will not bring this back again", "aria-label": `Forget ${r.title} for recall`, onclick: async () => { await recallForget(r.key); chip.classList.add("gone"); chip.querySelector(".rc-forget").remove(); toast("Lodestone will not bring that back again."); } }, "Forget"));
     box.append(chip);
   }
@@ -1381,17 +1488,17 @@ function recalledNode(m) {
 
 function sourcesNode(paths, web = [], yours = []) {
   const box = el("div", { class: "sources" });
-  for (const f of yours) box.append(el("span", { class: "own-src", title: "From a folder you let Lodestone read" }, "▸ " + f.split(/[\\/]/).pop()));
+  for (const f of yours) box.append(el("span", { class: "own-src", title: "From a folder you let Lodestone read" }, ico("folder"), f.split(/[\\/]/).pop()));
   for (const w of web) {
     if (!webUrl(w.url)) continue;   // http(s) only (1.13.1)
     let host = ""; try { host = new URL(w.url).hostname.replace(/^www\./, ""); } catch {}
-    box.append(el("a", { class: "web-src", href: w.url, target: "_blank", rel: "noopener", title: w.url }, "↗ " + (host || w.title)));
+    box.append(el("a", { class: "web-src", href: w.url, target: "_blank", rel: "noopener", title: w.url }, ico("out"), host || w.title));
   }
   const idx = new Map(S.pack.corpus.articles.map((a, i) => [a.p, i]));
   for (const p of paths) {
     const a = idx.get(p);
     if (a == null) continue;
-    box.append(el("button", { type: "button", title: "Read offline", onclick: () => openReader(a) }, "↳ " + S.pack.corpus.articles[a].t));
+    box.append(el("button", { type: "button", title: "Read offline", onclick: () => openReader(a) }, ico("book"), S.pack.corpus.articles[a].t));
   }
   return box;
 }
@@ -1740,7 +1847,7 @@ async function sendOne(prefill) {
   if (prefill == null) { S.pending = []; renderAttachBar(); }
 
   try {
-    if (!S.thread) S.thread = await store.threads.create(text.slice(0, 60));
+    if (!S.thread) { S.thread = await store.threads.create(text.slice(0, 60)); S.convCount = (S.convCount || 0) + 1; }
     await refreshWhere();
 
     const hp = await ingestHPCode(text);
@@ -1848,8 +1955,9 @@ async function sendOne(prefill) {
     am.id = await store.messages.add(am);
     S.history.push(am);
     chat.querySelectorAll(".last-only").forEach(b => b.remove());   // Retry and Edit move to the new last exchange
-    node.replaceWith(msgNode(am));
-    if (unode.isConnected) unode.replaceWith(msgNode(um));
+    const settle = n => (n.classList.add("settled"), n);   // v89: the finished answer takes the streaming one's place without arriving twice
+    node.replaceWith(settle(msgNode(am)));
+    if (unode.isConnected) unode.replaceWith(settle(msgNode(um)));
     await touchThread();
     noticesDone = true;
     await addNotices(turn, S.thread.id, n => { S.history.push(n); chat.append(msgNode(n)); followChat(true); });
@@ -2369,7 +2477,7 @@ async function retryLast() {
 
 async function editLast() {
   const input = $("#input");
-  if (input.value.trim() && !confirm("Replace what is in the message box with your last message?")) return;
+  if (input.value.trim() && !await ask("Replace what is in the message box with your last message?")) return;
   const u = await takeBackLast(); if (!u) return;
   input.value = u.content; autosize(); input.focus(); input.setSelectionRange(input.value.length, input.value.length);
 }
@@ -2408,7 +2516,7 @@ async function capReached() {
     el("span", { class: "spacer" }),
     el("button", { type: "button", onclick: async () => { S.settings.spendCap = next; await store.kv.set("settings", S.settings); card.hidden = true; toast(`Limit raised to ${fmtCost(next)} for this month and after.`, 4000); } }, `Raise to ${fmtCost(next)}`),
     el("button", { type: "button", onclick: () => { card.hidden = true; renderSettings(); openDrawer("#drawerSettings"); setTimeout(() => $("#setCap")?.focus(), 200); } }, "Settings"),
-    el("button", { type: "button", class: "x", "aria-label": "Dismiss", onclick: () => { card.hidden = true; } }, "×"));
+    el("button", { type: "button", class: "x", "aria-label": "Dismiss", onclick: () => { card.hidden = true; } }, ico("x")));
   card.hidden = false;
   return true;
 }
@@ -2470,6 +2578,7 @@ function withMemory(notes, text) {
 }
 
 async function remember(text, { quiet = false } = {}) {
+  if (!quiet) setTimeout(() => askSignIn().catch(() => {}), 900);   // v89: the moment an account is worth something
   await keepMemory(text);
   if (!quiet) toast("Added to what Lodestone knows about you: Your path → What Lodestone knows about you.", 5000);
 }
@@ -2571,7 +2680,12 @@ async function lifeBookEntries(force = false) {
   return lbCache.entries;
 }
 
-/** At the learning cadence: what of the last conversation is worth keeping, as proposals. Nothing is written here. */
+/**
+ * At the learning cadence: what of the last conversation is worth keeping, kept
+ * quietly (2026-10-26). The life book is Lodestone's own memory; asking the
+ * practitioner to confirm each line put their griefs and illnesses back in front
+ * of them as cards, unasked. They read and correct it in Settings → Life book.
+ */
 async function proposeLifeBook(all) {
   if (!lifeBookOn()) return;
   const entries = await lifeBookEntries(true);
@@ -2580,13 +2694,34 @@ async function proposeLifeBook(all) {
   const raw = await complete(lifebook.PROPOSE_PROMPT, lifebook.proposeRequest(entries, convo, { touched }), 1200);
   const props = lifebook.parseProposals(raw, entries);
   if (!props.length) return;
-  const same = (a, b) => a.path === b.path && a.op === b.op && (a.text || a.find) === (b.text || b.find);
-  const kept = (S.learned.lifeBook || []).filter(p => !props.some(q => same(p, q)));
-  S.learned.lifeBook = [...kept, ...props.map(p => ({ ...p, id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random())), ts: Date.now() }))].slice(-6);
+  for (const p of props) {
+    try { await keepLifeBook({ ...p, id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random())), ts: Date.now() }, null, null, { quiet: true }); }
+    catch (e) { console.warn("[life book keep]", e); }
+  }
+}
+
+/**
+ * Cards left from before the life book was kept quietly, or made by an older
+ * Lodestone on another device: kept the same way, never shown. Only what the
+ * practitioner chose to keep, and Organize, which they asked for, stay as cards.
+ */
+let lbSettling = false;
+async function settleLifeBookCards() {
+  if (lbSettling || !lifeBookOn()) return;
+  const auto = (S.learned?.lifeBook || []).filter(pr => !pr.mine && pr.op !== "organize");
+  if (!auto.length) return;
+  lbSettling = true;
+  try {
+    for (const pr of auto) {
+      try { await keepLifeBook(pr, null, null, { quiet: true }); }
+      catch (e) { console.warn("[life book settle]", e); await dropLifeBook(pr); }
+    }
+  } finally { lbSettling = false; }
 }
 
 /** "Keep in my life book" on a message of theirs: a card to place it, nothing written yet. */
 async function keepFromMessage(text, kind = "fact") {
+  setTimeout(() => askSignIn().catch(() => {}), 900);   // v89: the moment an account is worth something
   const entries = await lifeBookEntries(true);
   // The pillar it concerns, guessed from its words; the card lets them choose another (1.14.1).
   const p = lifebook.guessPillar(text);
@@ -2604,8 +2739,8 @@ async function dropLifeBook(pr) {
   await saveLearned(); renderCheckins();
 }
 
-async function keepLifeBook(pr, edited, pathIn) {
-  if (pr.op === "seed") return keepSeed(pr);
+async function keepLifeBook(pr, edited, pathIn, { quiet = false } = {}) {
+  if (pr.op === "seed") return keepSeed(pr, { quiet });
   if (pr.op === "organize") return keepOrganize(pr);
   let change;
   const text = edited ?? (pr.op === "replace" ? pr.replace : pr.text);
@@ -2624,19 +2759,23 @@ async function keepLifeBook(pr, edited, pathIn) {
     m.queue = [...(m.queue || []), { id: pr.id + "-" + Date.now(), ts: Date.now(), change, card: { op: pr.op, path: change.path, text, keys: pr.keys || [], find: pr.find, replace: pr.replace } }];
     await store.kv.set("lifebook", m); S.lbMirror = m;
     await dropLifeBook(pr); syncSoon(1000);
-    toast(`Kept in your life book (${change.path}). It comes back whenever its subject does, on all your devices${S.lbMirror?.notes?.length ? "; Lodestone Desktop also writes it into your vault" : ""}.`, 7000);
+    if (!quiet) toast("Kept. Lodestone will remember it.", 4000);
     return;
   }
   try {
     const r = await DESKTOP.lifebookWrite(change);
     lbCache.at = 0;
     await dropLifeBook(pr);
-    toast(`Kept in Lodestone/${r.rel}${r.backup ? " (the note as it was is in Lodestone/.backups/)" : ""}`, 6000);
-  } catch (e) { toast(String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ""), 8000); }
+    if (!quiet) toast(`Kept in Lodestone/${r.rel}${r.backup ? " (the note as it was is in Lodestone/.backups/)" : ""}`, 6000);
+  } catch (e) {
+    const why = String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
+    if (quiet) { console.warn("[life book]", why); await dropLifeBook(pr); }
+    else toast(why, 8000);
+  }
 }
 
 /** Keep a whole new life book at once (from memory carried in): one change per note, queued like any other. */
-async function keepSeed(pr) {
+async function keepSeed(pr, { quiet = false } = {}) {
   const entries = await lifeBookEntries(true);
   const changes = (pr.notes || []).map(n => {
     const have = entries.find(e => e.rel.toLowerCase() === n.path.toLowerCase());
@@ -2646,12 +2785,12 @@ async function keepSeed(pr) {
     let ok = 0;
     for (const c of changes) { try { await DESKTOP.lifebookWrite(c); ok++; } catch (e) { console.warn("[life book seed]", e); } }
     lbCache.at = 0; await lifeBookEntries(true);
-    toast(`${ok} note${ok === 1 ? "" : "s"} written in Lodestone/${pr.folder}/.`, 6000);
+    if (!quiet) toast(`${ok} note${ok === 1 ? "" : "s"} written in Lodestone/${pr.folder}/.`, 6000);
   } else {
     const m = (await store.kv.get("lifebook")) || { notesAt: 0, notes: [], queue: [], applied: [] };
     m.queue = [...(m.queue || []), ...changes.map((change, i) => ({ id: `${pr.id}-${i}`, ts: Date.now() + i, change, card: { op: change.op, path: change.path, text: "", keys: [] } }))];
     await store.kv.set("lifebook", m); S.lbMirror = m; syncSoon(1000);
-    toast(`Your life book has begun: ${changes.length} note${changes.length === 1 ? "" : "s"} in ${pr.folder}/, on all your devices.`, 7000);
+    if (!quiet) toast(`Your life book has begun: ${changes.length} note${changes.length === 1 ? "" : "s"} in ${pr.folder}/, on all your devices.`, 7000);
   }
   await store.kv.set("lifebook:seeded", { at: Date.now(), folder: pr.folder });
   await dropLifeBook(pr);
@@ -2663,8 +2802,7 @@ async function keepSeed(pr) {
  * person, the two always-present notes), moving lines only. The plan comes back
  * as one card; nothing is written until Keep.
  */
-async function organizeLifeBook() {
-  const msg = $("#setLbOrganizeMsg");
+async function organizeLifeBook({ msg = $("#setLbOrganizeMsg"), btn = $("#setLbOrganize") } = {}) {
   const entries = (await lifeBookEntries(true)).filter(e => !e.off);
   if (entries.length < 1) { msg.textContent = "There is nothing to sort yet."; return; }
   if (!S.engine || !S.engineReady) { msg.textContent = "Lodestone's model is not ready yet; try again in a moment."; return; }
@@ -2673,7 +2811,7 @@ async function organizeLifeBook() {
   const ctx = S.engine?.tier?.ctx || TIERS[S.settings.tier]?.ctx || 32768;
   const partChars = Math.max(6000, Math.min(40000, Math.floor(ctx * 3.3 * 0.33)));
   const parts = lifebook.organizeBatches(entries, partChars);
-  const btn = $("#setLbOrganize"); btn.disabled = true;
+  btn.disabled = true;
   const say = t => { msg.textContent = t; };
   say(`Lodestone is sorting ${entries.length} note${entries.length === 1 ? "" : "s"}${parts.length > 1 ? `, in ${parts.length} parts` : ""}… This can take ${parts.length > 3 ? "several minutes" : "a minute"}; you can keep using Lodestone meanwhile.`);
   try {
@@ -2718,10 +2856,10 @@ async function keepOrganize(pr) {
     toast(`Your life book is sorted into ${pr.layout.notes.length} notes, on all your devices. The old notes are switched off, not deleted.`, 8000);
   }
   await dropLifeBook(pr);
-  renderLifeBook();
+  renderLifeBook(); renderLifeBookPanel();
 }
 
-/** Memory carried in (from Lodestone on Telegram): offered once as the start of a life book, kept only with Keep. */
+/** Memory carried in (from Lodestone on Telegram): the start of the life book, kept once, quietly. */
 async function offerSeed() {
   if (!lifeBookOn() || !S.learned || await store.kv.get("lifebook:seeded")) return;
   if ((S.learned.lifeBook || []).some(p => p.op === "seed")) return;
@@ -2730,13 +2868,13 @@ async function offerSeed() {
   const folder = "From Telegram";
   const c0 = (await store.kv.get("companion"))?.state?.tables?.clients?.[0] || {};
   const notes = lifebook.seedNotes(rows, folder, { self: [c0.display_name, (await heldAccount())?.email?.split("@")[0]] });
-  S.learned.lifeBook = [...(S.learned.lifeBook || []), { op: "seed", id: "seed-" + Date.now(), ts: Date.now(), folder, path: folder + "/", notes, facts: rows.length }].slice(-6);
-  await saveLearned(); renderCheckins();
+  await keepSeed({ op: "seed", id: "seed-" + Date.now(), ts: Date.now(), folder, path: folder + "/", notes, facts: rows.length }, { quiet: true });
 }
 
 function lifeBookCards() {
   if (!lifeBookOn()) return [];
-  return (S.learned?.lifeBook || []).map(pr => {
+  if ((S.learned?.lifeBook || []).some(pr => !pr.mine && pr.op !== "organize")) settleLifeBookCards().catch(e => console.warn("[life book settle]", e));
+  return (S.learned?.lifeBook || []).filter(pr => pr.mine || pr.op === "organize").map(pr => {
     if (pr.op === "organize") {
       const L = pr.layout, list = el("ul", { class: "lb-plan" }, ...L.notes.map(n => el("li", {}, el("code", {}, n.path), (() => { const c = n.lines.filter(l => !/^#/.test(l)).length; return ` · ${c} line${c === 1 ? "" : "s"}${n.always ? " · always" : n.own?.length ? ` · ${n.own.slice(0, 5).join(", ")}` : ""}`; })())));
       return el("div", { class: "checkin proposal lifebook" },
@@ -2823,17 +2961,11 @@ async function renderLifeBook() {
     const fromDesk = S.lbMirror?.notes?.length || 0, waiting = view.filter(x => x.pending).length;
     $("#setLbWhere").textContent = view.length
       ? `${view.length.toLocaleString()} note${view.length === 1 ? "" : "s"}, kept in your memory and synced, encrypted, between your devices${fromDesk ? ` · ${fromDesk} from Lodestone Desktop` : ""}${fromDesk && waiting ? ` · ${waiting} waiting for the desktop to write into your vault` : ""}.`
-      : "No notes yet. Keep one from a card, or with \"Keep in my life book\" under a message of yours. With Lodestone Desktop, the notes are also written into your vault.";
+      : "No notes yet. Lodestone keeps what matters as you talk; you can also keep something with \"Keep in my life book\" under a message. With Lodestone Desktop, the notes are also written into your vault.";
     for (const id of ["#setLbChoose", "#setLbForget", "#setLbOpen"]) $(id).hidden = true;
     $("#setLbPrivacy").textContent = view.length ? (S.where ? `The notes Lodestone recalls travel with each message to ${S.where}, which can read them.` : "") : "";
     $("#setLbOrganize").hidden = !view.some(n => !lifebook.parseEntry(n.rel, n.text).off);
-    let list = $("#setLbNotes");
-    if (!list) { list = el("div", { id: "setLbNotes", class: "lb-notes" }); $("#setLbPrivacy").after(list); }
-    const parsed = view.map(n => ({ n, e: lifebook.parseEntry(n.rel, n.text, n.mtime) })).sort((a, b) => (a.e.off - b.e.off) || a.n.rel.localeCompare(b.n.rel));
-    list.replaceChildren(...parsed.map(({ n, e }) => {
-      return el("details", { class: "lb-note" + (e.off ? " off" : "") }, el("summary", {}, e.title, el("span", { class: "fine" }, `  Lodestone/${n.rel}${e.off ? " · switched off" : e.always ? " · always" : e.keys.length ? ` · ${e.keys.slice(0, 6).join(", ")}${e.keys.length > 6 ? "…" : ""}` : ""}`)),
-        el("pre", { class: "lb-body" }, e.body));
-    }));
+    $("#setLbBrowse").hidden = false;
     return;
   }
   if (!DESKTOP?.lifebookStatus) { sec.hidden = true; return; }
@@ -2841,10 +2973,240 @@ async function renderLifeBook() {
   const on = !!S.lifeBook?.vault;
   $("#setLbWhere").textContent = on ? `${S.lifeBook.dir} · ${S.lifeBook.notes.toLocaleString()} note${S.lifeBook.notes === 1 ? "" : "s"}` : "No vault chosen.";
   $("#setLbChoose").textContent = on ? "Choose another vault…" : "Choose your vault…";
-  $("#setLbForget").hidden = !on; $("#setLbOpen").hidden = !on; $("#setLbOrganize").hidden = !on || !S.lifeBook?.notes;
+  $("#setLbForget").hidden = !on; $("#setLbOpen").hidden = !on; $("#setLbOrganize").hidden = !on || !S.lifeBook?.notes; $("#setLbBrowse").hidden = !on;
   $("#setLbPrivacy").textContent = !on ? "" : S.where
     ? `Lodestone is thinking with a rented model (${S.where}): the notes it recalls travel with each message to that provider, which can read them.`
     : "Lodestone is thinking on this computer: nothing from the life book leaves it.";
+}
+
+// ─── The life book in Your path (October 26, 2026) ──────────────────────────
+// Every note, grouped as the book is laid out (always present, the Wheel, people,
+// kept answers, the other folders, loose notes, Unsorted, switched off), with
+// search. A note is switched on or off, made always present, edited, moved to
+// another folder or merged into another note, here. Nothing is ever deleted: a
+// note moved away is switched off and marked moved_to, and kept out of the list.
+// The changes go the way every kept change goes: written by Lodestone Desktop
+// (with a backup), or queued in the synced record for it to write.
+const LB_UI = { q: "", filter: "", shut: new Set(["Switched off"]), open: new Set(), edit: null, move: null, adding: false };
+const LB_FIRST = ["Always with Lodestone", "Wheel of Harmony", "People", "Kept answers"];
+const LB_LAST = ["Loose notes", "Unsorted", "Switched off"];
+function lbGroup(e) {
+  if (e.off) return "Switched off";
+  if (e.always) return "Always with Lodestone";
+  const top = e.rel.includes("/") ? e.rel.split("/")[0] : "";
+  if (/^wheel$/i.test(top)) return "Wheel of Harmony";
+  if (/^people$/i.test(top)) return "People";
+  if (/^kept$/i.test(top)) return "Kept answers";
+  if (!top) return /^unsorted\.md$/i.test(e.rel) ? "Unsorted" : "Loose notes";
+  return top;
+}
+const lbRank = g => LB_FIRST.includes(g) ? LB_FIRST.indexOf(g) : LB_LAST.includes(g) ? 100 + LB_LAST.indexOf(g) : 50;
+const lbPillarRank = e => { const i = lifebook.PILLARS.findIndex(p => e.rel.toLowerCase() === `wheel/${p.toLowerCase()}.md`); return i < 0 ? 99 : i; };
+const lbFold = x => String(x || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+const lbClean = e => String(e?.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
+const lbNorm = p => { p = String(p || "").trim().replace(/\\/g, "/").replace(/^\/+/, "").replace(/^Lodestone\//i, "").replace(/\/{2,}/g, "/"); return !p || p.endsWith("/") ? "" : /\.md$/i.test(p) ? p : p + ".md"; };
+
+/** The note's text with frontmatter keys set (a value) or taken out (null). */
+function lbSetFm(text, set) {
+  text = String(text || "");
+  const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+  const lines = m ? m[1].split(/\r?\n/) : [];
+  const rest = m ? text.slice(m[0].length) : text;
+  for (const [k, v] of Object.entries(set)) {
+    const i = lines.findIndex(l => l.startsWith(k + ":"));
+    if (i >= 0) { let j = i + 1; while (j < lines.length && /^\s+-\s/.test(lines[j])) j++; lines.splice(i, j - i); }
+    if (v != null) lines.push(`${k}: ${v}`);
+  }
+  return lines.length ? `---\n${lines.join("\n")}\n---\n${rest}` : rest.replace(/^\s+/, "");
+}
+const lbRewrite = (e, text) => ({ op: "replace", path: e.rel, find: e.text, replace: text, ...(e.pending ? {} : { mtime: e.mtime }) });
+
+async function lbWrite(changes, done) {
+  if (!changes.length) return true;
+  if (DESKTOP) {
+    const failed = [];
+    for (const c of changes) { try { await DESKTOP.lifebookWrite(c); } catch (e) { failed.push(lbClean(e)); } }
+    lbCache.at = 0; await lifeBookEntries(true);
+    if (failed.length) { toast(failed.join(" · "), 9000); renderLifeBookPanel({ force: true }); return false; }
+  } else {
+    const m = (await store.kv.get("lifebook")) || { notesAt: 0, notes: [], queue: [], applied: [] };
+    const id = "book-" + Date.now();
+    m.queue = [...(m.queue || []), ...changes.map((change, i) => ({ id: `${id}-${i}`, ts: Date.now() + i, change, card: { op: change.op, path: change.path, text: "", keys: [] } }))];
+    await store.kv.set("lifebook", m); S.lbMirror = m; syncSoon(1000);
+  }
+  if (done) toast(done, 4500);
+  renderLifeBookPanel({ force: true }); renderLifeBook().catch(() => {}); renderVaultSide();
+  return true;
+}
+
+function openLifeBook() {
+  renderMe(); openDrawer("#drawerMe");
+  setTimeout(() => {
+    const d = $("#drawerMe"), b = $("#lbBox"); if (!b || d.hidden) return;
+    d._navHold = "Life book"; b.scrollIntoView({ block: "start" }); setPageNavOn(d, "Life book");
+  }, 80);
+}
+
+/** The vault's line at the foot of the conversations. */
+function renderVaultSide() {
+  const sub = $("#vaultSideSub"); if (!sub) return;
+  if (DESKTOP?.lifebookStatus) {
+    const lb = S.lifeBook;
+    sub.textContent = lb?.vault ? homeShort(lb.vault).split("/").filter(Boolean).slice(-1)[0] || homeShort(lb.vault) : "Choose a vault";
+    $("#btnVaultSide").title = lb?.vault ? `Your life book: ${homeShort(lb.dir || lb.vault)}${lb.notes != null ? `, ${lb.notes} note${lb.notes === 1 ? "" : "s"}` : ""}` : "No vault chosen yet: Lodestone keeps no life book on this computer.";
+  } else {
+    const n = lifebook.withPending(S.lbMirror).length;
+    sub.textContent = n ? `Life book · ${n} note${n === 1 ? "" : "s"}` : "Life book";
+  }
+}
+
+function bindLifeBookPanel() {
+  let t; $("#lbSearch").oninput = e => { clearTimeout(t); t = setTimeout(() => { LB_UI.q = e.target.value; renderLifeBookPanel({ force: true }); }, 150); };
+  $("#lbFilter").onclick = e => { const b = e.target.closest("button"); if (!b) return; LB_UI.filter = b.dataset.v; renderLifeBookPanel({ force: true }); };
+  $("#lbNew").onclick = () => { LB_UI.adding = !LB_UI.adding; renderLifeBookPanel({ force: true }); };
+  $("#lbSort").onclick = () => organizeLifeBook({ msg: $("#lbMsg"), btn: $("#lbSort") });
+  $("#lbVault").onclick = () => DESKTOP?.lifebookOpen?.();
+}
+
+async function renderLifeBookPanel({ force = false } = {}) {
+  const box = $("#lbBox"); if (!box) return;
+  const list = $("#lbList");
+  // A refresh from elsewhere (sync, Your path opening again) waits while something is being typed here.
+  const typing = document.activeElement && list.contains(document.activeElement) && document.activeElement.matches("input, textarea");
+  if (typing && !force) return;
+  const tok = LB_UI.tok = (LB_UI.tok || 0) + 1;
+  if (DESKTOP && !DESKTOP.lifebookStatus) { box.hidden = true; return; }
+  if (DESKTOP) await loadLifeBookStatus(); else await loadLifeBookMirror();
+  if (tok !== LB_UI.tok) return;
+  renderVaultSide();
+  if (!lifeBookOn()) {
+    $("#lbStatus").textContent = "No vault chosen yet. Lodestone keeps its life book as notes in a folder of its own inside your Obsidian vault (or any folder).";
+    $("#lbCount").textContent = "";
+    for (const id of ["#lbNew", "#lbSort", "#lbVault"]) $(id).hidden = true;
+    box.querySelector(".lb-tools").hidden = true;
+    list.replaceChildren(el("div", { class: "row-btns" }, el("button", { class: "btn primary", type: "button", onclick: () => { renderSettings(); openDrawer("#drawerSettings"); setTimeout(() => $("#setLifeBook")?.scrollIntoView({ block: "start" }), 150); } }, "Choose your vault…")));
+    return;
+  }
+  box.querySelector(".lb-tools").hidden = false;
+  const all = await lifeBookEntries(true);
+  if (tok !== LB_UI.tok) return;
+  const moved = all.filter(e => e.off && /^moved_to:/m.test((String(e.text).match(/^---\r?\n[\s\S]*?\r?\n---/) || [""])[0]));
+  const entries = all.filter(e => !moved.includes(e));
+  const live = entries.filter(e => !e.off).length;
+  $("#lbCount").textContent = entries.length ? String(live) : "";
+  $("#lbCount").title = `${live} note${live === 1 ? "" : "s"} Lodestone reads back`;
+  $("#lbStatus").textContent = DESKTOP
+    ? `In ${homeShort(S.lifeBook?.dir || "")}: ${live} note${live === 1 ? "" : "s"} Lodestone reads back${entries.length - live ? `, ${entries.length - live} switched off` : ""}. Earlier versions of every note changed here are kept in Lodestone/.backups/.`
+    : `${live} note${live === 1 ? "" : "s"} Lodestone reads back${entries.length - live ? `, ${entries.length - live} switched off` : ""}, synced, encrypted, between your devices${S.lbMirror?.notes?.length ? "; Lodestone Desktop writes the changes made here into your vault" : ""}.`;
+  $("#lbNew").hidden = false; $("#lbVault").hidden = !(DESKTOP?.lifebookOpen);
+  $("#lbSort").hidden = live < 2;
+  for (const b of $("#lbFilter").children) b.setAttribute("aria-pressed", String(b.dataset.v === LB_UI.filter));
+
+  const q = lbFold(LB_UI.q.trim());
+  const shown = entries.filter(e => (LB_UI.filter === "always" ? e.always && !e.off : LB_UI.filter === "off" ? e.off : true)
+    && (!q || lbFold([e.title, e.rel, e.keys.join(" "), e.body].join(" ")).includes(q)));
+  const groups = new Map();
+  for (const e of shown) { const g = lbGroup(e); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(e); }
+  const names = [...groups.keys()].sort((a, b) => lbRank(a) - lbRank(b) || a.localeCompare(b));
+  const folders = [...new Set(entries.map(e => e.rel.includes("/") ? e.rel.split("/").slice(0, -1).join("/") + "/" : null).filter(Boolean)),
+    "Wheel/", "People/", "Practices/", "Kept/"].filter((x, i, a) => a.findIndex(y => y.toLowerCase() === x.toLowerCase()) === i).sort();
+  const pathList = el("datalist", { id: "lbPaths" }, ...folders.map(f => el("option", { value: f })), ...entries.filter(e => !e.off).map(e => el("option", { value: e.rel })));
+
+  const kids = [pathList];
+  if (LB_UI.adding) kids.push(lbNewForm(entries));
+  if (!shown.length) kids.push(el("p", { class: "hint" }, entries.length ? "No note matches." : "No notes yet. Keep one from a card, with “Keep in my life book” under a message, or start one with New note."));
+  for (const g of names) {
+    const notes = groups.get(g).sort((a, b) => (g === "Wheel of Harmony" ? lbPillarRank(a) - lbPillarRank(b) : 0) || a.title.localeCompare(b.title));
+    const det = el("details", { class: "lb-group", ...(q || !LB_UI.shut.has(g) ? { open: true } : {}) },
+      el("summary", {}, el("span", {}, g), el("span", { class: "n" }, String(notes.length))),
+      el("div", { class: "lb-group-body" }, ...notes.map(e => lbNoteRow(e, entries))));
+    det.addEventListener("toggle", () => { if (q) return; if (det.open) LB_UI.shut.delete(g); else LB_UI.shut.add(g); });
+    kids.push(det);
+  }
+  if (moved.length && !LB_UI.filter && !q) kids.push(el("p", { class: "fine" }, `${moved.length} note${moved.length === 1 ? "" : "s"} moved elsewhere ${moved.length === 1 ? "is" : "are"} left switched off in the folder, not shown here.`));
+  list.replaceChildren(...kids);
+}
+
+function lbNoteRow(e, entries) {
+  const meta = e.off ? "off" : e.always ? "always" : e.keys.filter(k => k !== e.title).slice(0, 5).join(", ");
+  const body = el("div", { class: "lb-note-body" });
+  const det = el("details", { class: "lb-note" + (e.off ? " off" : ""), ...(LB_UI.open.has(e.rel) ? { open: true } : {}) },
+    el("summary", {}, el("span", { class: "t" }, e.title), el("span", { class: "fine" }, e.rel + (meta ? " · " + meta : "") + (e.pending && S.lbMirror?.notes?.length ? " · not yet in the vault" : ""))), body);
+  const fill = () => {
+    const act = (label, fn, extra = {}) => el("button", { class: "btn ghost small", type: "button", onclick: fn, ...extra }, label);
+    const row = el("div", { class: "row-btns lb-note-actions" },
+      act(e.off ? "Switch on" : "Switch off", () => lbWrite([lbRewrite(e, lbSetFm(e.text, { recall: e.off ? null : "false", moved_to: null }))], e.off ? `${e.title} comes back in conversations again.` : `${e.title} is switched off: kept, not read back.`)),
+      e.off ? null : act(e.always ? "Not always" : "Always", () => lbWrite([lbRewrite(e, lbSetFm(e.text, { always: e.always ? null : "true" }))], e.always ? `${e.title} comes back only when its subject does.` : `${e.title} is now in every conversation.`), { title: "Always: in every conversation, not only when its subject comes up" }),
+      act("Edit", () => { LB_UI.edit = LB_UI.edit === e.rel ? null : e.rel; LB_UI.move = null; fill(); }),
+      act("Move or merge…", () => { LB_UI.move = LB_UI.move === e.rel ? null : e.rel; LB_UI.edit = null; fill(); }));
+    const kids = [row];
+    if (LB_UI.edit === e.rel) {
+      const ta = el("textarea", { class: "lb-edit", rows: Math.min(18, Math.max(6, e.text.split("\n").length + 1)), "aria-label": `The text of ${e.title}` });
+      ta.value = e.text;
+      kids.push(ta, el("div", { class: "row-btns" },
+        el("button", { class: "btn primary small", type: "button", onclick: async () => { if (ta.value === e.text) { LB_UI.edit = null; fill(); return; } if (await lbWrite([lbRewrite(e, ta.value)], `${e.title} is saved.`)) LB_UI.edit = null; } }, "Save"),
+        el("button", { class: "btn ghost small", type: "button", onclick: () => { LB_UI.edit = null; fill(); } }, "Cancel")));
+      setTimeout(() => ta.focus(), 0);
+    } else if (LB_UI.move === e.rel) {
+      const inp = el("input", { type: "text", class: "lb-path", list: "lbPaths", value: e.rel, "aria-label": "Where the note goes", spellcheck: "false", autocomplete: "off" });
+      const hint = el("p", { class: "fine" });
+      const say = () => {
+        const to = lbNorm(inp.value.endsWith("/") ? inp.value + e.rel.split("/").pop() : inp.value);
+        const have = to && entries.find(x => x.rel.toLowerCase() === to.toLowerCase() && x !== e);
+        hint.textContent = !to ? "A folder ending in / keeps the note's name; a note's name merges it into that note." : to.toLowerCase() === e.rel.toLowerCase() ? "That is where it is now." : have ? `Merged into ${have.rel}: its text is added at the end of that note, and this one is switched off.` : `Moved to ${to}; the old note is switched off, not deleted.`;
+      };
+      inp.oninput = say; say();
+      kids.push(el("label", { class: "lb-where-row" }, el("span", {}, "To"), inp), hint, el("div", { class: "row-btns" },
+        el("button", { class: "btn primary small", type: "button", onclick: async () => {
+          const to = lbNorm(inp.value.endsWith("/") ? inp.value + e.rel.split("/").pop() : inp.value);
+          if (!to || to.toLowerCase() === e.rel.toLowerCase()) { LB_UI.move = null; fill(); return; }
+          if (await lbMove(e, to, entries)) LB_UI.move = null;
+        } }, "Move"),
+        el("button", { class: "btn ghost small", type: "button", onclick: () => { LB_UI.move = null; fill(); } }, "Cancel")));
+      setTimeout(() => { inp.focus(); inp.select(); }, 0);
+    } else kids.push(el("pre", { class: "lb-body" }, e.body.replace(/^#\s+.+\n*/, "").trim() || "(empty)"));
+    body.replaceChildren(...kids);
+  };
+  det.addEventListener("toggle", () => { if (det.open) { LB_UI.open.add(e.rel); if (!body.childElementCount) fill(); } else LB_UI.open.delete(e.rel); });
+  if (det.open) fill();
+  return det;
+}
+
+/** A note to another place: merged into the note there, or made there; the old one switched off and marked moved_to. */
+async function lbMove(e, to, entries) {
+  const have = entries.find(x => x.rel.toLowerCase() === to.toLowerCase());
+  const off = lbRewrite(e, lbSetFm(e.text, { recall: "false", always: null, moved_to: to }));
+  const oldName = e.rel.split("/").pop().replace(/\.md$/i, ""), newName = to.split("/").pop().replace(/\.md$/i, "");
+  if (have) {
+    const add = `\n### From ${e.title}\n\n${e.body.replace(/^#\s+.+\n+/, "").trim()}\n`;
+    const ok = await lbWrite([{ op: "append", path: have.rel, text: add, ...(have.pending ? {} : { mtime: have.mtime }) }, off], `${e.title} is merged into ${have.title}.`);
+    if (ok) { LB_UI.open.delete(e.rel); LB_UI.open.add(have.rel); }
+    return ok;
+  }
+  // A name of its own: the heading follows the file's new name when it was the old one.
+  const text = e.title === oldName ? e.text.replace(/^(#\s+).+$/m, (m, h) => h + newName) : e.text;
+  const ok = await lbWrite([{ op: "create", path: to, text }, off], `${e.title} is now ${to}.`);
+  if (ok) { LB_UI.open.delete(e.rel); LB_UI.open.add(to); }
+  return ok;
+}
+
+function lbNewForm(entries) {
+  const where = el("input", { type: "text", class: "lb-path", list: "lbPaths", placeholder: "People/Mariam, Practices/Morning, Wheel/Health…", "aria-label": "The new note's name and folder", spellcheck: "false", autocomplete: "off" });
+  const ta = el("textarea", { class: "lb-edit", rows: 5, placeholder: "What Lodestone should know, in your words.", "aria-label": "The new note's text" });
+  const always = el("input", { type: "checkbox" });
+  const make = async () => {
+    const to = lbNorm(where.value);
+    if (!to) { where.focus(); return; }
+    if (entries.some(x => x.rel.toLowerCase() === to.toLowerCase())) { toast(`${to} is already in your life book: open it there to add to it.`, 5000); return; }
+    const keys = lifebook.keysForPath(to);
+    const text = lifebook.noteText(to, { keys, always: always.checked }, ta.value);
+    if (await lbWrite([{ op: "create", path: to, text }], `${to} is in your life book.`)) { LB_UI.adding = false; LB_UI.open.add(to); renderLifeBookPanel({ force: true }); }
+  };
+  setTimeout(() => where.focus(), 0);
+  return el("div", { class: "lb-new" },
+    el("label", { class: "lb-where-row" }, el("span", {}, "Note"), where), ta,
+    el("label", { class: "check" }, always, el("span", {}, " Always in every conversation")),
+    el("div", { class: "row-btns" }, el("button", { class: "btn primary small", type: "button", onclick: make }, "Create"), el("button", { class: "btn ghost small", type: "button", onclick: () => { LB_UI.adding = false; renderLifeBookPanel({ force: true }); } }, "Cancel")));
 }
 
 // ─── Accompaniment: practices and check-ins ─────────────────────────────────
@@ -3017,11 +3379,17 @@ async function autoSync() {
 // (an expiry, or an update the keychain would not open to) is always asked for.
 const SIGNIN_ASK = "lodestone-signin-ask";
 const SETUP_PICK = "lodestone-setup-pick";   // where Lodestone thinks, chosen before leaving to sign in
-async function askSignIn() {
+let signinAsked = false;   // v89: asked at most once a session
+async function askSignIn({ startup = false } = {}) {
   if (!syncAvailable() || BRIDGE || $("#signinAsk") || !$("#setup").hidden) return;
   if (!DESKTOP && !phoneRoutesAvailable()) return;
   const acct = await accountTransport().account().catch(() => null);
   if (acct && !acct.expired) return;
+  if (!acct?.expired) {
+    if (signinAsked) return;
+    if (startup && ((await conversationCount()) < 3 || !$("#homeNote")?.hidden)) return;
+  }
+  signinAsked = true;
   const conf = await syncer()?.conf().catch(() => ({})) || {};
   if (conf.on && conf.via === "computer") return;   // a phone synced through its computer needs no account
   let never = false; try { never = localStorage.getItem(SIGNIN_ASK) === "never"; } catch {}
@@ -3171,11 +3539,11 @@ async function drawSync() {
       renderSync();
     } }, "Sync now"),
     el("button", { class: "btn ghost block", type: "button", id: "syncOff", onclick: async () => {
-      if (!confirm(`Stop syncing on this device? Its memory stays here, and the synced copy stays ${where} for your other devices.`)) return;
+      if (!await ask(`Stop syncing on this device? Its memory stays here, and the synced copy stays ${where} for your other devices.`)) return;
       await sy.off(); toast("Sync is off on this device."); renderSync();
     } }, "Turn off on this device"),
     el("button", { class: "btn danger block", type: "button", id: "syncErase", onclick: async () => {
-      if (!confirm(`Delete the synced copy ${where}? Every device keeps its own memory and stops syncing. This cannot be undone.`)) return;
+      if (!await ask(`Delete the synced copy ${where}? Every device keeps its own memory and stops syncing. This cannot be undone.`)) return;
       try { await sy.erase(); toast("The synced copy is deleted."); } catch (e) { toast(String(e.message || e)); }
       renderSync();
     } }, "Delete the synced copy"),
@@ -3240,7 +3608,7 @@ async function renderDevices(box) {
       } }, "Rename"));
     } else {
       act.append(el("button", { class: "link-btn danger", type: "button", onclick: async e => {
-        if (!confirm(`Remove ${d.name || "this device"}?\n\nIt stops syncing the next time it goes online, and says so there. What it holds stays on it. To sync it again, turn sync on there and let it in.`)) return;
+        if (!await ask(`Remove ${d.name || "this device"}?\n\nIt stops syncing the next time it goes online, and says so there. What it holds stays on it. To sync it again, turn sync on there and let it in.`)) return;
         e.target.disabled = true;
         try { await sy.removeDevice(d.id); toast(`${d.name || "The device"} is removed: it stops at its next sync.`, 6000); renderSync(); }
         catch (err) { m.textContent = syncErr(err); e.target.disabled = false; }
@@ -3260,7 +3628,7 @@ async function renderDevices(box) {
     lost.addEventListener("toggle", () => {
       if (!lost.open || lost.querySelector(".sync-form")) return;
       lost.append(passwordForm("Change the key", async m => {
-        if (!confirm("Start the synced copy again from this device under a new key? It syncs first, so nothing is lost; every other device then opens your memory again with your new password.")) return;
+        if (!await ask("Start the synced copy again from this device under a new key? It syncs first, so nothing is lost; every other device then opens your memory again with your new password.")) return;
         m.textContent = "Syncing, then changing the key…";
         try { await sy.takeOver(); startSync(); toast("The key is changed: only your new password opens your memory now.", 7000); renderSync(); }
         catch (e) { m.textContent = syncErr(e); }
@@ -3300,7 +3668,7 @@ async function syncSetup(via, label, replace = false) {
     let less = null;
     if (r.meta) { const here = await sy.localCount().catch(() => null); if (here != null && r.count != null && here < r.count) less = { here, there: r.count }; }
     const go = el("button", { class: "btn primary block", type: "button", id: "syncGo", onclick: async () => {
-      if (r.meta && !confirm(`This replaces the synced copy on ${place} with this device's memory. Every device keeps its own memory; the others join again from this one.`)) return;
+      if (r.meta && !await ask(`This replaces the synced copy on ${place} with this device's memory. Every device keeps its own memory; the others join again from this one.`)) return;
       go.disabled = true; msg.textContent = "Encrypting and syncing…";
       try {
         const res = await sy.createLinked({ key: key.checked, replace: !!r.meta });
@@ -3441,7 +3809,7 @@ function linkRequestEl(q, redraw) {
   // lost it): this device takes the key over first, then lets the other in.
   const ensureKey = async () => {
     if (await sy.canLink()) return true;
-    if (!confirm("This device syncs, but does not hold the key that lets another device in.\n\nIt can take the key over: it syncs first, then starts the synced copy again from here under a new key, and lets the other device in. Nothing is removed from either device; any other synced device asks to be let in again.\n\nGo ahead?")) return false;
+    if (!await ask("This device syncs, but does not hold the key that lets another device in.\n\nIt can take the key over: it syncs first, then starts the synced copy again from here under a new key, and lets the other device in. Nothing is removed from either device; any other synced device asks to be let in again.\n\nGo ahead?")) return false;
     m.textContent = "Syncing, then making this device the one that holds the key…";
     await sy.takeOver();
     startSync();
@@ -3487,7 +3855,7 @@ async function renderLinkTools(box, where) {
   if (!(await sy.canLink())) {
     box.append(el("p", { class: "hint" }, "This device syncs, but does not hold the key that lets your other devices in (it joined with a passphrase, or its key was lost). Make it the device that holds the key: it syncs first, then starts the synced copy again from here; nothing is removed from any device, and your other devices join from this one."),
       el("button", { class: "btn ghost block", type: "button", onclick: async () => {
-        if (!confirm(`Make this device the one that holds the key? It syncs first, then starts the synced copy ${where} again from here. Nothing is removed from any device; your other devices then ask to be let in from this one.`)) return;
+        if (!await ask(`Make this device the one that holds the key? It syncs first, then starts the synced copy ${where} again from here. Nothing is removed from any device; your other devices then ask to be let in from this one.`)) return;
         try { await sy.takeOver(); startSync(); toast("This device now holds the key: let your other devices in from here."); } catch (e) { toast(syncErr(e)); }
         renderSync();
       } }, "Make this device hold the key"));
@@ -3538,18 +3906,21 @@ function answeredHere() {
 }
 const hereMeta = () => (answeredHere() ? { here: true } : {});
 
-async function maybeLearn() {
+async function maybeLearn({ leaving = false } = {}) {
   if (!syncAvailable()) return;
   if (!(await held.learnFromApps())) return;
-  const n = ((await store.kv.get("held:learnSince")) || 0) + 1;
-  await store.kv.set("held:learnSince", n);
-  if (n < 10) return;
+  let n = (await store.kv.get("held:learnSince")) || 0;
+  if (!leaving) await store.kv.set("held:learnSince", ++n);
+  const ranAt = (await store.kv.get("held:learnAt")) || 0;
+  if (!learning.learnDue(n, { ranBefore: !!ranAt, leaving })) return;
+  if (leaving && Date.now() - ranAt < learning.LEAVE_GAP) return;
   const blocked = await store.kv.get("held:learnBlocked");
   if (blocked && Date.now() - blocked < 7 * 864e5) return;
   if (!(await heldAccount())) return;
   try {
     await held.heldCall("lodestone-learn.php", { withRecent: true });
     await store.kv.set("held:learnSince", 0);
+    await store.kv.set("held:learnAt", Date.now());
     S.heldBlocks = ((await store.kv.get("companion")) || {}).blocks || null;
   } catch (e) {
     // Without the website's consent the jobs do not run; asked again in a week.
@@ -3600,7 +3971,7 @@ async function renderReading() {
     const ns = canon.notes(R, arc.id, 8);
     if (ns.length) box.append(el("ul", { class: "canon-notes" }, ns.map(n => el("li", {}, el("small", {}, `${n.seam === "mine" ? "mine" : n.seam} · ${arc.unit_label.replace(/s$/, "")} ${n.unit_index}`), n.body))));
     box.append(el("p", { class: "fine" }, `${CADENCE_LINE(arc)} ${left.pending ? `${left.pending} question${left.pending === 1 ? "" : "s"} left in the plan, the last of them the close.` : ""}`),
-      el("button", { class: "btn ghost block", type: "button", onclick: async () => { if (!confirm(`Release your reading of ${arc.title}? The margin notes stay.`)) return; canon.closeArc(R, arc.id, "released"); await saveReading(); renderReading(); } }, "Release this reading"));
+      el("button", { class: "btn ghost block", type: "button", onclick: async () => { if (!await ask(`Release your reading of ${arc.title}? The margin notes stay.`)) return; canon.closeArc(R, arc.id, "released"); await saveReading(); renderReading(); } }, "Release this reading"));
     return;
   }
   const last = [...R.arcs].reverse().find(a => a.state === "closed");
@@ -3691,7 +4062,15 @@ async function afterTurn(turn) {
   learnLocally();
 }
 
-// The learning: every ten of the practitioner's messages, three calls on the
+// Leaving the app (the window hidden) is the end of a sitting: learn what is new
+// of it then, rather than waiting for the tenth message (learning.learnDue).
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden || S.busy) return;
+  learnLocally({ leaving: true }).catch(() => {});
+  maybeLearn({ leaving: true }).catch(() => {});
+});
+
+// The learning: every ten of the practitioner's messages (the first after three), three calls on the
 // model in use, after the answer is on screen. Never on harmonism.io's hosted
 // models (it would spend the daily allowance on messages nobody sent) and never
 // with no model.
@@ -3706,11 +4085,12 @@ async function complete(system, user, maxTokens = 1500) {
   return out;
 }
 
-async function learnLocally({ force = false } = {}) {
+async function learnLocally({ force = false, leaving = false } = {}) {
   if (learnJob || !S.learned || !canLearnHere()) return false;
   const all = (await store.messages.all()).filter(m => !m.meta?.crisis && !m.meta?.care && !m.meta?.notice && !m.meta?.review && !m.meta?.outreach && !["harmonic-profile", "crisis-template"].includes(m.meta?.model)).sort((a, b) => (a.ts || 0) - (b.ts || 0));
   const count = all.filter(m => m.role === "user").length;
-  if (!force && count - (S.learned.lastCount || 0) < learning.LEARN_EVERY) return false;
+  if (!force && !learning.learnDue(count - (S.learned.lastCount || 0), { ranBefore: !!S.learned.lastRun, leaving })) return false;
+  if (!force && leaving && Date.now() - (S.learned.lastRun || 0) < learning.LEAVE_GAP) return false;
   const job = (async () => {
     await S.summaryJob;
     while (S.busy) await new Promise(r => setTimeout(r, 1500));
@@ -3723,12 +4103,14 @@ async function learnLocally({ force = false } = {}) {
     // What they reported of their practices is evidence too, in their own words.
     const prac = (S.practices || []).filter(p => !p.archived && p.log?.length).map(p => `- [${p.pillar}] ${p.text}: ${p.log.slice(-6).map(l => `${l.status} ${new Date(l.ts).toISOString().slice(0, 10)}`).join(", ")}`);
     const evidence = prac.length ? `${convo}\n\nTheir own practice check-ins (held / partly / not):\n${prac.join("\n")}` : convo;
+    // v92: what the practitioner corrected stands over what the conversation suggests.
+    const fix = S.learned.corrections?.trim() ? `\n\nThe practitioner's own corrections. They are true and override the conversation and any earlier note: remove or rewrite whatever they contradict, and do not infer it again.\n${S.learned.corrections.trim().slice(0, 2000)}` : "";
     try {
       if (!S.learned.summaryEdited || force) {
-        const sum = (await complete(learning.PROFILE_PROMPT, learning.profileRequest(S.learned.summary, convo), 1200)).replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+        const sum = (await complete(learning.PROFILE_PROMPT, learning.profileRequest(S.learned.summary, convo) + fix, 1200)).replace(/<think>[\s\S]*?<\/think>/g, "").trim();
         if (sum.length > 40) S.learned.summary = sum.slice(0, 6000);
       }
-      const w = learning.parseJson(await complete(learning.WHEEL_PROMPT, learning.wheelRequest(S.wheel, S.learned.wheel, evidence), 1500));
+      const w = learning.parseJson(await complete(learning.WHEEL_PROMPT, learning.wheelRequest(S.wheel, S.learned.wheel, evidence) + fix, 1500));
       if (w && typeof w === "object") {
         const r = learning.applyWheelUpdates(S.wheel, S.learned.wheel, w);
         S.learned.wheel = r.learned;
@@ -3738,7 +4120,7 @@ async function learnLocally({ force = false } = {}) {
         }
         if (r.proposals.length) notifyProposals(r.proposals);
       }
-      const c = learning.cleanContext(learning.parseJson(await complete(learning.CONTEXT_PROMPT, learning.contextRequest(S.learned.context, (S.where ? leaveOut : x => x)(learning.conversationText(all.slice(-30)))), 800)), S.learned.context);
+      const c = learning.cleanContext(learning.parseJson(await complete(learning.CONTEXT_PROMPT, learning.contextRequest(S.learned.context, (S.where ? leaveOut : x => x)(learning.conversationText(all.slice(-30)))) + fix, 800)), S.learned.context);
       if (c) S.learned.context = c;
       try { await proposeLifeBook(all); } catch (e) { console.warn("[life book]", e); }
       S.learned.lastCount = count; S.learned.lastRun = Date.now();
@@ -3794,7 +4176,7 @@ function celebrate(pr, before, after) {
   box.replaceChildren(
     el("div", { class: "lu-ring", style: `--pc:${PILLAR_COLOR(pr.pillar)}` }, el("span", {}, `+${after - before}`)),
     el("div", { class: "lu-text" }, el("strong", {}, pr.from ? `${pillarName(pr.pillar)} rises to ${levelName(pr.to)}` : `${pillarName(pr.pillar)} enters your Wheel at ${levelName(pr.to)}`), el("span", {}, `Your Wheel: ${after} of ${learning.MAX_SCORE}`)),
-    el("button", { type: "button", class: "lu-x", "aria-label": "Close", onclick: () => { box.hidden = true; } }, "×"));
+    el("button", { type: "button", class: "lu-x", "aria-label": "Close", onclick: () => { box.hidden = true; } }, ico("x")));
   box.hidden = false; box.classList.remove("show"); void box.offsetWidth; box.classList.add("show");
   clearTimeout(celebrate.t); celebrate.t = setTimeout(() => { box.hidden = true; }, 9000);
   notify(pr.from ? `${pillarName(pr.pillar)} rises to ${levelName(pr.to)}` : `${pillarName(pr.pillar)} enters your Wheel at ${levelName(pr.to)}`, `Your Wheel: ${after} of ${learning.MAX_SCORE}.`);
@@ -4157,7 +4539,7 @@ async function sendShare() {
 }
 
 async function withdrawShare(r) {
-  if (!confirm(`Withdraw “${r.title}”? Harmonia's copy is deleted.`)) return;
+  if (!await ask(`Withdraw “${r.title}”? Harmonia's copy is deleted.`)) return;
   try {
     await shareCall({ action: "withdraw", id: r.id, token: r.token });
   } catch (e) {
@@ -4175,26 +4557,114 @@ function renderLearned() {
   const L = S.learned;
   const score = learning.wheelScore(S.wheel);
   $("#wheelScore").replaceChildren(el("b", {}, String(score)), el("span", {}, ` of ${learning.MAX_SCORE}`));
-  const sum = el("textarea", { rows: "7", placeholder: "Nothing yet. Lodestone writes its notes here after every ten of your messages; you can correct them." });
-  sum.value = L.summary || "";
-  sum.addEventListener("change", async () => { L.summary = sum.value.trim(); L.summaryEdited = true; await saveLearned(); toast("Kept. Lodestone will build on your version; it rewrites it again only when you ask it to learn now."); });
-  const pill = PILLARS.map(([k, n]) => { const p = L.wheel?.[k]; if (!p) return null; const bits = [p.strengths && `strong: ${p.strengths}`, p.concerns && `concern: ${p.concerns}`, p.edges && `edge: ${p.edges}`, p.resistance && "you seem to keep this one at a distance"].filter(Boolean); return bits.length ? el("li", { style: `--pc:${PILLAR_COLOR(k)}` }, el("b", {}, n), " — ", bits.join(" · ")) : null; }).filter(Boolean);
-  const c = L.context;
-  const ctx = c && (c.capsule || c.state?.open_commitments?.length || c.state?.pending_threads?.length) ? el("div", { class: "kv" },
-    c.capsule ? el("div", {}, el("b", {}, "Now: "), c.capsule) : null,
-    c.state?.open_commitments?.length ? el("div", {}, el("b", {}, "You committed to: "), c.state.open_commitments.join("; ")) : null,
-    c.state?.pending_threads?.length ? el("div", {}, el("b", {}, "Left open: "), c.state.pending_threads.join("; ")) : null) : null;
+  const pencil = () => { const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("aria-hidden", "true"); s.innerHTML = '<path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>'; return s; };
+  const lines = t => t.split("\n").map(x => x.trim()).filter(Boolean);
+
+  // v92: the notes read as text, the whole of them a tap away, and edited on purpose
+  // (on a phone the box scrolled inside itself, and nothing said it could be changed).
+  const notes = el("div", {});
+  const drawNotes = (editing = false) => {
+    if (editing) {
+      const ta = el("textarea", { rows: "14", "aria-label": "Lodestone's notes on you" }); ta.value = L.summary || "";
+      notes.replaceChildren(el("div", { class: "learned-edit" }, ta, el("div", { class: "learned-tools" },
+        el("button", { class: "btn primary", type: "button", onclick: async () => { L.summary = ta.value.trim(); L.summaryEdited = true; await saveLearned(); drawNotes(); toast("Kept. Lodestone builds on your version, and rewrites it only when you ask it to learn now."); } }, "Save"),
+        el("button", { class: "btn ghost", type: "button", onclick: () => drawNotes() }, "Cancel"))));
+      ta.focus();
+      return;
+    }
+    if (!L.summary?.trim()) { notes.replaceChildren(el("p", { class: "learned-notes-empty" }, "Nothing yet. Lodestone writes its notes here after every ten of your messages."), el("div", { class: "learned-tools" }, el("button", { class: "btn ghost", type: "button", onclick: () => drawNotes(true) }, "Write them yourself"))); return; }
+    const view = el("div", { class: "learned-notes clamped prose" }); view.innerHTML = render(L.summary);
+    const more = el("button", { class: "btn ghost", type: "button", hidden: true, onclick: () => { const c = view.classList.toggle("clamped"); more.textContent = c ? "Read all" : "Show less"; } }, "Read all");
+    notes.replaceChildren(view, el("div", { class: "learned-tools" }, more, el("button", { class: "btn ghost", type: "button", onclick: () => drawNotes(true) }, "Edit")));
+    requestAnimationFrame(() => { more.hidden = view.scrollHeight <= view.clientHeight + 4; if (more.hidden) view.classList.remove("clamped"); });
+  };
+  drawNotes();
+
+  // Its reading of each pillar, each line corrected or forgotten by itself.
+  const pillarItem = (k, n) => {
+    const li = el("li", { style: `--pc:${PILLAR_COLOR(k)}` });
+    const draw = (editing = false) => {
+      const p = L.wheel?.[k] || {};
+      if (!editing) {
+        const bits = [p.strengths && `strong: ${p.strengths}`, p.concerns && `concern: ${p.concerns}`, p.edges && `edge: ${p.edges}`, p.resistance && "you seem to keep this one at a distance"].filter(Boolean);
+        li.classList.toggle("lp-empty", !bits.length);
+        li.replaceChildren(el("span", { class: "lp-text" }, el("b", {}, n), " — ", bits.length ? bits.join(" · ") : "nothing read yet"),
+          el("button", { class: "lp-edit", type: "button", "aria-label": `Correct what Lodestone reads in ${n}`, title: "Correct", onclick: () => draw(true) }, pencil()));
+        return;
+      }
+      const f = (label, v) => { const t = el("textarea", { rows: "2" }); t.value = v || ""; return [el("label", {}, label, t), t]; };
+      const [l1, s] = f("Strong", p.strengths), [l2, c] = f("Concern", p.concerns), [l3, e] = f("Edge", p.edges);
+      const r = el("input", { type: "checkbox" }); r.checked = !!p.resistance;
+      li.replaceChildren(el("div", { class: "lp-form" }, el("b", {}, n), l1, l2, l3,
+        el("label", { class: "check" }, r, el("span", {}, "I seem to keep this one at a distance")),
+        el("div", { class: "learned-tools" },
+          el("button", { class: "btn primary", type: "button", onclick: async () => {
+            const v = { ...p, strengths: s.value.trim(), concerns: c.value.trim(), edges: e.value.trim(), resistance: r.checked, edited: Date.now() };
+            L.wheel = { ...(L.wheel || {}), [k]: v }; await saveLearned(); renderLearned();
+          } }, "Save"),
+          el("button", { class: "btn ghost", type: "button", onclick: () => draw() }, "Cancel"),
+          el("button", { class: "btn ghost", type: "button", onclick: async () => {
+            const w = { ...(L.wheel || {}) }; delete w[k]; L.wheel = w; await saveLearned(); renderLearned();
+          } }, "Forget this"))));
+    };
+    draw();
+    return li;
+  };
+  // v93: all eight pillars, in the Way of Harmony's order: one pillar alone read as
+  // a stray box. A pillar not read yet says so, and can be written by hand.
+  const pill = PILLARS.map(([k, n]) => pillarItem(k, n));
+
+  // Where they are now and what is left open: corrected the same way.
+  const ctxBox = el("div", {});
+  const drawCtx = (editing = false) => {
+    const c = L.context || {}, st = c.state || {};
+    if (editing) {
+      const cap1 = el("input", { type: "text" }); cap1.value = c.capsule || "";
+      const com = el("textarea", { rows: "3" }); com.value = (st.open_commitments || []).join("\n");
+      const pen = el("textarea", { rows: "3" }); pen.value = (st.pending_threads || []).join("\n");
+      ctxBox.replaceChildren(el("div", { class: "learned-edit" },
+        el("label", {}, "Now", cap1), el("label", {}, "You committed to (one per line)", com), el("label", {}, "Left open (one per line)", pen),
+        el("div", { class: "learned-tools" },
+          el("button", { class: "btn primary", type: "button", onclick: async () => {
+            L.context = { ...c, capsule: cap1.value.trim(), state: { ...st, open_commitments: lines(com.value), pending_threads: lines(pen.value) } };
+            await saveLearned(); drawCtx();
+          } }, "Save"),
+          el("button", { class: "btn ghost", type: "button", onclick: () => drawCtx() }, "Cancel"))));
+      return;
+    }
+    if (!(c.capsule || st.open_commitments?.length || st.pending_threads?.length)) { ctxBox.replaceChildren(); return; }
+    ctxBox.replaceChildren(el("div", { class: "learned-kv-head" },
+      el("div", { class: "kv" },
+        c.capsule ? el("div", {}, el("b", {}, "Now: "), c.capsule) : null,
+        st.open_commitments?.length ? el("div", {}, el("b", {}, "You committed to: "), st.open_commitments.join("; ")) : null,
+        st.pending_threads?.length ? el("div", {}, el("b", {}, "Left open: "), st.pending_threads.join("; ")) : null),
+      el("button", { class: "lp-edit", type: "button", "aria-label": "Correct where Lodestone thinks you are", title: "Correct", onclick: () => drawCtx(true) }, pencil())));
+  };
+  drawCtx();
+
+  // Something it has wrong, said once: true in every conversation and in its next learning.
+  const fixes = el("textarea", { rows: "3", placeholder: "One per line, such as: I have no children. I live in Spain, not France.", "aria-label": "Your corrections" });
+  fixes.value = L.corrections || "";
+  fixes.addEventListener("change", async () => {
+    L.corrections = fixes.value.trim(); await saveLearned();
+    toast(canLearnHere() ? "Kept. Lodestone holds it as true from now on; Learn now rewrites its notes with it." : "Kept. Lodestone holds it as true from now on.", 5000);
+  });
+
   const learnT = el("input", { type: "checkbox" }); learnT.checked = learningOn();
   learnT.onchange = async () => { S.settings.learn = learnT.checked; await store.kv.set("settings", S.settings); renderLearned(); };
   const outT = el("input", { type: "checkbox" }); outT.checked = outreachOn();
   outT.onchange = async () => { S.settings.outreach = outT.checked; await store.kv.set("settings", S.settings); };
   const moves = (L.history || []).filter(h => h.to !== h.from).slice(-8).reverse();
   const learnCost = sumUsage((L.costLog || []).filter(x => x.ts > Date.now() - 30 * 864e5));
-  box.replaceChildren(
+  box.replaceChildren(...[
     el("label", { class: "check" }, learnT, el("span", {}, "Learn from our conversations: every ten of your messages, Lodestone reads them back and updates its notes and your Wheel's evidence. It runs on the model you use, on this computer when the model is here.")),
-    el("label", {}, "Lodestone's notes on you", sum),
-    pill.length ? el("ul", { class: "learned-pillars" }, pill) : null,
-    ctx,
+    el("h5", { class: "sub-h" }, "Lodestone's notes on you"),
+    notes,
+    el("h5", { class: "sub-h" }, "What it reads in your Wheel"),
+    el("ul", { class: "learned-pillars" }, pill),
+    ctxBox,
+    el("h5", { class: "sub-h" }, "Something it has wrong?"),
+    el("label", {}, el("span", { class: "hint" }, "Tell it here. Lodestone takes what you write as true over anything it has inferred, in every conversation and the next time it learns."), fixes),
     el("div", { class: "kv" },
       el("div", {}, el("b", {}, "Harmonist vocabulary: "), `${cap(learning.FLUENCY_NAMES[L.fluency] || "new")} — Lodestone uses the terms as far as you have used them yourself.`),
       el("div", {}, el("b", {}, "The body: "), `${cap(learning.OPENNESS_NAMES[L.bodily] || "closed")} — Lodestone speaks of the body and sexuality only as openly as you have.`),
@@ -4203,9 +4673,9 @@ function renderLearned() {
       el("span", {}, new Date(h.ts).toLocaleDateString(undefined, { day: "numeric", month: "short" })), ` ${pillarName(h.pillar)} ${levelName(h.from)} → ${levelName(h.to)}`, h.accepted === false ? " (not yet)" : h.source === "you" ? " (yours)" : "")))) : null,
     el("div", { class: "row-btns" },
       el("button", { class: "btn ghost", type: "button", disabled: !canLearnHere(), title: canLearnHere() ? "" : "Needs a model, and not harmonism.io's hosted one", onclick: async e => { e.target.disabled = true; e.target.textContent = "Learning…"; const ok = await learnLocally({ force: true }); toast(ok ? "Lodestone has read your conversations again." : "Nothing was learned just now.", 4000); renderLearned(); } }, "Learn now"),
-      el("button", { class: "btn ghost", type: "button", onclick: async () => { if (!confirm("Forget what Lodestone has learned? Your Wheel, your notes and your conversations stay.")) return; S.learned = { ...emptyLearned(), history: L.history }; await saveLearned(); renderLearned(); renderCheckins(); } }, "Forget what it learned")),
+      el("button", { class: "btn ghost", type: "button", onclick: async () => { if (!await ask("Forget what Lodestone has learned? Your Wheel, your notes, your corrections and your conversations stay.")) return; S.learned = { ...emptyLearned(), history: L.history, corrections: L.corrections || "" }; await saveLearned(); renderLearned(); renderCheckins(); } }, "Forget what it learned")),
     el("label", { class: "check" }, outT, el("span", {}, "Lodestone may write first: after a silence longer than your usual rhythm, or when your Wheel is ready for its next step. Once a week at most, in waking hours, while Lodestone is open; through your own Telegram bot too, if you paired one.")),
-    reviewControls());
+    reviewControls()].filter(Boolean));   // v92: no "null" where a part is empty
 }
 
 function reviewControls() {
@@ -4294,7 +4764,7 @@ async function renderAccountBox() {
     if (d?.has_consent) {
       const when = d.consented_at ? new Date(typeof d.consented_at === "number" ? d.consented_at * 1000 : d.consented_at).toLocaleDateString() : "";
       const w = el("button", { class: "btn ghost small", type: "button", onclick: async () => {
-        if (!confirm("Withdraw your consent for Lodestone to process health, psychological and spiritual information on harmonism.io?\n\nThe next message you send to Lodestone on harmonism.io will ask for fresh consent before continuing.")) return;
+        if (!await ask("Withdraw your consent for Lodestone to process health, psychological and spiritual information on harmonism.io?\n\nThe next message you send to Lodestone on harmonism.io will ask for fresh consent before continuing.")) return;
         w.disabled = true;
         try { const r = await accountCall("POST", "member/companion-consent.php", { action: "revoke" }); if (r.success === false) throw new Error(r.error || "refused"); showConsent({ has_consent: false }); toast("Consent withdrawn. The next message on harmonism.io asks again.", 5000); }
         catch (e) { w.disabled = false; toast("Could not withdraw consent: " + (e.message || e), 6000); }
@@ -4332,6 +4802,8 @@ async function profileInput() {
   const tables = ((await store.kv.get("companion")) || {}).state?.tables || {};
   const notes = {};
   for (const r of tables.wheel_profile || []) notes[r.pillar] = { concerns: r.primary_concerns || "", edges: r.growth_edges || "", resistance: r.resistance_noted || "" };
+  // v93: and what Lodestone has learned per pillar (strengths among it), over the older import.
+  for (const [k, p] of Object.entries(S.learned?.wheel || {})) if (p) notes[k] = { ...(notes[k] || {}), ...Object.fromEntries(["strengths", "concerns", "edges", "resistance"].filter(f => p[f]).map(f => [f, p[f]])) };
   // The name the person gave Lodestone (Your path → What Lodestone knows about you), nothing guessed.
   const name = S.profile?.name || "";
   return { name, wheel: S.wheel || {}, hp: decodeHP(await store.kv.get("hp_code")), notes, situation: tables.clients?.[0]?.situation_capsule || "" };
@@ -4425,7 +4897,7 @@ async function renderHP() {
   const go = el("button", { class: "btn ghost", type: "button", onclick: async () => {
     const code = ta.value.replace(/\s+/g, "");
     if (!isHPCode(code)) { toast("That is not a Harmonic Profile code: it begins with HP:: and has no spaces.", 5000); return; }
-    if (S.assessment && !confirm("Replace your Harmonic Profile with this one? Your notes, practices and conversations stay as they are.")) return;
+    if (S.assessment && !await ask("Replace your Harmonic Profile with this one? Your notes, practices and conversations stay as they are.")) return;
     const reply = await ingestHPCode(code);
     if (!reply || !reply.startsWith("I have your Harmonic Profile")) { toast(reply || "The code could not be read.", 6000); return; }
     toast("Your Harmonic Profile is in Lodestone.", 4000);
@@ -4453,7 +4925,7 @@ async function takeAssessment() {
   if (!code) return;
   try { localStorage.removeItem(HP_PENDING); } catch {}
   if (!isHPCode(code)) return;
-  if (S.assessment && !confirm("Replace your earlier Harmonic Profile with the new one? Your notes and practices stay as they are.")) return;
+  if (S.assessment && !await ask("Replace your earlier Harmonic Profile with the new one? Your notes and practices stay as they are.")) return;
   const reply = await ingestHPCode(code);
   if (!reply) return;
   if (!S.thread) S.thread = await store.threads.create("Harmonic Profile");
@@ -4482,7 +4954,10 @@ async function refreshWebChip() {
   // routes not yet set up (a key to paste, an account to sign in to).
   const pc = isNative() ? await pairing.get().catch(() => null) : null;
   const show = !!S.engine && (phoneRoutesAvailable() || !!pc || localInferenceAvailable());
-  $("#modelRow").hidden = !show;
+  // The model is chosen in Settings, not on the chat page (October 26, 2026): it is a
+  // one-time choice, and the chip was clutter. The row stays in the page, hidden — the
+  // voice chip checks for it — and its label keeps up so nothing else changes.
+  $("#modelRow").hidden = true;
   if (!show) return;
   if (S.engine.kind === "hosted") await hosted.status().catch(() => null);   // the model's name, not its id
   $("#modelChipLabel").textContent = chipLabel(S.engine.describe());
@@ -4560,7 +5035,7 @@ async function switchWebTo(choice) {
   if (S.busy) { toast("Wait for this answer to finish, then change the model."); return; }
   if (choice.tier === "standard" && !(S.settings.tier === "standard" && S.settings.modelKey === choice.modelKey)) {
     const m = MODELS[choice.modelKey];
-    if (!confirm(`Think with ${choice.modelKey} in this browser? The first time, it downloads about ${Math.round(m.gb)} GB and runs on this computer's graphics card; after that it works offline and nothing you say leaves this device.`)) return;
+    if (!await ask(`Think with ${choice.modelKey} in this browser? The first time, it downloads about ${Math.round(m.gb)} GB and runs on this computer's graphics card; after that it works offline and nothing you say leaves this device.`)) return;
   }
   S.settings.tier = choice.tier;
   if (choice.tier === "openrouter" || choice.tier === "hosted") S.settings.remote = { tier: choice.tier, model: choice.model || "" };
@@ -4578,11 +5053,13 @@ async function switchWebTo(choice) {
 }
 
 function renderMe() {
-  renderHP();
-  renderMemoryLine();
-  renderReading();
-  renderLearned();
-  renderShare();
+  const safe = f => { try { const r = f(); r?.catch?.(e => console.warn("[your path]", e)); } catch (e) { console.warn("[your path]", e); } };
+  safe(renderHP);
+  safe(renderLifeBookPanel);
+  safe(renderMemoryLine);
+  safe(renderReading);
+  safe(renderLearned);
+  safe(renderShare);
   $("#meName").value = S.profile.name || "";
   $("#meCountry").value = S.profile.country || "";
   $("#meNotes").value = S.profile.notes || "";
@@ -4861,10 +5338,12 @@ async function renderSettings() {
   renderUsageSummary();
   const t = TIERS[S.settings.tier];
   const kvBox = $("#setEngine"); kvBox.innerHTML = "";
-  kvBox.append(el("div", {}, el("b", {}, t.label)), el("div", {}, S.engine ? S.engine.describe() : ""),
+  const desc = S.engine ? S.engine.describe() : "";   // v89: not said twice where the route's name already says it
+  kvBox.append(el("div", {}, el("b", {}, t.label)), ...(desc && !t.label.toLowerCase().startsWith(desc.split(" · ")[0].toLowerCase()) ? [el("div", {}, desc)] : []),
     el("div", {}, t.engine === "none" ? "No model: questions bring back passages of the corpus" : `Context ${S.engine?.tier.ctx || t.ctx} tokens · ${t.backbone === "server" ? "harmonism.io's current" : t.backbone === "full" ? "full" : "light"} doctrinal backbone`));
   const sel = $("#setModel"); sel.innerHTML = "";
   const acct = $("#setAccount"); acct.innerHTML = ""; acct.hidden = true;
+  $("#setModelOther").hidden = $("#setModelOtherNote").hidden = true;
   if (!DESKTOP && (t.engine === "hosted" || t.engine === "openrouter")) {
     // Phone routes: change the model in place; sign out or forget the key.
     const reengine = async model => {
@@ -4894,10 +5373,29 @@ async function renderSettings() {
       for (const m of OFFERED) sel.append(el("option", { value: m.id }, `${m.label} · ${m.maker} · not recommended · doctrinal fidelity`));
       const cur = S.settings.remote?.model;
       if (cur && ![...RECOMMENDED, ...OFFERED].some(m => m.id === cur)) sel.append(el("option", { value: cur }, `${cur} · ${assess(cur).note}`));
+      sel.append(el("option", { value: "__other" }, "Another model on OpenRouter…"));
       sel.value = cur || RECOMMENDED[0]?.id;
-      sel.onchange = () => reengine(sel.value);
+      // Any model OpenRouter carries, by its id: tested under the saved key before
+      // the conversation moves to it.
+      const other = $("#setModelOther"), oid = $("#setModelOtherId"), note = $("#setModelOtherNote");
+      const prev = sel.value;
+      sel.onchange = () => {
+        if (sel.value === "__other") { other.hidden = false; note.hidden = true; oid.value = ""; oid.focus(); return; }
+        other.hidden = note.hidden = true; reengine(sel.value);
+      };
+      const useOther = async () => {
+        const id = oid.value.trim(); if (!id) return;
+        note.hidden = false; note.textContent = "Asking OpenRouter…";
+        try { await testOpenRouter(await secrets.get("openrouter"), id); }
+        catch (e) { note.textContent = String(e.message || e); return; }
+        await reengine(id);
+        renderSettings();
+        const a = assess(id); if (!a.tested) toast(`${id}: ${a.note}.`, 6000);
+      };
+      $("#setModelOtherUse").onclick = useOther;
+      oid.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); useOther(); } else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); sel.value = prev; other.hidden = note.hidden = true; } };
       acct.append(el("button", { class: "btn ghost", type: "button", onclick: async () => {
-        if (!confirm("Forget the OpenRouter key on this device? Your conversations stay.")) return;
+        if (!await ask("Forget the OpenRouter key on this device? Your conversations stay.")) return;
         await secrets.del("openrouter"); S.engineReady = false; updateBadge(); closeDrawers(); S.engine = null; await showSetup();
       } }, "Forget the key"));
     }
@@ -4928,6 +5426,7 @@ async function renderSettings() {
 
   [...$("#setTheme").children].forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === (S.settings.theme || "dark"))));
   $("#setLang").value = S.settings.lang || "auto";
+  $("#setShowCost").checked = !!S.settings.showCost;
   const p = S.pack.runtime.pack;
   $("#setCorpus").innerHTML = "";
   const ver = DESKTOP ? (S.desktopVersion ? `Lodestone Desktop ${S.desktopVersion}` : "") : (vname(S.appVersion) ? `Lodestone ${vname(S.appVersion)}` : "");
@@ -5011,13 +5510,18 @@ const reloadButton = (label = "Reload Lodestone") => el("button", { class: "btn 
 // Focus goes into what opens and comes back where it was (1.13.1): with the
 // cursor left in the hidden message box, Enter sent a message under Settings.
 let drawerReturn = null;
-function openDrawer(sel) {
+function openDrawer(sel, { back = false } = {}) {
+  // What was open beneath is where Back returns (October 26, 2026): Usage from
+  // Settings goes back to Settings, Page readings to the conversations.
+  const under = [...document.querySelectorAll(".drawer")].find(x => !x.hidden && !isDocked(x) && "#" + x.id !== sel);
   document.querySelectorAll(".drawer").forEach(d => { if ("#" + d.id !== sel && !isDocked(d)) d.hidden = true; });
   const d = $(sel);
+  if (!back && d.hidden) d._parent = under ? "#" + under.id : null;
   if (!drawerReturn || !document.contains(drawerReturn)) drawerReturn = document.activeElement;
+  d.classList.remove("leaving"); $("#scrim").classList.remove("leaving");
   d.hidden = false; $("#scrim").hidden = false;
   if (!d.hasAttribute("role")) { d.setAttribute("role", "dialog"); const h = d.querySelector(".drawer-head h3"); if (h) { h.id = h.id || d.id + "Title"; d.setAttribute("aria-labelledby", h.id); } }
-  if (d.classList.contains("page")) openPage(d);
+  if (d.classList.contains("page") && !back) openPage(d);
   setTimeout(() => { if (!d.hidden && !d.contains(document.activeElement)) (d.querySelector(".drawer-head [data-close], .drawer-head button") || d).focus?.(); }, 30);
 }
 
@@ -5045,6 +5549,8 @@ function openPage(d) {
     new MutationObserver(() => { if (!d.hidden) drawPageNav(d); }).observe(d.querySelector(".me-body, .settings-body"), { subtree: true, attributes: true, attributeFilter: ["hidden"] });
     pageSpy.set(d, true);
   }
+  // v89: a group's heading gives way where its first section already says the same (MODEL over Model).
+  d.querySelectorAll(".set-group").forEach(g => { const t = g.querySelector(".set-group-title"), h = g.querySelector("section h4"); if (t && h) t.hidden = t.textContent.trim().toLowerCase() === h.textContent.trim().toLowerCase(); });
   main.scrollTop = 0; d._navHold = null;
   renderVault();
   if (d.id === "drawerMe") refreshProfileView();
@@ -5058,7 +5564,10 @@ function drawPageNav(d) {
   const key = pageSections(d).map(s => s.dataset.nav).join("|");
   if (box.dataset.key === key) return markPageNav(d);
   box.dataset.key = key; box.innerHTML = "";
+  let group = null;
   for (const sec of pageSections(d)) {
+    // Your path names its groups in the list (October 26, 2026).
+    if (sec.dataset.group && sec.dataset.group !== group) { group = sec.dataset.group; box.append(el("div", { class: "page-nav-group" }, group)); }
     const ic = sec.querySelector("h4 svg")?.cloneNode(true);
     const b = el("button", { type: "button", "data-for": sec.dataset.nav }, ...(ic ? [ic] : []), el("span", {}, sec.dataset.nav));
     // The item clicked stays lit while the page glides to it.
@@ -5117,9 +5626,185 @@ async function renderVault() {
 }
 function closeDrawers() {
   const was = [...document.querySelectorAll(".drawer")].some(d => !d.hidden && !isDocked(d));
-  document.querySelectorAll(".drawer").forEach(d => { if (!isDocked(d)) d.hidden = true; });
-  $("#scrim").hidden = true;
+  // v89: what was open slides away, then hides; reopened before that, it simply stays.
+  const still = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+  document.querySelectorAll(".drawer").forEach(d => { d._parent = null; if (!isDocked(d)) still && !d.hidden ? leave(d) : (d.hidden = true); });
+  still && !$("#scrim").hidden ? leave($("#scrim")) : ($("#scrim").hidden = true);
   if (was) { const r = drawerReturn; drawerReturn = null; if (r && document.contains(r) && r.offsetParent !== null) r.focus?.(); else $("#input")?.focus(); }
+}
+
+// ─── Back (October 26, 2026) ─────────────────────────────────────────────────
+// One way back from wherever one is: the back buttons, a swipe from left to
+// right, the phone's own back (Android's gesture, iOS Safari's edge swipe) and
+// the browser's. Each layer open over the conversation (a drawer, the one it was
+// opened from, an article over the Library's list on a phone, the Harmonic
+// Profile page) holds one entry in the page's history, so the system's back
+// closes it instead of leaving Lodestone. Back steps down one layer; in the
+// conversation on a phone, a swipe brings the list of conversations.
+const narrowMQ = matchMedia("(max-width: 760px)");
+const openLayers = () => [...document.querySelectorAll(".drawer")].filter(d => !d.hidden && !isDocked(d));
+function navDepth() {
+  // Setup over a running Lodestone: one layer, two when it was opened from Settings.
+  if (!$("#setup").hidden) return S.setupBack ? (S.setupFrom ? 2 : 1) : 0;
+  if ($("#main").hidden) return 0;
+  // v92: on a phone the list of conversations is the root, as in the phone's own
+  // apps: the conversation sits one step above it, so a swipe, the phone's back or
+  // the browser's back from the conversation brings the list, and from the list
+  // leaves. Before this the conversation had no entry of its own, and the system's
+  // back left the page and loaded it again (a blank, then the same conversation).
+  const w = x => x.id === "drawerThreads" && narrowMQ.matches ? 0 : 1;
+  let n = 0;
+  if ($("#profileView") && !$("#profileView").hidden) n++;
+  const d = openLayers()[0];
+  if (d) {
+    n += w(d);
+    for (let p = d._parent, i = 0; p && $(p) && i < 4; p = $(p)._parent, i++) n += w($(p));
+    if (d.id === "drawerLibrary" && d.classList.contains("reading") && narrowMQ.matches) n++;
+  } else if (narrowMQ.matches) n++;
+  return n;
+}
+const NAV = { depth: 0, skip: 0 };
+function navSync() {
+  const want = navDepth();
+  if (want === NAV.depth) return;
+  try {
+    if (want > NAV.depth) for (let i = NAV.depth; i < want; i++) history.pushState({ lodestone: i + 1 }, "");
+    else { NAV.skip++; history.go(want - NAV.depth); }
+  } catch {}
+  NAV.depth = want;
+}
+/** One layer down. Returns false when there is nothing to go back from. */
+function goBack() {
+  if (!$("#setup").hidden) {
+    if (!S.setupBack || !S.setupRestore) return false;
+    S.setupRestore();
+    return true;
+  }
+  if ($("#profileView") && !$("#profileView").hidden) { closeProfileView(); return true; }
+  const d = openLayers()[0];
+  if (!d) {
+    if (narrowMQ.matches && !$("#main").hidden) { renderThreadList(); openDrawer("#drawerThreads"); return true; }
+    return false;
+  }
+  if (d.id === "drawerThreads" && narrowMQ.matches) return false;   // the root on a phone: a swipe to the left closes it
+  if (d.id === "drawerLibrary" && d.classList.contains("reading") && narrowMQ.matches) { d.classList.remove("reading"); return true; }
+  const p = d._parent && $(d._parent);
+  if (p) {
+    d._parent = null; d.hidden = true;
+    if (p.id === "drawerThreads") renderThreadList();
+    openDrawer("#" + p.id, { back: true });
+    return true;
+  }
+  closeDrawers();
+  return true;
+}
+function initBack() {
+  const watch = new MutationObserver(() => navSync());
+  for (const n of [...document.querySelectorAll(".drawer"), $("#profileView"), $("#setup"), $("#main")].filter(Boolean)) watch.observe(n, { attributes: true, attributeFilter: ["hidden", "class"] });
+  addEventListener("popstate", () => {
+    if (NAV.skip) { NAV.skip--; return; }
+    if (NAV.depth > 0) { NAV.depth--; goBack(); }
+  });
+  document.addEventListener("click", e => { if (e.target.closest?.("[data-back]")) { e.preventDefault(); goBack(); } });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#setup").hidden && S.setupBack && !e.target.closest?.("input, textarea, select")) { e.preventDefault(); goBack(); } });
+  // In Lodestone Desktop, the mouse's back button and a two-finger swipe on the
+  // trackpad; a browser does both itself, through the history above.
+  if (DESKTOP) {
+    addEventListener("mouseup", e => { if (e.button === 3 && goBack()) e.preventDefault(); });
+    initTrackpadBack();
+  }
+  initSwipeBack();
+  // The desktop menu's Your Path (⌘3) and Life Book (⌘4).
+  window.lodestoneOpen = openFromDesktop;
+  narrowMQ.addEventListener("change", () => navSync());
+  // A reload keeps the page's history: start from the entry it reopened on, not
+  // on top of it, so entries do not pile up under the conversation.
+  NAV.depth = Number(history.state?.lodestone) || 0;
+  navSync();
+}
+function openFromDesktop(what) {
+  if ($("#main").hidden) return;
+  if (what === "lifebook") return openLifeBook();
+  if (what === "path") openMe();
+}
+// v92: Your path opens on the first tap whatever one of its parts makes of the
+// data: each part is drawn on its own, and the page opens even if one fails.
+function openMe() {
+  try { renderMe(); } catch (e) { console.warn("[your path]", e); }
+  openDrawer("#drawerMe");
+}
+let swipeCue = null;
+// Two fingers moved left to right on a Mac's trackpad (wheel events, deltaX below
+// zero, mostly level): one step back per gesture, the momentum that follows ignored
+// until the fingers have rested.
+function initTrackpadBack() {
+  let acc = 0, last = 0, locked = false, rest = 0;
+  addEventListener("wheel", e => {
+    clearTimeout(rest); rest = setTimeout(() => { locked = false; acc = 0; swipeCue?.classList.remove("on", "go"); }, 320);
+    if (locked || e.ctrlKey || Math.abs(e.deltaX) <= Math.abs(e.deltaY) * 1.5 || !swipeAllowed(e.target)) return;
+    const now = performance.now();
+    if (now - last > 250) acc = 0;
+    last = now; acc += e.deltaX;
+    if (acc >= 0) { swipeCue?.classList.remove("on", "go"); return; }
+    const can = navDepth() > 0 || !wideMQ.matches;
+    if (!can) return;
+    const p = Math.min(1, -acc / 150);
+    if (swipeCue) { swipeCue.style.setProperty("--p", p.toFixed(3)); swipeCue.classList.add("on"); swipeCue.classList.toggle("go", p >= 1); }
+    if (p >= 1) {
+      locked = true; acc = 0;
+      setTimeout(() => swipeCue?.classList.remove("on", "go"), 160);
+      if (!goBack() && !wideMQ.matches) { renderThreadList(); openDrawer("#drawerThreads"); }
+    }
+  }, { passive: true });
+}
+
+// The swipe: from left to right, mostly level, at least 72 px. Not where the
+// finger is in a text field, on a range, or on something that scrolls sideways
+// (the section strip of a page on a phone, a wide table or code).
+function swipeAllowed(t) {
+  for (let n = t; n && n !== document.body; n = n.parentElement) {
+    if (n.matches?.("input, textarea, select, [contenteditable], .model-menu, .recbar")) return false;
+    if (n.scrollWidth > n.clientWidth + 2) { const ox = getComputedStyle(n).overflowX; if (ox === "auto" || ox === "scroll") return false; }
+  }
+  return true;
+}
+function initSwipeBack() {
+  const cue = swipeCue = el("div", { class: "swipe-cue", "aria-hidden": "true" });
+  cue.innerHTML = '<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>';
+  document.body.append(cue);
+  let s = null;
+  const reset = () => { s = null; cue.classList.remove("on", "go"); cue.style.removeProperty("--p"); };
+  const canBack = () => navDepth() > 0 || (!wideMQ.matches && !$("#main").hidden);
+  document.addEventListener("touchstart", e => {
+    if (e.touches.length !== 1 || !swipeAllowed(e.target) || String(getSelection?.() || "")) { reset(); return; }
+    const t = e.touches[0];
+    // The screen's left edge is iOS's own back gesture; it reaches goBack through
+    // the history, so the two never both act on one swipe.
+    if (isIOS() && t.clientX < 22) { reset(); return; }
+    s = { x: t.clientX, y: t.clientY, at: Date.now(), dir: 0 };
+  }, { passive: true });
+  document.addEventListener("touchmove", e => {
+    if (!s || e.touches.length !== 1) return;
+    const t = e.touches[0], dx = t.clientX - s.x, dy = t.clientY - s.y;
+    if (!s.dir) {
+      if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
+      if (Math.abs(dx) < Math.abs(dy) * 1.6) { reset(); return; }
+      s.dir = dx > 0 ? 1 : -1;
+      if (s.dir > 0 && !canBack()) { reset(); return; }
+    }
+    s.dx = dx; s.dy = dy;
+    if (s.dir > 0) { const p = Math.min(1, dx / 72); cue.style.setProperty("--p", p.toFixed(3)); cue.classList.add("on"); cue.classList.toggle("go", p >= 1); }
+  }, { passive: true });
+  document.addEventListener("touchend", () => {
+    const g = s; reset();
+    if (!g?.dir || Date.now() - g.at > 900) return;
+    const level = Math.abs(g.dy || 0) < Math.abs(g.dx || 0) * 0.6;
+    if (g.dir > 0 && g.dx >= 72 && level) {
+      if (goBack()) return;
+      if (!wideMQ.matches && !$("#main").hidden) { renderThreadList(); openDrawer("#drawerThreads"); }
+    } else if (g.dir < 0 && -g.dx >= 72 && level && !$("#drawerThreads").hidden && !threadsDocked()) closeDrawers();
+  }, { passive: true });
+  document.addEventListener("touchcancel", reset, { passive: true });
 }
 
 // Conversations stay docked on the left in a wide window (the default); the
@@ -5201,7 +5886,7 @@ async function refreshModelChip() {
   const label = modelLabelOf(q, true) || "Choose a model";
   $("#modelChipLabel").textContent = chipLabel(label);
   $("#modelChip").classList.toggle("rented", q.current.kind === "remote" || q.current.kind === "hosted");
-  $("#modelRow").hidden = false;
+  $("#modelRow").hidden = true;   // chosen in Settings, as on the web (October 26, 2026)
 }
 
 function closeModelMenu() { $("#modelMenu").hidden = true; $("#modelChip").setAttribute("aria-expanded", "false"); }
@@ -5281,8 +5966,8 @@ function renderAttachBar() {
       : it.status === "error" ? it.error
       : it.data?.note || (it.data?.images?.length ? "image" : `${(it.data?.text?.length || 0).toLocaleString()} characters`);
     bar.append(el("span", { class: "attach-chip" + (it.status === "error" ? " err" : "") },
-      el("span", { class: "n", title: it.name }, `📎 ${it.name}`), el("small", {}, what),
-      el("button", { type: "button", "aria-label": `Remove ${it.name}`, onclick: () => { S.pending = S.pending.filter(x => x !== it); renderAttachBar(); } }, "×")));
+      el("span", { class: "n", title: it.name }, ico("clip"), it.name), el("small", {}, what),
+      el("button", { type: "button", "aria-label": `Remove ${it.name}`, onclick: () => { S.pending = S.pending.filter(x => x !== it); renderAttachBar(); } }, ico("x"))));
   }
 }
 
@@ -5324,14 +6009,14 @@ async function addFiles(list) {
           item.data = { name: item.name, kind: "audio", text, note: `recording, written out by ${PROVIDER_LABEL[p]}` };
         }
       } else if (item.kind === "audio" && !info.asr) {
-        if (!confirm(`To read recordings and videos, Lodestone needs its speech model (${info.asrLabel || "Whisper"}, about ${info.asrMB || 250} MB). It is downloaded once and runs on this computer: the recording goes nowhere. Download it now?`)) throw new Error("Not transcribed.");
+        if (!await ask(`To read recordings and videos, Lodestone needs its speech model (${info.asrLabel || "Whisper"}, about ${info.asrMB || 250} MB). It is downloaded once and runs on this computer: the recording goes nowhere. Download it now?`)) throw new Error("Not transcribed.");
         const off = DESKTOP.onProgress?.(p => { if (p.what === "speech" && p.total) say(`Downloading the speech model… ${Math.round(p.done / p.total * 100)}%`); });
         const r = await DESKTOP.asrDownload(); off?.();
         if (!r.ok) throw new Error(r.message || "The speech model could not be downloaded.");
       }
       let vision = info.vision?.state || "no";
       if (item.kind === "image" && vision === "download") {
-        if (confirm(`To see images, ${info.label || "this model"} needs its vision component (${Math.round((info.vision.size || 0) / 1e6)} MB), downloaded once. Lodestone then restarts the model, which takes a few seconds. Download it now?`)) {
+        if (await ask(`To see images, ${info.label || "this model"} needs its vision component (${Math.round((info.vision.size || 0) / 1e6)} MB), downloaded once. Lodestone then restarts the model, which takes a few seconds. Download it now?`)) {
           const off = DESKTOP.onProgress?.(p => { if (p.what === "vision" && p.total) say(`Downloading the model's vision… ${Math.round(p.done / p.total * 100)}%`); });
           const r = await DESKTOP.visionDownload(); off?.();
           if (!r.ok) throw new Error(r.message || "The vision component could not be downloaded.");
@@ -5462,7 +6147,7 @@ async function chooseSpeechRoute(why, dictating = false) {
   if (p && S.settings.dictSource === "provider") return "provider";
   if (S.settings.dictSource !== "provider" && await speechWeb.speechReady()) return "device";
   if (p && !S.settings.dictSource) {
-    const viaP = confirm(`${why}: write it out through ${PROVIDER_LABEL[p]}?\n\nOK — the recording is sent to ${PROVIDER_LABEL[p]}${p === "account" ? " and the transcription service it uses" : ""}, which writes it out. Nothing to download.\nCancel — download the speech model once (about ${speechWeb.MB} MB); your voice then stays on this device.\n\nSettings → Dictation changes this at any time.`);
+    const viaP = await ask(`${why}: write it out through ${PROVIDER_LABEL[p]}?\n\nOK — the recording is sent to ${PROVIDER_LABEL[p]}${p === "account" ? " and the transcription service it uses" : ""}, which writes it out. Nothing to download.\nCancel — download the speech model once (about ${speechWeb.MB} MB); your voice then stays on this device.\n\nSettings → Dictation changes this at any time.`);
     S.settings.dictSource = viaP ? "provider" : "device"; await store.kv.set("settings", S.settings);
     if (viaP) return "provider";
   }
@@ -5486,7 +6171,7 @@ async function ensureWebSpeech(why, dictating = false) {
   if (!speechWeb.speechStorable()) { toast("This browser cannot keep the speech model (it needs a secure page and storage).", 6000); return false; }
   if (speechDl) { toast("The speech model is still downloading.", 3000); return false; }
   const phone = isHandheld();
-  if (!confirm(`${why}, Lodestone needs its speech model (Whisper small, about ${speechWeb.MB} MB). It is downloaded once into this browser, from Hugging Face, checked, and runs on ${HERE}: your voice goes nowhere.${phone ? " On a phone, use Wi-Fi for the download; transcribing is slower than on a computer." : ""} Download it now?`)) return false;
+  if (!await ask(`${why}, Lodestone needs its speech model (Whisper small, about ${speechWeb.MB} MB). It is downloaded once into this browser, from Hugging Face, checked, and runs on ${HERE}: your voice goes nowhere.${phone ? " On a phone, use Wi-Fi for the download; transcribing is slower than on a computer." : ""} Download it now?`)) return false;
   D.working = true; setMic();
   let last = -1;
   speechDl = speechWeb.downloadSpeech((done, total) => { const pc = Math.floor(done / total * 100); if (pc >= last + 5) { last = pc; toast(`Downloading the speech model… ${pc}%`, 4000); } });
@@ -5660,13 +6345,13 @@ async function ensureSpeechModel(local = false) {
   // A provider can be reached and none was chosen: asked once, before anything is sent.
   const vp = voiceProvider();
   if (!local && vp && !S.settings.dictSource) {
-    const viaP = confirm(`To dictate: write it out through ${PROVIDER_LABEL[vp]}?\n\nOK — each recording is sent to ${PROVIDER_LABEL[vp]}, which writes it out.\nCancel — Lodestone writes it out on this computer: your voice goes nowhere.`);
+    const viaP = await ask(`To dictate: write it out through ${PROVIDER_LABEL[vp]}?\n\nOK — each recording is sent to ${PROVIDER_LABEL[vp]}, which writes it out.\nCancel — Lodestone writes it out on this computer: your voice goes nowhere.`);
     S.settings.dictSource = viaP ? "provider" : "device"; await store.kv.set("settings", S.settings);
     if (viaP) return true;
   }
   const info = await DESKTOP.info().catch(() => ({}));
   if (info.asr) return true;
-  if (!confirm(`To dictate, Lodestone needs its speech model (${info.asrLabel || "Whisper"}, about ${info.asrMB || 250} MB). It is downloaded once and runs on this computer: your voice goes nowhere. Download it now?`)) return false;
+  if (!await ask(`To dictate, Lodestone needs its speech model (${info.asrLabel || "Whisper"}, about ${info.asrMB || 250} MB). It is downloaded once and runs on this computer: your voice goes nowhere. Download it now?`)) return false;
   D.working = true; setMic();
   const off = DESKTOP.onProgress?.(p => { if (p.what === "speech" && p.total) toast(`Downloading the speech model… ${Math.round(p.done / p.total * 100)}%`, 4000); });
   try {
@@ -5944,6 +6629,9 @@ function bindChrome() {
   // Spoken replies
   renderVoiceChip();
   $("#voiceChip").onclick = e => { e.stopPropagation(); toggleVoiceMenu(); };
+  fitFoot(); addEventListener("resize", fitFoot); addEventListener("orientationchange", () => setTimeout(fitFoot, 300));
+  // A composer menu opened near a screen edge is kept inside the screen, on any width.
+  for (const menu of document.querySelectorAll(".composer .model-menu")) new MutationObserver(() => { if (!menu.hidden) fitMenu(menu); }).observe(menu, { attributes: true, attributeFilter: ["hidden"] });
   document.addEventListener("click", e => { if (!e.target.closest("#voiceWrap")) { $("#voiceMenu").hidden = true; $("#voiceChip").setAttribute("aria-expanded", "false"); } });
   $("#setVoiceMode").onclick = e => { const k = e.target.closest("button")?.dataset.v; if (k && !e.target.closest("button").disabled) saveVoice({ mode: k }); };
   $("#setVoiceGender").onclick = e => { const k = e.target.closest("button")?.dataset.v; if (k) saveVoice({ gender: k }); };
@@ -5970,16 +6658,16 @@ function bindChrome() {
   $("#setVoiceTry").onclick = async () => {
     if (speaker.active && speaker.key === "try") { speaker.stop(); return; }
     const lang = $("#setVoiceName").dataset.lang || "en";
-    const line = { fr: "Parle depuis là où tu te tiens. La Roue commence par la Présence.", es: "Habla desde donde estás. La Rueda empieza por la Presencia.", ar: "تكلّم من حيث تقف. تبدأ العجلة بالحضور.", pt: "Fala a partir de onde estás. A Roda começa pela Presença.", de: "Sprich von dort, wo du stehst. Das Rad beginnt mit der Präsenz." }[lang] || "Speak from where you are. The Wheel begins with Presence.";
+    const line = { fr: "Bienvenue. La Roue commence par la Présence.", es: "Bienvenido. La Rueda empieza por la Presencia.", ar: "أهلاً بك. تبدأ العجلة بالحضور.", pt: "Bem-vindo. A Roda começa pela Presença.", de: "Willkommen. Das Rad beginnt mit der Präsenz." }[lang] || "Welcome. The Wheel begins with Presence.";
     if (await startSpeaking("try", lang)) speaker.feed(line, true);
   };
   $("#setDictDownload").onclick = () => ensureSpeechModel(true);
-  $("#webBtn").onclick = () => {
+  $("#webBtn").onclick = async () => {
     if (!S.webNext) {
       let told = false; try { told = localStorage.getItem("munai-web-consent") === "1"; } catch {}
       if (!told) {
         const viaProvider = !DESKTOP && ["openrouter", "hosted"].includes(S.engine?.kind);
-        if (!confirm(viaProvider
+        if (!await ask(viaProvider
           ? `Look this up online?\n\nYour question will be searched on the web by ${S.engine.kind === "hosted" ? "harmonism.io's provider, OpenRouter," : "OpenRouter"} (its search engine, Exa, receives it), and the results are read with you. Nothing else goes beyond the turn already sent.\n\nThis applies to the next question only.`
           : DESKTOP
           ? "Look this up online?\n\nYour question will be sent to a search engine (DuckDuckGo, or Wikipedia when DuckDuckGo does not answer), and the pages it finds will be opened from this computer. Nothing else leaves: not your conversations, not your notes.\n\nThis applies to the next question only."
@@ -6036,7 +6724,8 @@ function bindChrome() {
   };
   $("#drawerThreads [data-close]").onclick = () => { if (threadsDocked()) setDock(false); else closeDrawers(); };
   $("#newThread").onclick = newThread;
-  $("#btnLibrary").onclick = () => { renderLibrary($("#libSearch").value); openLibrary(); };
+  $("#btnLibrary").onclick = $("#btnLibrarySide").onclick = () => { renderLibrary($("#libSearch").value); openLibrary(); };
+  $("#btnNew").onclick = () => newThread();
   let lt; $("#libSearch").oninput = e => { clearTimeout(lt); lt = setTimeout(() => renderLibrary(e.target.value), 180); };
   // On a phone the article covers the list; this brings the list back.
   $("#readerBack").onclick = () => $("#drawerLibrary").classList.remove("reading");
@@ -6044,7 +6733,11 @@ function bindChrome() {
     const a = S.pack.corpus.articles[readerArticle]; closeDrawers();
     $("#input").value = `Walk me through "${a.t}" from where I stand.`; autosize(); $("#input").focus();
   };
-  $("#btnMe").onclick = () => { renderMe(); openDrawer("#drawerMe"); };
+  $("#btnMe").onclick = $("#btnPathSide").onclick = $("#btnPathTop").onclick = () => openMe();
+  // The vault, at the foot of the conversations: the life book in Your path, where it is read and arranged.
+  $("#btnVaultSide").onclick = $("#setLbBrowse").onclick = () => openLifeBook();
+  bindLifeBookPanel();
+  initBack();
   $("#btnSettings").onclick = $("#btnSettingsSide").onclick = () => { renderSettings(); openDrawer("#drawerSettings"); };
   document.addEventListener("keydown", e => { if (e.key === "Escape") closeDrawers(); });
 
@@ -6070,6 +6763,7 @@ function bindChrome() {
     S.settings.theme = v; applyTheme(v); await store.kv.set("settings", S.settings); renderSettings();
   };
   $("#setLang").onchange = async e => { S.settings.lang = e.target.value; await store.kv.set("settings", S.settings); };
+  $("#setShowCost").onchange = async e => { S.settings.showCost = e.target.checked; await store.kv.set("settings", S.settings); renderChat(); };
   if (FOLDERS?.foldersAdd) {
     $("#setFolderAdd").onclick = async () => { try { if (!DESKTOP) $("#setFoldersStats").textContent = "Reading…"; renderFolders(await FOLDERS.foldersAdd()); } catch (e) { toast(String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ""), 6000); } };
     $("#setFolderReread").onclick = async () => { $("#setFoldersStats").textContent = "Reading…"; renderFolders(await FOLDERS.foldersReread()); };
@@ -6084,6 +6778,7 @@ function bindChrome() {
   $("#setChangeTier").onclick = async () => {
     closeDrawers();
     if (DESKTOP) return DESKTOP.openModels();
+    S.setupFrom = "#drawerSettings";
     S.engineReady = false; S.engine = null; await showSetup();
   };
   $("#setCheckUpdate").onclick = async () => {
@@ -6131,7 +6826,7 @@ function bindChrome() {
     e.target.value = "";
   };
   $("#setWipe").onclick = async () => {
-    if (!confirm("Erase conversations, practices, notes, the corpus and cached models from this device? This cannot be undone.")) return;
+    if (!await ask("Erase conversations, practices, notes, the corpus and cached models from this device? This cannot be undone.")) return;
     try { const w = await import("../vendor/web-llm.js"); for (const k of Object.values(MODELS)) { await w.deleteModelAllInfoInCache(k.id).catch(() => {}); await w.deleteModelAllInfoInCache(k.f32).catch(() => {}); } } catch {}
     await store.wipeEverything();
     location.reload();
@@ -6151,11 +6846,11 @@ function bindChrome() {
 
 /** Signing out: the memory stays on this device unless this is a shared computer (or the person says otherwise). */
 async function signOutOfAccount() {
-  if (!confirm("Sign out of harmonism.io on this device?")) return false;
+  if (!await ask("Sign out of harmonism.io on this device?")) return false;
   const shared = await held.sharedComputer.get().catch(() => false);
   const keep = shared
-    ? !confirm("This device is marked as a shared computer. Remove your Lodestone memory from it?\n\nOK: remove it. With sync on, it comes back when you sign in again.\nCancel: keep it here.")
-    : confirm("Keep your Lodestone memory on this device for when you sign in again?\n\nOK: keep it (your own computer).\nCancel: remove it from this device (a shared computer). With sync on, it comes back when you sign in again.");
+    ? !await ask("This device is marked as a shared computer. Remove your Lodestone memory from it?\n\nOK: remove it. With sync on, it comes back when you sign in again.\nCancel: keep it here.")
+    : await ask("Keep your Lodestone memory on this device for when you sign in again?\n\nOK: keep it (your own computer).\nCancel: remove it from this device (a shared computer). With sync on, it comes back when you sign in again.");
   try { const a = await accountTransport().account().catch(() => null); if (a?.email) await unlock.forget(a.email); } catch {}
   try { await held.signOutHere({ keep }); } catch (e) { console.warn("[memory]", e); }
   if (DESKTOP && DESKTOP.hostedSignOut) await DESKTOP.hostedSignOut().catch(() => {});
@@ -6175,7 +6870,7 @@ async function askDeviceMemory() {
   const o = await held.deviceOffer().catch(() => ({ offer: false }));
   if (!o.offer) return;
   const a = await heldAccount();
-  if (confirm(`This device holds a Lodestone memory from before ${a?.email || "you"} signed in here: conversations, notes and what Lodestone has learned. Is it yours?\n\nOK: it joins your memory.\nCancel: it stays with this device, apart from yours, and Lodestone will not ask again.`)) {
+  if (await ask(`This device holds a Lodestone memory from before ${a?.email || "you"} signed in here: conversations, notes and what Lodestone has learned. Is it yours?\n\nOK: it joins your memory.\nCancel: it stays with this device, apart from yours, and Lodestone will not ask again.`)) {
     await held.adoptDevice(); location.reload();
   } else await held.declineDevice();
 }
@@ -6185,3 +6880,76 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) foll
 addEventListener("storage", e => { if (e.key && e.key.startsWith("sb-") && e.key.endsWith("-auth-token")) followAccount(); });
 
 boot().then(() => askDeviceMemory()).catch(e => { console.error(e); document.body.insertAdjacentHTML("beforeend", `<p style="padding:20px">Lodestone could not start: ${String(e.message || e)}</p>`); });
+
+
+// --- The screen's foot and the composer's menus (v88) ---
+// iOS 26 can stop an installed web app's page short of the screen's foot, a band
+// drawn by the system that no element reaches (WebKit bug 301994). Whatever the
+// phone, the page then does not reach the home indicator, so the composer drops the
+// bottom inset there. The shortfall is measured, never assumed: a page that reaches
+// the foot (Android edge to edge, an iPhone without the bug, any browser tab) keeps it.
+function fitFoot() {
+  const root = document.documentElement;
+  const installed = navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
+  if (!installed) { root.classList.remove("foot-held"); return; }
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || "")) return; // a keyboard shortens the page; judge without it
+  const full = matchMedia("(orientation: landscape)").matches ? Math.min(screen.width, screen.height) : Math.max(screen.width, screen.height);
+  root.classList.toggle("foot-held", full - innerHeight > 16);
+}
+function fitMenu(menu) {
+  const host = menu.offsetParent; if (!host) return;
+  menu.style.left = "0px"; menu.style.right = "auto";
+  const h = host.getBoundingClientRect(), w = menu.offsetWidth;
+  const x = Math.max(8, Math.min(h.left, innerWidth - w - 8));
+  menu.style.left = (x - h.left) + "px";
+}
+
+
+/** v89: an element leaves with its exit animation (.leaving), then is hidden. */
+function leave(node, ms = 200) {
+  node.classList.add("leaving");
+  clearTimeout(node._leaveT);
+  node._leaveT = setTimeout(() => { if (node.classList.contains("leaving")) { node.classList.remove("leaving"); node.hidden = true; } }, ms);
+}
+
+// ─── A question asked in Lodestone's own sheet (v89) ─────────────────────────
+// In place of the browser's grey confirm(): the same text, the same answer (true
+// for OK), drawn as the rest of the app. A destructive question shows its button in
+// the danger colour and puts the focus on Cancel. Where the text sets out what OK
+// and Cancel each do ("OK — …", "Cancel: …"), the two become described choices.
+const ASK_VERBS = { delete: "Delete", erase: "Erase", remove: "Remove", forget: "Forget", withdraw: "Withdraw", release: "Release", replace: "Replace", pair: "Pair", stop: "Stop syncing", "sign": "Sign out", think: "Use it", "make": "Make it so", "start": "Start again", look: "Look it up" };
+const ASK_DANGER = /^(delete|erase|remove|forget|withdraw|stop syncing|sign out|release)\b/i;
+function ask(text, { ok = "", cancel = "Cancel", danger = null } = {}) {
+  return new Promise(resolve => {
+    const paras = String(text).split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+    let okDesc = "", cancelDesc = "";
+    const body = [];
+    for (const p of paras) for (const line of p.split("\n")) {
+      const o = line.match(/^OK\s*[—:–-]\s*(.+)$/i), c = line.match(/^Cancel\s*[—:–-]\s*(.+)$/i);
+      if (o) okDesc = o[1]; else if (c) cancelDesc = c[1]; else if (line.trim()) body.push(line.trim());
+    }
+    const first = body.shift() || "";
+    const isDanger = danger ?? ASK_DANGER.test(first);
+    const w = (first.match(/^[A-Za-z]+/)?.[0] || "").toLowerCase();
+    const okLabel = ok || (/download it now\?|downloaded once/i.test(text) ? "Download" : ASK_VERBS[w] || "OK");
+    const done = v => { document.removeEventListener("keydown", onKey, true); leave(sheet, 180); setTimeout(() => sheet.remove(), 200); resolve(v); };
+    const onKey = e => {
+      if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); done(false); }
+      else if (e.key === "Enter" && !e.shiftKey && document.activeElement?.closest?.(".ask-card") && document.activeElement.tagName !== "BUTTON") { e.preventDefault(); done(true); }
+    };
+    const choice = (label, desc, v, cls) => el("button", { type: "button", class: `ask-choice ${cls}`, onclick: () => done(v) }, el("b", {}, label), el("span", {}, desc));
+    const card = el("div", { class: "ask-card", role: "alertdialog", "aria-modal": "true", "aria-label": first },
+      first.length <= 150 ? el("h3", {}, first) : el("p", { class: "ask-lead" }, first),
+      body.map(t => el("p", {}, t)),
+      okDesc || cancelDesc
+        ? el("div", { class: "ask-choices" }, choice(okLabel === "OK" ? "Yes" : okLabel, okDesc, true, "yes"), choice("No", cancelDesc, false, "no"))
+        : el("div", { class: "ask-btns" },
+            el("button", { type: "button", class: "btn ghost", onclick: () => done(false) }, cancel),
+            el("button", { type: "button", class: `btn primary${isDanger ? " danger" : ""}`, onclick: () => done(true) }, okLabel)));
+    const sheet = el("div", { class: "ask-sheet signin-ask" }, card);
+    sheet.addEventListener("click", e => { if (e.target === sheet) done(false); });
+    document.body.append(sheet);
+    document.addEventListener("keydown", onKey, true);
+    (isDanger ? card.querySelector(".btn.ghost, .ask-choice.no") : card.querySelector(".btn.primary, .ask-choice.yes"))?.focus();
+  });
+}

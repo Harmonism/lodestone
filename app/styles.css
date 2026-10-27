@@ -1,3 +1,16 @@
+/* v89: the faces harmonism.io sets, shipped with the app (SIL OFL, fonts/), so every
+   phone and computer shows the same Lodestone, offline too. */
+@font-face { font-family: 'Cormorant Garamond'; font-style: normal; font-weight: 500; font-display: swap; src: url('fonts/cormorant-garamond-latin-ext-500-normal.woff2') format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Cormorant Garamond'; font-style: normal; font-weight: 500; font-display: swap; src: url('fonts/cormorant-garamond-latin-500-normal.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Cormorant Garamond'; font-style: normal; font-weight: 600; font-display: swap; src: url('fonts/cormorant-garamond-latin-ext-600-normal.woff2') format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Cormorant Garamond'; font-style: normal; font-weight: 600; font-display: swap; src: url('fonts/cormorant-garamond-latin-600-normal.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Cormorant Garamond'; font-style: italic; font-weight: 500; font-display: swap; src: url('fonts/cormorant-garamond-latin-ext-500-italic.woff2') format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Cormorant Garamond'; font-style: italic; font-weight: 500; font-display: swap; src: url('fonts/cormorant-garamond-latin-500-italic.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Source Sans 3'; font-style: normal; font-weight: 200 900; font-display: swap; src: url('fonts/source-sans-3-latin-ext-wght-normal.woff2') format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Source Sans 3'; font-style: normal; font-weight: 200 900; font-display: swap; src: url('fonts/source-sans-3-latin-wght-normal.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Source Sans 3'; font-style: italic; font-weight: 200 900; font-display: swap; src: url('fonts/source-sans-3-latin-ext-wght-italic.woff2') format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Source Sans 3'; font-style: italic; font-weight: 200 900; font-display: swap; src: url('fonts/source-sans-3-latin-wght-italic.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+
 /* MunAI Offline — palette from harmonia-astro BaseLayout (dark: emanation, light: carving) */
 :root, [data-theme="dark"] {
   --font-body: 'Source Sans 3', 'Source Sans Pro', system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -11,7 +24,7 @@
   --text-heading: #f0f0ff;
   --accent: #9B3DBE;
   --accent-secondary: #B892D4;
-  --link: #FFBA2E;
+  --link: #CDB0E6;   /* v89: one accent; gold is the Matter pillar's alone */
   --border: #1e1e40;
   --border-light: #2a2a55;
   --user-bubble: #1a1a3a;
@@ -57,7 +70,7 @@
   --text-heading: #1a1a2e;
   --accent: #7B2D8E;
   --accent-secondary: #7B2D8E;
-  --link: #b07800;
+  --link: #6E2A82;
   --border: #d8d4ce;
   --border-light: #c8c4be;
   --user-bubble: #efe9f3;
@@ -85,12 +98,18 @@ button { font: inherit; color: inherit; cursor: pointer; }
 input, select, textarea { font: inherit; color: var(--text); }
 svg { stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 
-#app { height: 100dvh; display: flex; flex-direction: column; }
+/* 2026-10-26: pinned to the whole screen. 100dvh in an installed iPhone app
+   (black-translucent status bar) is the screen less the status bar, which left
+   a dead band under the composer; inset: 0 is the whole screen everywhere. */
+#app { position: fixed; inset: 0; display: flex; flex-direction: column; }
 .screen { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
 /* ── Setup ── */
 #setup { overflow-y: auto; }
 .setup-inner { max-width: 620px; margin: 0 auto; padding: max(28px, env(safe-area-inset-top)) 18px 40px; }
+.setup-top-back { margin: 0 0 -8px -12px; }
+.set-model-other { display: flex; gap: 8px; margin: -4px 0 10px; }
+.set-model-other input { flex: 1; min-width: 0; }
 .setup-sprite { width: 64px; height: 75px; display: block; margin: 8px auto 18px; fill: none; stroke: none; }
 h1, h2, h3, h4 { font-family: var(--font-header); color: var(--text-heading); font-weight: 600; letter-spacing: .01em; }
 h1 { font-size: 2rem; text-align: center; line-height: 1.2; }
@@ -101,6 +120,10 @@ h2 { font-size: 1.3rem; margin: 28px 0 12px; }
   text-align: left; background: var(--bg-surface); border: 1px solid var(--border-light);
   border-radius: 12px; padding: 14px 16px; display: grid; gap: 3px; transition: border-color .15s, background .15s;
 }
+.choices-more { border-top: 1px solid var(--border); padding-top: 8px; }
+.choices-more summary { cursor: pointer; color: var(--text-muted); font-size: .93rem; padding: 6px 2px; }
+.choices-more[open] summary { margin-bottom: 4px; }
+.choices-more .hint { margin: 0 0 10px; }
 .choice:hover { background: var(--bg-elevated); }
 .choice[aria-pressed="true"] { border-color: var(--accent-secondary); box-shadow: 0 0 0 1px var(--accent-secondary) inset; }
 .choice[disabled] { opacity: .45; cursor: not-allowed; }
@@ -297,7 +320,7 @@ html:not(.desktop) .desktop-only { display: none !important; }
 .attach-chip small { color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
 .attach-chip.err { border-color: #e0707a; }
 /* A file dragged over the window: the whole window takes it. */
-body.dropping::after { content: "Drop to attach: documents, spreadsheets, PDFs, images, recordings, videos, archives"; position: fixed; inset: 10px; z-index: 2147483000; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; border: 2px dashed var(--accent, #c9a14a); border-radius: 16px; background: color-mix(in srgb, var(--bg, #111) 82%, transparent); color: var(--text); font-size: 17px; pointer-events: none; }
+body.dropping::after { content: "Drop to attach: documents, spreadsheets, PDFs, images, recordings, videos, archives"; position: fixed; inset: 10px; z-index: 2147483000; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; border: 2px dashed var(--accent, #9B3DBE); border-radius: 16px; background: color-mix(in srgb, var(--bg, #111) 82%, transparent); color: var(--text); font-size: 17px; pointer-events: none; }
 .attach-chip.err small { color: #e0707a; white-space: normal; }
 .attach-chip button { border: 0; background: transparent; color: var(--text-muted); font-size: 16px; line-height: 1; padding: 0 4px; cursor: pointer; }
 .msg-files { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 6px; justify-content: flex-end; }
@@ -887,8 +910,8 @@ html.threads-docked .top-settings { display: none; }
 .composer { padding: 8px 12px calc(6px + env(safe-area-inset-bottom)); }
 .composer-tools .cost-line { margin-left: auto; padding-left: 8px; }
 .input-wrap { position: relative; flex: 1 1 auto; min-width: 0; display: flex; }
-.input-wrap textarea { flex: 1 1 auto; min-width: 0; min-height: 76px; max-height: 240px; padding-right: 50px; }
-.input-wrap .mic { position: absolute; right: 6px; bottom: 6px; width: 38px; height: 38px; flex: none; border: 0; border-radius: 10px; background: transparent; }
+.input-wrap textarea { flex: 1 1 auto; min-width: 0; min-height: 76px; max-height: 240px; padding-right: 98px; }
+.input-wrap .mic { position: absolute; right: 50px; bottom: 6px; width: 38px; height: 38px; flex: none; border: 0; border-radius: 10px; background: transparent; }
 .input-wrap .mic:hover { background: var(--bg-elevated); color: var(--text); }
 .composer-main .talk { flex: 0 0 48px; height: 48px; border-radius: 12px; border-color: var(--accent); color: var(--accent); }
 .composer-main .talk.on { color: #fff; }
@@ -898,10 +921,10 @@ html.threads-docked .top-settings { display: none; }
 :root:has(#attachBar:not([hidden])) #talkBtn { display: none !important; }
 .model-menu .model-cost { display: none; }
 @media (max-width: 520px) {
-  .composer { padding: 6px 8px calc(4px + env(safe-area-inset-bottom)); gap: 6px; }
+  .composer { padding: 6px 8px max(4px, calc(env(safe-area-inset-bottom) - 22px)); gap: 6px; }
   .composer-tools .cost-line { display: none; }
   .model-menu .model-cost { display: block; }
-  .input-wrap textarea { min-height: 76px; padding-right: 48px; }
+  .input-wrap textarea { min-height: 76px; padding-right: 96px; }
 }
 /* 1.14.1: the answer's actions wrap on a phone; the last answer's are fully shown. */
 .msg .actions { flex-wrap: wrap; row-gap: 4px; }
@@ -917,3 +940,248 @@ html.threads-docked .top-settings { display: none; }
 .lifebook .lb-where-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
 .lifebook .lb-where-row span { color: var(--text-muted); font-size: .88rem; }
 .lifebook .lb-where { flex: 1; min-width: 0; }
+
+/* ── Back, everywhere (October 26, 2026) ── */
+.head-back { flex: 0 0 auto; margin-left: -8px; }
+.head-back svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.pv-top .head-back { margin-left: 0; }
+/* The swipe's cue: a disc that follows the finger in from the left edge. */
+.swipe-cue { position: fixed; z-index: 90; left: 0; top: 50%; width: 44px; height: 44px; margin-top: -22px; border-radius: 50%; display: grid; place-items: center; background: var(--bg-elevated); border: 1px solid var(--border-light); color: var(--text-muted); box-shadow: 0 4px 18px rgba(0,0,0,.25); pointer-events: none; opacity: 0; transform: translateX(calc(-48px + var(--p, 0) * 64px)) scale(calc(.7 + var(--p, 0) * .3)); transition: opacity .12s, background .12s, color .12s; }
+.swipe-cue.on { opacity: calc(.35 + var(--p, 0) * .65); }
+.swipe-cue.go { background: var(--accent); color: #fff; border-color: transparent; }
+.swipe-cue svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ── The foot of the conversations: Your path, the vault, Settings ── */
+.threads-foot { display: grid; gap: 1px; }
+.threads-settings .tf-lbl { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.threads-settings .tf-lbl small { font-size: .74rem; color: var(--text-muted); opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.threads-settings .tf-lbl small:empty { display: none; }
+
+/* ── Your path in four groups ── */
+.me-group-title { font-family: var(--font-body); font-size: .74rem; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--text-muted); margin: 14px 4px -6px; grid-column: 1 / -1; }
+.me-group-title:first-child { margin-top: 0; }
+.page-nav-group { font-size: .68rem; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--text-muted); opacity: .75; padding: 14px 12px 4px; }
+.page-nav-group:first-child { padding-top: 2px; }
+@media (min-width: 1180px) {
+  #drawerMe .me-body > section[data-nav="Wheel"], #drawerMe .me-body > #lbBox { grid-column: 1 / -1; }
+}
+@media (max-width: 760px) {
+  .page-nav-group { display: none; }
+  .me-group-title { margin: 10px 2px -6px; }
+}
+
+/* ── The life book, in Your path ── */
+.lb-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.lb-tools .search { flex: 1 1 220px; margin: 0; min-width: 0; }
+.lb-tools .seg button { padding: 6px 12px; font-size: .86rem; }
+.lb-actions { margin-top: 2px; }
+.lb-groups { display: grid; gap: 8px; }
+.lb-group { border: 1px solid var(--border-light); border-radius: 12px; padding: 0 12px; }
+.lb-group > summary { display: flex; align-items: center; gap: 10px; padding: 10px 0; cursor: pointer; font-weight: 600; list-style: none; }
+.lb-group > summary::-webkit-details-marker { display: none; }
+.lb-group > summary::before { content: "›"; display: inline-block; width: 10px; color: var(--text-muted); transition: transform .15s; }
+.lb-group[open] > summary::before { transform: rotate(90deg); }
+.lb-group > summary .n { margin-left: auto; font-weight: 400; font-size: .82rem; color: var(--text-muted); }
+.lb-group-body { display: grid; gap: 2px; padding: 0 0 10px; }
+.lb-group .lb-note { border-top: 1px solid var(--border); padding: 8px 0 6px; }
+.lb-group .lb-note > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; list-style: none; }
+.lb-group .lb-note > summary::-webkit-details-marker { display: none; }
+.lb-group .lb-note > summary .t { font-weight: 600; }
+.lb-group .lb-note > summary .fine { font-weight: 400; overflow-wrap: anywhere; }
+.lb-note-body { display: grid; gap: 8px; padding-top: 8px; }
+.lb-note-actions { gap: 6px; }
+.lb-note-body .lb-edit, .lb-note-body .lb-path, .lb-new .lb-edit, .lb-new .lb-path { width: 100%; font: inherit; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--border-light); background: var(--bg); color: var(--text); }
+.lb-note-body .lb-edit { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; line-height: 1.45; }
+.lb-new { display: grid; gap: 8px; padding: 12px; border: 1px dashed var(--border-light); border-radius: 12px; }
+.lb-new .lb-where-row, .lb-note-body .lb-where-row { display: flex; align-items: center; gap: 8px; }
+.lb-new .lb-where-row span, .lb-note-body .lb-where-row span { color: var(--text-muted); font-size: .88rem; }
+
+/* 2026-10-26 (v86): the voice button and Send share the box's last slot, beside
+   dictation, inside the box: voice while it is empty, Send once there is text. */
+.input-wrap .send, .input-wrap .talk { position: absolute; right: 6px; bottom: 6px; width: 38px; height: 38px; flex: none; border-radius: 10px; }
+.input-wrap .talk { background: transparent; border: 1px solid var(--accent); color: var(--accent); }
+.input-wrap .talk.on { background: var(--accent); color: #fff; }
+.input-wrap .send svg { width: 20px; height: 20px; }
+
+/* v88: the page's own background under everything, which iOS also takes for the
+   band it draws below an installed app; and no bottom inset where the page stops
+   short of the screen's foot (fitFoot() in main.js). */
+html { background: var(--bg); }
+html.foot-held .composer { padding-bottom: 6px; }
+
+/* ── v89: the composer as one block ──────────────────────────────────────────
+   The box holds the words and, under them, every setting of the next message,
+   as the flagship apps draw it. It opens on one line and grows (autosize()). */
+.composer { gap: 0; }
+.composer-box { display: flex; flex-direction: column; background: var(--bg-surface); border: 1px solid var(--border-light); border-radius: 22px; transition: border-color .18s ease, box-shadow .18s ease; }
+.composer-box:focus-within { border-color: color-mix(in srgb, var(--accent-secondary) 55%, var(--border-light)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
+.composer-box textarea, .composer-box textarea:focus { display: block; width: 100%; min-height: 46px; max-height: min(240px, 38vh); padding: 13px 16px 4px; border: 0; border-radius: 22px 22px 0 0; background: transparent; outline: none; resize: none; line-height: 1.45; font-size: 16.5px; }
+.composer-box textarea::placeholder { color: var(--text-muted); opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.composer-box .composer-tools { display: flex; align-items: center; gap: 4px; padding: 4px 8px 8px; min-width: 0; }
+.composer-box .composer-tools .web-toggle, .composer-box .composer-tools .mic { position: static; flex: 0 0 36px; width: 36px; height: 36px; border: 0; border-radius: 999px; background: transparent; color: var(--text-muted); }
+.composer-box .composer-tools .web-toggle:hover { background: var(--bg-elevated); color: var(--text); }
+.composer-box .composer-tools .web-toggle[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent-secondary); }
+.composer-box .composer-tools .web-toggle svg { width: 20px; height: 20px; }
+.composer-box .composer-tools .model-chip { height: 32px; border-radius: 999px; font-size: 13px; padding: 0 10px 0 9px; }
+.composer-box .tools-spacer { flex: 1 1 0; min-width: 0; }
+.composer-box .send, .composer-box .talk { position: static; flex: 0 0 36px; width: 36px; height: 36px; border-radius: 999px; display: grid; place-items: center; }
+.composer-box .send { border: 0; background: var(--accent); color: #fff; }
+.composer-box .send svg { width: 19px; height: 19px; stroke-width: 2; }
+.composer-box .send.stop { background: var(--bg-elevated); color: var(--text); }
+.composer-box .talk { border: 0; background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent-secondary); }
+.composer-box .talk.on { background: var(--accent); color: #fff; }
+.composer-box .mic.recording { background: var(--danger); color: #fff; }
+@media (max-width: 520px) {
+  .composer { padding-left: 8px; padding-right: 8px; }
+  .composer-box .composer-tools { gap: 2px; padding: 2px 6px 6px; }
+  .composer-box .composer-tools .cost-line { display: none; }
+}
+
+/* v89: a message's actions appear with it: on hover or focus, by a tap on a touch
+   screen, and always under the latest answer. Hidden, they take no taps. */
+.msg .actions { opacity: 0; pointer-events: none; transition: opacity .18s ease; gap: 2px; }
+.msg:hover .actions, .msg:focus-within .actions, .msg.show-actions .actions, #chat > .msg.assistant:last-of-type .actions { opacity: 1; pointer-events: auto; }
+.msg.user .actions { justify-content: flex-end; }
+.msg .actions .act-icon + .act-icon { margin-left: 0; }
+.row-menu-info { padding: 7px 10px 4px; margin-top: 4px; border-top: 1px solid var(--border); font-size: .76rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.row-menu button svg { flex: none; }
+
+/* v89: the top bar as the flagship apps hold it: the conversations on the left,
+   Lodestone in the middle, a new conversation on the right. On a phone, Your path,
+   the Library and Settings live at the foot of the conversations. The state of the
+   model is a quiet line with a dot, green on owned hardware, violet when rented. */
+.topbar { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+.top-right { display: flex; justify-content: flex-end; }
+.badge, .badge.live, .badge.live.rented { color: var(--text-muted); font-size: .7rem; letter-spacing: .03em; }
+.badge.live::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); margin-right: 6px; vertical-align: 1px; }
+.badge.live.rented::before { background: var(--accent-secondary); }
+@media (max-width: 760px) {
+  .topbar { grid-template-columns: 44px minmax(0, 1fr) 44px; padding-left: 6px; padding-right: 6px; }
+  .top-left .top-actions { display: none; }
+  .topbar > .title { justify-self: center; }
+  .title { gap: 8px; }
+  .title strong { font-size: 1.2rem; }
+  .mini-sprite { width: 32px; height: 38px; flex-basis: 32px; margin: -2px 0; }
+}
+@media (min-width: 761px) { #btnLibrarySide { display: none; } }
+/* v92: on a phone, Settings beside the conversations and Your path beside a new
+   conversation, one tap each from the chat; the Library and the vault stay at the
+   foot of the conversations. */
+.top-phone { display: none; }
+@media (max-width: 760px) {
+  .topbar { grid-template-columns: 84px minmax(0, 1fr) 84px; }
+  .top-left .top-actions { display: flex; margin-left: 0; }
+  .top-left .top-actions > :not(#btnSettings) { display: none; }
+  .top-right { gap: 2px; }
+  .top-phone { display: inline-flex; align-items: center; justify-content: center; }
+}
+/* v92: what Lodestone has learned, read and corrected in place. */
+.learned-notes { position: relative; font-size: .92rem; line-height: 1.55; }
+.learned-notes.clamped { max-height: 15.5em; overflow: hidden; }
+.learned-notes.clamped::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 4em; background: linear-gradient(transparent, var(--bg-surface)); pointer-events: none; }
+.learned-notes > :first-child { margin-top: 0; }
+.learned-notes h1, .learned-notes h2, .learned-notes h3 { font-size: 1rem; margin: .8em 0 .3em; }
+.learned-notes p, .learned-notes ul { margin: .4em 0; }
+.learned-notes-empty { color: var(--text-muted); font-size: .9rem; }
+.learned-tools { display: flex; gap: 8px; flex-wrap: wrap; }
+.learned-tools .btn { padding: 6px 12px; font-size: .86rem; }
+.learned-edit { display: grid; gap: 8px; }
+.learned-edit textarea { min-height: 12em; }
+.learned-pillars li { display: flex; gap: 8px; align-items: flex-start; }
+.learned-pillars li > .lp-text { flex: 1; min-width: 0; }
+.lp-edit { flex: 0 0 auto; background: none; border: 0; color: var(--text-muted); padding: 2px 4px; border-radius: 6px; }
+.lp-edit svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.lp-form { display: grid; gap: 6px; flex: 1; }
+.lp-form textarea { min-height: 2.6em; }
+.learned-pillars li.lp-empty .lp-text { color: var(--text-muted); }
+.greet-open { margin-top: 22px; text-align: left; }
+.greet-open .sub-h { margin: 0 0 6px; }
+.greet-open .starters { margin-top: 0; }
+.learned-kv-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+/* v89: one accent. Actions are violet; links a lighter violet with a quiet underline;
+   a button drawn as a link takes the text's colour, not the link's. */
+a { text-decoration-color: color-mix(in srgb, currentColor 40%, transparent); text-underline-offset: 3px; }
+a.btn, a.btn:visited { color: var(--text); text-decoration: none; }
+.prose a[data-wikilink], .prose a.art-link { color: var(--link); border-bottom: 0; text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--link) 38%, transparent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.prose a[data-wikilink]:hover, .prose a.art-link:hover { text-decoration-color: currentColor; }
+.note, .home-note { border-left-color: var(--accent); }
+
+/* ── v89: motion. Things arrive and leave rather than blink: drawers slide, pages
+   and sheets rise, menus open from where they were asked, a new message settles in.
+   Short and soft; none of it for someone who has asked their device for less motion. */
+@keyframes ls-from-left { from { transform: translateX(-104%); } to { transform: none; } }
+@keyframes ls-from-right { from { transform: translateX(104%); } to { transform: none; } }
+@keyframes ls-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes ls-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ls-pop { from { opacity: 0; transform: translateY(6px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes ls-to-left { to { transform: translateX(-104%); } }
+@keyframes ls-to-right { to { transform: translateX(104%); } }
+@keyframes ls-sink { to { opacity: 0; transform: translateY(14px); } }
+@keyframes ls-out { to { opacity: 0; } }
+:root { --ease-out: cubic-bezier(.22, .8, .24, 1); }
+.drawer.left:not([hidden]) { animation: ls-from-left .26s var(--ease-out); }
+.drawer.right:not([hidden]) { animation: ls-from-right .26s var(--ease-out); }
+.drawer.page:not([hidden]), .drawer.wide.page:not([hidden]) { animation: ls-rise .24s var(--ease-out); }
+.scrim:not([hidden]) { animation: ls-fade .2s ease; }
+.drawer.left.leaving { animation: ls-to-left .2s ease-in forwards; }
+.drawer.right.leaving { animation: ls-to-right .2s ease-in forwards; }
+.drawer.page.leaving { animation: ls-sink .18s ease-in forwards; }
+.scrim.leaving { animation: ls-out .2s ease forwards; }
+html.threads-docked #drawerThreads { animation: none; }
+.model-menu:not([hidden]) { animation: ls-pop .16s var(--ease-out); transform-origin: bottom left; }
+.row-menu { animation: ls-pop .14s var(--ease-out); transform-origin: top left; }
+.signin-ask:not([hidden]) { animation: ls-fade .2s ease; }
+.signin-ask:not([hidden]) .signin-card { animation: ls-rise .26s var(--ease-out); }
+@keyframes ls-toast { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.toast { animation: ls-toast .2s var(--ease-out); }
+#chat > .msg:last-child { animation: ls-rise .32s var(--ease-out); }
+#chat > .empty { animation: ls-fade .4s ease; }
+button, .btn, .icon-btn, .act-icon, .web-toggle, .model-chip, .threads-settings { transition: background-color .15s ease, color .15s ease, border-color .15s ease, opacity .15s ease, transform .1s ease; }
+button:active:not(:disabled), .btn:active { transform: scale(.97); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+#chat > .msg.settled { animation: none; }
+/* v89: Lodestone's own question sheet, in place of the browser's confirm(). */
+.ask-card { width: min(420px, 100%); max-height: calc(100% - 32px); overflow-y: auto; background: var(--bg-surface); border: 1px solid var(--border-light); border-radius: 18px; padding: 22px 22px 18px; box-shadow: 0 24px 64px rgba(0, 0, 0, .45); display: grid; gap: 10px; }
+.ask-card h3 { font-family: var(--font-header); font-weight: 500; font-size: 1.45rem; line-height: 1.25; color: var(--text-heading); margin: 0; }
+.ask-card p { margin: 0; color: var(--text-muted); font-size: .93rem; line-height: 1.55; }
+.ask-card .ask-lead { color: var(--text); font-size: 1rem; }
+.ask-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.ask-btns .btn { min-width: 96px; }
+.btn.primary.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.ask-choices { display: grid; gap: 8px; margin-top: 6px; }
+.ask-choice { display: grid; gap: 2px; text-align: left; padding: 11px 14px; border: 1px solid var(--border-light); border-radius: 12px; background: var(--bg); color: var(--text); }
+.ask-choice b { font-weight: 600; }
+.ask-choice span { color: var(--text-muted); font-size: .86rem; line-height: 1.45; }
+.ask-choice.yes { border-color: color-mix(in srgb, var(--accent) 55%, var(--border-light)); }
+.ask-choice:hover, .ask-choice:focus-visible { background: var(--bg-elevated); outline: none; }
+.ask-sheet.leaving { animation: ls-out .18s ease forwards; }
+
+/* v89: a page (Settings, Your path) has one way out, Back, and on a phone its title
+   comes first: a bar with Back and the title, then the sections as tabs that scroll,
+   fading at the edge so it is plain there are more. */
+:is(#drawerSettings, #drawerMe) .page-main > .drawer-head [data-close] { display: none; }
+.page-title { display: none; }
+@media (max-width: 760px) {
+  :is(#drawerSettings, #drawerMe) .page-nav { display: grid; grid-template-columns: 40px minmax(0, 1fr) 40px; align-items: center; row-gap: 6px; padding: calc(6px + env(safe-area-inset-top)) 6px 8px; }
+  :is(#drawerSettings, #drawerMe) .page-nav .page-back { grid-row: 1; grid-column: 1; width: 40px; height: 40px; margin: 0; padding: 0; justify-content: center; font-size: 0; }
+  :is(#drawerSettings, #drawerMe) .page-nav .page-back svg { width: 21px; height: 21px; flex-basis: 21px; }
+  :is(#drawerSettings, #drawerMe) .page-title { display: block; grid-row: 1; grid-column: 2; text-align: center; font-family: var(--font-header); font-weight: 600; font-size: 1.3rem; color: var(--text-heading); }
+  :is(#drawerSettings, #drawerMe) .page-nav-items { grid-row: 2; grid-column: 1 / -1; overflow-x: auto; scrollbar-width: none; padding: 0 4px; -webkit-mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 28px), transparent); }
+  :is(#drawerSettings, #drawerMe) .page-nav-items::-webkit-scrollbar { display: none; }
+  :is(#drawerSettings, #drawerMe) .page-nav-items button { border-radius: 999px; }
+  :is(#drawerSettings, #drawerMe) .page-nav-foot { display: none; }
+  :is(#drawerSettings, #drawerMe) .page-main > .drawer-head { display: none; }
+}
+
+/* v89: no box inside a card: the facts of a section read as its own text. */
+.settings-body .kv { background: none; border: 0; border-radius: 0; padding: 0 2px; gap: 4px; line-height: 1.5; }
+.settings-body .kv b { font-size: .95rem; }
+
+/* v89: the inline marks (a page read, a file, a source) sit on the text's line. */
+svg.ico { width: 1.05em; height: 1.05em; flex: none; vertical-align: -0.17em; margin-right: .35em; stroke-width: 1.7; }
+.icon-btn > svg.ico, button[data-close] > svg.ico, .lib-back > svg.ico, .more > svg.ico { width: 20px; height: 20px; margin: 0; vertical-align: middle; }
+.readings-btn svg.ico { width: 17px; height: 17px; }
+button.x > svg.ico, button.lu-x > svg.ico, .attach-bar button > svg.ico { margin: 0; width: 16px; height: 16px; }

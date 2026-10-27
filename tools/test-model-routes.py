@@ -1,10 +1,11 @@
 """Where Lodestone thinks, in the web app on a computer, against test-phone.py's mocks:
   setup begins on the harmonism.io account with DeepSeek V4.1 Flash, OpenRouter next, and no
   model inside the browser (withdrawn 25 Oct 2026: none holds the whole backbone);
-  signed in, the account's model is chosen in setup and the chip names it, not its id;
-  reopening setup says where Lodestone thinks now;
-  the menu: a key pasted there is tested and DeepSeek V4.1 Flash begins on OpenRouter; another
-  model id can be typed; no in-browser model is listed.
+  signed in, the account's model is chosen in setup; the chat page carries no model chip
+  (October 26, 2026: the model is a Settings choice); Settings switches the model in place;
+  "Change where Lodestone thinks" reopens setup, which says where Lodestone thinks now; a key
+  pasted there is tested and DeepSeek V4.1 Flash begins on OpenRouter; another model id can
+  be typed; no in-browser model is listed.
 
 Usage: python3 tools/test-model-routes.py      (needs playwright, as test-phone.py)"""
 import importlib.util, json, os, sys, threading, time
@@ -47,35 +48,49 @@ def main():
         check("first run: no line about where Lodestone thinks now", page.is_hidden("#setupNow"))
         page.wait_for_selector("#hModelRow:not([hidden])", timeout=10000)
         check("signed in: the account's model is chosen in setup, DeepSeek V4.1 Flash first", page.input_value("#hModel") == "deepseek/deepseek-v4.1-flash-1017" and page.eval_on_selector_all("#hModel option", "o => o.length") == 2)
-        page.select_option("#hModel", "z-ai/glm-5.3-flash")
+        page.select_option("#hModel", "nvidia/nemotron-3-ultra-550b-a55b")
         page.uncheck("#optSemantic"); page.click("#beginSetup"); page.wait_for_selector("#main:not([hidden])", timeout=60000)
-        page.wait_for_selector("#modelRow:not([hidden])", timeout=20000); page.wait_for_timeout(600)
-        check("the chip names the account's model, not its id", page.text_content("#modelChipLabel") == "GLM-5.3 Flash · harmonism.io", page.text_content("#modelChipLabel"))
+        page.wait_for_timeout(1500)
+        check("the chat page carries no model chip", page.is_hidden("#modelRow"))
         page.fill("#input", "What is Dharma?"); page.click("#sendBtn")
         page.wait_for_function("[...document.querySelectorAll('.msg.assistant .body')].some(b => b.textContent.includes('from the mock'))", timeout=20000)
-        check("the turn goes to the account with the model chosen in setup", LOG["hosted"][-1]["body"].get("model") == "z-ai/glm-5.3-flash")
-        # The menu: no key yet; one pasted there
-        page.click("#modelChip"); page.wait_for_timeout(500)
-        groups = page.eval_on_selector_all("#modelMenu .model-group", "ns => ns.map(n => n.textContent)")
-        check("menu order: account, OpenRouter, no model; each says who reads; no in-browser model",
-              [g.split(" —")[0] for g in groups] == ["Your harmonism.io account", "OpenRouter, your key", "No model"] and "harmonism.io reads each turn" in groups[0], str(groups))
-        check("the account's current model is marked", "GLM-5.3 Flash" in page.text_content("#modelMenu .model-item.active"))
-        page.fill("#menuOrKey", "sk-or-v1-badkeybadkeybadkeybad00"); page.click("#modelMenu .model-other button")
-        page.wait_for_function("!/Asking OpenRouter/.test(document.querySelector('#modelMenu').textContent)", timeout=10000)
-        check("a bad key pasted in the menu is refused there", "OpenRouter refused the key" in page.text_content("#modelMenu") and page.is_visible("#modelMenu"), page.text_content("#modelMenu")[:700] if page.is_visible("#modelMenu") else "menu closed")
-        page.fill("#menuOrKey", tp.GOOD); page.click("#modelMenu .model-other button")
-        page.wait_for_function("document.querySelector('#modelChipLabel').textContent === 'DeepSeek V4.1 Flash · openrouter.ai'", timeout=15000)
-        check("a good key pasted in the menu: kept, and DeepSeek V4.1 Flash begins on OpenRouter", page.evaluate("(async () => !!(await (await import('./js/phone.js')).secrets.get('openrouter')))()"))
+        check("the turn goes to the account with the model chosen in setup", LOG["hosted"][-1]["body"].get("model") == "nvidia/nemotron-3-ultra-550b-a55b")
+        # Settings: the model is changed here, in place
+        page.click("#btnSettingsSide"); page.wait_for_selector("#drawerSettings:not([hidden])"); page.wait_for_timeout(800)
+        opts = page.eval_on_selector_all("#setModel option", "o => o.map(x => x.value)")
+        check("Settings lists the account's models, the current one chosen", opts == ["deepseek/deepseek-v4.1-flash-1017", "nvidia/nemotron-3-ultra-550b-a55b"] and page.input_value("#setModel") == "nvidia/nemotron-3-ultra-550b-a55b", str(opts))
+        page.select_option("#setModel", "deepseek/deepseek-v4.1-flash-1017"); page.wait_for_timeout(1200)
+        check("switching in Settings says so in the conversation", "Now thinking with" in page.text_content("#chat"))
+        page.click("#drawerSettings [data-close]"); page.wait_for_timeout(300)
+        page.fill("#input", "And Logos?"); page.click("#sendBtn")
+        page.wait_for_function("[...document.querySelectorAll('.msg.assistant .body')].filter(b => b.textContent.includes('from the mock')).length >= 2", timeout=20000)
+        check("the next turn uses the model chosen in Settings", LOG["hosted"][-1]["body"].get("model") == "deepseek/deepseek-v4.1-flash-1017")
+        # Settings → Change where Lodestone thinks: setup says where it thinks now; a key pasted there
+        page.click("#btnSettingsSide"); page.wait_for_selector("#drawerSettings:not([hidden])"); page.wait_for_timeout(500)
+        page.click("#setChangeTier"); page.wait_for_selector("#setup:not([hidden])"); page.wait_for_timeout(500)
+        check("reopened from Settings, setup says where Lodestone thinks now and who reads", page.is_visible("#setupNow") and "harmonism.io" in page.text_content("#setupNow"), page.text_content("#setupNow"))
+        page.click("#tierChoices .choice:has(strong:has-text('OpenRouter'))")
+        page.fill("#orKey", "sk-or-v1-badkeybadkeybadkeybad00")
+        page.wait_for_function("document.querySelector('#orStatus').textContent.includes('refused')", timeout=8000)
+        check("a bad key pasted in setup is refused there", True, page.text_content("#orStatus"))
+        page.fill("#orKey", tp.GOOD)
+        page.wait_for_function("document.querySelector('#orStatus').textContent.includes('works')", timeout=8000)
+        page.click("#beginSetup"); page.wait_for_selector("#main:not([hidden])", timeout=60000)
         page.fill("#input", "And the Wheel?"); page.click("#sendBtn")
         page.wait_for_function("[...document.querySelectorAll('.msg.assistant .body')].some(b => b.textContent.includes('OpenRouter answer'))", timeout=20000)
-        check("the turn goes to OpenRouter under that key", LOG["openrouter"][-1]["body"]["model"] == "deepseek/deepseek-v4.1-flash-1017" and LOG["openrouter"][-1]["auth"] == "Bearer " + tp.GOOD)
-        page.click("#modelChip"); page.wait_for_timeout(500)
-        page.fill("#modelMenu .model-other input", "mistralai/mistral-medium-3"); page.press("#modelMenu .model-other input", "Enter"); page.wait_for_timeout(800)
-        check("another model id typed in the menu is used", "mistralai/mistral-medium-3" in page.text_content("#modelChipLabel"), page.text_content("#modelChipLabel"))
-        # Reopening setup says where Lodestone thinks now
-        page.click("#modelChip"); page.wait_for_timeout(400); page.click("#modelMenu .model-manage"); page.wait_for_selector("#setup:not([hidden])")
-        page.wait_for_timeout(500)
-        check("reopened, setup says where Lodestone thinks now and who reads", page.is_visible("#setupNow") and "rented from OpenRouter with your key; OpenRouter reads each message" in page.text_content("#setupNow"), page.text_content("#setupNow"))
+        check("a good key: kept, and DeepSeek V4.1 Flash begins on OpenRouter under it", LOG["openrouter"][-1]["body"]["model"] == "deepseek/deepseek-v4.1-flash-1017" and LOG["openrouter"][-1]["auth"] == "Bearer " + tp.GOOD
+              and page.evaluate("(async () => !!(await (await import('./js/phone.js')).secrets.get('openrouter')))()"))
+        # Another model id, typed in setup
+        page.click("#btnSettingsSide"); page.wait_for_selector("#drawerSettings:not([hidden])"); page.wait_for_timeout(500)
+        page.click("#setChangeTier"); page.wait_for_selector("#setup:not([hidden])"); page.wait_for_timeout(500)
+        check("reopened, setup says Lodestone thinks on OpenRouter with your key", "rented from OpenRouter with your key; OpenRouter reads each message" in page.text_content("#setupNow"), page.text_content("#setupNow"))
+        page.click("#tierChoices .choice:has(strong:has-text('OpenRouter'))"); page.wait_for_timeout(300)
+        page.select_option("#orModel", "__other"); page.fill("#orOther", "mistralai/mistral-medium-3")
+        page.click("#orTest"); page.wait_for_function("document.querySelector('#orStatus').textContent.includes('works')", timeout=8000)
+        page.click("#beginSetup"); page.wait_for_selector("#main:not([hidden])", timeout=60000)
+        page.fill("#input", "And Presence?"); page.click("#sendBtn")
+        page.wait_for_function("[...document.querySelectorAll('.msg.assistant .body')].filter(b => b.textContent.includes('OpenRouter answer')).length >= 2", timeout=20000)
+        check("another model id typed in setup is used", LOG["openrouter"][-1]["body"]["model"] == "mistralai/mistral-medium-3", LOG["openrouter"][-1]["body"]["model"])
         check("no page errors", not errors, "; ".join(errors)[:300])
         page.screenshot(path="/tmp/model-routes-setup.png", full_page=True)
     print(f"{sum(res)} of {len(res)} passed")

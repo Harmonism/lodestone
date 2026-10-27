@@ -46,7 +46,7 @@ class H(SimpleHTTPRequestHandler):
                 return self._json(401, {"error": {"code": "auth", "message": "Sign in to your harmonism.io account again."}})
             return self._json(200, {"email": "t@example.org", "status": "free", "cap": 10, "remaining": 7, "reset_at": 0,
                                     "models": [{"id": "deepseek/deepseek-v4.1-flash-1017", "label": "DeepSeek V4.1 Flash", "maker": "DeepSeek", "licence": "MIT", "default": True},
-                                               {"id": "z-ai/glm-5.3-flash", "label": "GLM-5.3 Flash", "maker": "Zhipu", "licence": "MIT", "default": False}]})
+                                               {"id": "nvidia/nemotron-3-ultra-550b-a55b", "label": "Nemotron 3 Ultra", "maker": "NVIDIA", "licence": "OpenMDW 1.1", "default": False}]})
         return super().do_GET()
 
     def do_POST(self):
@@ -142,32 +142,33 @@ def main():
         check("OpenRouter turn: own key, recommended model run as hosted, full backbone",
               o["body"]["model"] == "deepseek/deepseek-v4.1-flash-1017" and o["body"].get("provider") == {"data_collection": "deny"} and len(o["body"]["messages"][0]["content"]) > 40000)
         page.wait_for_timeout(400)
-        check("model menu shown on the phone, the model named alone (1.14.1)", page.is_visible("#modelRow") and page.text_content("#modelChipLabel").strip() == "DeepSeek V4.1 Flash", page.text_content("#modelChipLabel"))
-        page.click("#modelChip"); page.wait_for_timeout(400)
-        groups = page.eval_on_selector_all("#modelMenu .model-group", "ns => ns.map(n => n.textContent)")
-        check("menu: the account (signed out: one step to sign in), OpenRouter's models and no model, each saying who reads", groups[0].startswith("Your harmonism.io account — harmonism.io reads each turn") and "Sign in for ten free messages a day" in page.text_content("#modelMenu") and any(g.startswith("OpenRouter, your key — OpenRouter reads") for g in groups) and any("No model" in g for g in groups), str(groups))
-        check("menu: another model id can be typed under OpenRouter", page.is_visible("#modelMenu .model-other input"))
-        page.click("#modelMenu .model-item:has-text('GLM-5.3 Flash')"); page.wait_for_timeout(600)
+        settings = lambda: page.click('#btnSettings' if page.is_visible('#btnSettings') else '#btnSettingsSide')
+        check("no model chip on the chat page: the model is a Settings choice (October 26, 2026)", page.is_hidden("#modelRow"))
+        settings(); page.wait_for_selector("#drawerSettings:not([hidden])"); page.wait_for_timeout(600)
+        opts = page.eval_on_selector_all("#setModel option", "o => o.map(x => x.value)")
+        check("Settings lists the tested models, DeepSeek V4.1 Flash chosen", opts[:2] == ["deepseek/deepseek-v4.1-flash-1017", "nvidia/nemotron-3-ultra-550b-a55b"] and page.input_value("#setModel") == "deepseek/deepseek-v4.1-flash-1017", str(opts))
+        page.select_option("#setModel", "nvidia/nemotron-3-ultra-550b-a55b"); page.wait_for_timeout(800)
+        page.click("#drawerSettings [data-close]"); page.wait_for_timeout(300)
         page.fill("#input", "And Logos?"); page.click("#sendBtn")
         page.wait_for_function("[...document.querySelectorAll('.msg.assistant .body')].filter(b => b.textContent.includes('OpenRouter answer')).length >= 2", timeout=20000)
-        check("switching in the menu changes the model in place", LOG["openrouter"][-1]["body"]["model"] == "z-ai/glm-5.3-flash" and LOG["openrouter"][-1]["body"].get("max_tokens") == 8000)
+        check("switching in Settings changes the model in place", LOG["openrouter"][-1]["body"]["model"] == "nvidia/nemotron-3-ultra-550b-a55b" and LOG["openrouter"][-1]["body"].get("reasoning") == {"effort": "none", "exclude": True})
 
-        # Setup opened from the menu is not a one-way door: a route not ready leaves Begin off, and Back restores the route as it was.
-        page.click("#modelChip"); page.wait_for_timeout(400)
-        page.click("#modelMenu .model-manage"); page.wait_for_selector("#setup:not([hidden])", timeout=10000)
+        # Setup opened from Settings is not a one-way door: a route not ready leaves Begin off, and Back restores the route as it was.
+        settings(); page.wait_for_selector("#drawerSettings:not([hidden])"); page.wait_for_timeout(400)
+        page.click("#setChangeTier"); page.wait_for_selector("#setup:not([hidden])", timeout=10000)
         page.click("#tierChoices .choice:has(strong:has-text('computer'))"); page.wait_for_timeout(200)
-        check("setup from the menu: an unready route disables Begin, and Back is offered", page.is_disabled("#beginSetup") and page.is_visible("#setupBack"))
+        check("setup from Settings: an unready route disables Begin, and Back is offered", page.is_disabled("#beginSetup") and page.is_visible("#setupBack"))
         page.click("#setupBack"); page.wait_for_selector("#main:not([hidden])", timeout=10000); page.wait_for_timeout(400)
         page.fill("#input", "Back again?"); page.click("#sendBtn")
         page.wait_for_function("[...document.querySelectorAll('.msg.assistant .body')].filter(b => b.textContent.includes('OpenRouter answer')).length >= 3", timeout=20000)
-        check("Back restores the saved route untouched", LOG["openrouter"][-1]["body"]["model"] == "z-ai/glm-5.3-flash" and page.text_content("#modelChipLabel").strip() == "GLM-5.3 Flash", page.text_content("#modelChipLabel"))
+        check("Back restores the saved route untouched", LOG["openrouter"][-1]["body"]["model"] == "nvidia/nemotron-3-ultra-550b-a55b")
 
         # 1.14.1: a question about Lodestone itself carries the manual and this install's state;
         # an answer's common actions are icons, and Retry is gone.
         page.fill("#input", "Comment changer de modèle ?"); page.click("#sendBtn")
         page.wait_for_function("[...document.querySelectorAll('.msg.assistant .body')].filter(b => b.textContent.includes('OpenRouter answer')).length >= 4", timeout=20000)
         sysmsg = LOG["openrouter"][-1]["body"]["messages"][0]["content"]
-        check("a question about Lodestone carries <lodestone_self> with this install's state", "<lodestone_self>" in sysmsg and "Thinking with: GLM-5.3 Flash" in sysmsg, sysmsg[sysmsg.find("This install, now:"):][:200])
+        check("a question about Lodestone carries <lodestone_self> with this install's state", "<lodestone_self>" in sysmsg and "Thinking with: Nemotron 3 Ultra" in sysmsg, sysmsg[sysmsg.find("This install, now:"):][:200])
         check("an answer's copy, listen and save are icons, and there is no Retry", page.locator(".msg.assistant .act-icon[aria-label='Copy this answer']").count() >= 1
               and page.locator(".msg.assistant .act-icon[aria-label='Save this answer as a Markdown file']").count() >= 1 and page.locator(".msg.assistant button:has-text('Retry')").count() == 0)
         page.click("#btnMe"); page.wait_for_timeout(500)
@@ -180,11 +181,13 @@ def main():
         page.reload(); page.wait_for_selector("#main:not([hidden])", timeout=30000)
         # Signing in, the app asks whether the device's memory is this account's (accepted here) and reopens on it.
         page.wait_for_function("(async () => (await import('./js/store.js')).using() === 'munai-offline')()", timeout=20000)
-        page.wait_for_selector("#modelRow:not([hidden])", timeout=30000); page.wait_for_timeout(800)
-        page.click("#modelChip"); page.wait_for_timeout(600)
-        groups = page.eval_on_selector_all("#modelMenu .model-group", "ns => ns.map(n => n.textContent)")
-        check("signed in on the website: the account's models join the menu", any("harmonism.io account" in g and "7 of 10" in g for g in groups), str(groups))
-        page.click("#modelMenu .model-item:has-text('DeepSeek V4.1 Flash') >> nth=0")   # the account's, first; page.wait_for_timeout(600)
+        page.wait_for_timeout(800)
+        settings(); page.wait_for_selector("#drawerSettings:not([hidden])"); page.wait_for_timeout(400)
+        page.click("#setChangeTier"); page.wait_for_selector("#setup:not([hidden])", timeout=10000)
+        page.click("#tierChoices .choice:has(strong:has-text('harmonism.io account'))")
+        page.wait_for_selector("#hModelRow:not([hidden])", timeout=10000)
+        check("signed in on the website: the account is ready in setup, its models listed", page.input_value("#hModel") == "deepseek/deepseek-v4.1-flash-1017" and not page.is_disabled("#beginSetup"))
+        page.click("#beginSetup"); page.wait_for_selector("#main:not([hidden])", timeout=30000); page.wait_for_timeout(600)
         page.fill("#input", "What is Dharma?"); page.click("#sendBtn")
         page.wait_for_function("[...document.querySelectorAll('.msg.assistant .body')].some(b => b.textContent.includes('from the mock'))", timeout=20000)
         h = LOG["hosted"][-1]

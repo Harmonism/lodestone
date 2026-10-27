@@ -69,9 +69,9 @@ def main():
         check("and it is used", ["hostedUse", "deepseek/deepseek-v4.1-flash-1017"] in pg.evaluate("window.__calls"))
         check("no page errors", not errs, "; ".join(errs)[:300]); ctx.close()
 
-        st = status(24, "darwin", "arm64"); st["remote"] = {"preset": "openrouter", "baseUrl": "https://openrouter.ai/api/v1", "model": "qwen/qwen3.5-397b-a17b", "host": "openrouter.ai", "hasKey": True, "label": "OpenRouter"}
+        st = status(24, "darwin", "arm64"); st["remote"] = {"preset": "openrouter", "baseUrl": "https://openrouter.ai/api/v1", "model": "nvidia/nemotron-3-ultra-550b-a55b", "host": "openrouter.ai", "hasKey": True, "label": "OpenRouter"}
         ctx, pg, errs = open_(st, "?screen=models")
-        check("the Model page names a rented model, not its id", "Lodestone is thinking with Qwen 3.5 397B, rented from openrouter.ai" in pg.text_content("#manageText"), pg.text_content("#manageText"))
+        check("the Model page names a rented model, not its id", "Lodestone is thinking with Nemotron 3 Ultra, rented from openrouter.ai" in pg.text_content("#manageText"), pg.text_content("#manageText"))
         check("on that page Bonsai is tagged recommended and untested", "Recommended for this computer · not yet tested" in pg.text_content("#manageList"))
         pg.screenshot(path="/tmp/launcher-models.png", full_page=True); ctx.close()
 

@@ -92,6 +92,20 @@ const EDGE_BODIES = {
   nature: "The body knows it belongs to the wider field; the mind forgets. The practice is not scheduled hikes but the daily act of remembering the ground beneath your feet is alive.",
   recreation: "Play is not the absence of seriousness; it is a different kind of seriousness. Without it, the other pillars harden into obligation.",
 };
+// v93: what already holds. The pillars where the Wheel stands highest, read for what
+// they give the rest.
+const STRENGTH_TITLES = { presence: "Attention that can rest", health: "The vessel holds", matter: "Stewardship over what you keep", service: "Work that carries meaning", relationships: "Bonds with real contact", learning: "A mind that keeps opening", nature: "Rooted in the wider field", recreation: "Joy kept alive" };
+const STRENGTH_BODIES = {
+  presence: "You can return to the centre. Attention that is not owned by every passing demand is the ground the other pillars stand on: from here, practice deepens instead of starting over.",
+  health: "The fundamentals hold often enough to be trusted: sleep, food, movement. A body that holds frees attention for refinement, and for the pillars that need it more.",
+  matter: "What you keep serves you more than it claims you. Resources ordered this way become leverage for the rest of the Wheel rather than a weight on it.",
+  service: "Your work stands close to the shape of your contribution. Where Dharma and livelihood meet, effort feeds the person instead of draining them.",
+  relationships: "Your bonds carry real contact, not only roles. Being known by others is a mirror and a support: it keeps the inner work honest.",
+  learning: "You stay with a question long enough for it to change you. Sustained attention to what exceeds your categories is how understanding becomes your own.",
+  nature: "You keep contact with the living world. The nervous system steadies in the conditions it was made for, and you return to them.",
+  recreation: "Play still has its place. Joy is the register of a healthy field, and it keeps the other pillars from hardening into obligation.",
+};
+const STRENGTH_ASKS = ["How can this strength carry the pillar that needs it most?", "What keeps this one strong, and what would weaken it?", "Where else in my life could this become practice?"];
 const EDGE_ASKS = ["Where in your body does this edge live?", "Walk me through the last time this showed up.", "What would change if this stopped being true?", "Name the one small practice that meets this.", "How do you know when you are in it?"];
 const HORIZON_LABELS = ["This week", "Within the month", "When you are ready"];
 const HORIZON_ASKS = ["Show me the first step I can take today.", "What would I need to have in place before this can hold?", "Ask me this again in three months."];
@@ -123,6 +137,9 @@ export function buildProfile({ name = "", wheel = {}, hp = null, notes = {}, sit
 
   const ranked = PILLARS.map((k, order) => ({ k, s: lv(k), order })).sort((a, b) => a.s - b.s || a.order - b.order).slice(0, 5);
   const edges = ranked.map((r, i) => ({ pillar: r.k, title: EDGE_TITLES[r.k], body: EDGE_BODIES[r.k], note: notes[r.k]?.concerns || notes[r.k]?.edges || "", ask: EDGE_ASKS[i] }));
+  // The three highest, of those read above the first level; ties in the Way of Harmony's order.
+  const strengths = PILLARS.map((k, order) => ({ k, s: lv(k), order })).filter(r => r.s > 1).sort((a, b) => b.s - a.s || a.order - b.order).slice(0, 3)
+    .map((r, i) => ({ pillar: r.k, title: STRENGTH_TITLES[r.k], body: STRENGTH_BODIES[r.k], note: notes[r.k]?.strengths || "", ask: STRENGTH_ASKS[i] }));
   const start = PILLARS.indexOf(next);
   const horizons = [0, 1, 2].map(i => { const k = PILLARS[(start + i) % 8]; return { label: HORIZON_LABELS[i], pillar: k, p1: HORIZONS[k][0], p2: HORIZONS[k][1], ask: HORIZON_ASKS[i] }; });
 
@@ -157,7 +174,7 @@ export function buildProfile({ name = "", wheel = {}, hp = null, notes = {}, sit
   }
 
   const altitude = hp?.alt != null ? Number(hp.alt) : null;
-  return { name, date, situation, has, wheel: Object.fromEntries(PILLARS.map(k => [k, lv(k)])), scores, highest, next, resistance, edges, horizons, enneagram, constitution, altitude, taken: !!hp };
+  return { name, date, situation, has, wheel: Object.fromEntries(PILLARS.map(k => [k, lv(k)])), scores, highest, next, resistance, strengths, edges, horizons, enneagram, constitution, altitude, taken: !!hp };
 }
 
 // ─── The drawing ─────────────────────────────────────────────────────────────
@@ -241,7 +258,9 @@ export function renderProfile(d) {
       </section>`);
   } else out.push(`<section class="pv-section"><h2>Constitution</h2><p class="pv-muted">Not taken. The assessment's third layer reads your dosha, your Wu Xing element, Yin and Yang, and your Jing, from which Qi and Shen are read; or takes the constitution you already know.</p></section>`);
 
-  // Edges
+  // Strengths (v93), then the edges
+  out.push(`<section class="pv-section"><h2>Your strengths</h2>${d.strengths.length ? `<p class="pv-muted">The pillars where the Wheel stands highest now: what already holds, and what the rest can lean on.</p>
+    <div class="pv-cards">${d.strengths.map(x => `<article class="pv-card" style="--pc:${COLORS[x.pillar]}"><p class="pv-kicker">${NAMES[x.pillar]} · ${LEVELS[d.wheel[x.pillar]]}</p><h3>${esc(x.title)}</h3><p>${esc(x.body)}</p>${x.note ? `<p><em>What Lodestone has noted: ${esc(x.note.replace(/[.\s]+$/, ""))}.</em></p>` : ""}${ask(x.ask)}</article>`).join("")}</div>` : `<p class="pv-muted">None read yet: a strength shows here once a pillar of your Wheel stands above its first level. Set your Wheel in Your path, or take the assessment.</p>`}</section>`);
   out.push(`<section class="pv-section"><h2>Your edges</h2><p class="pv-muted">The five pillars where the Wheel stands lowest now, in the Way of Harmony's order where they are level.</p>
     <div class="pv-cards">${d.edges.map(x => `<article class="pv-card" style="--pc:${COLORS[x.pillar]}"><p class="pv-kicker">${NAMES[x.pillar]} · ${LEVELS[d.wheel[x.pillar]]}</p><h3>${esc(x.title)}</h3><p>${esc(x.body)}${x.note ? ` <em>${esc(x.note)}</em>` : ""}</p>${ask(x.ask)}</article>`).join("")}</div></section>`);
 

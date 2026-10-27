@@ -200,7 +200,13 @@ Small models invent specifics. The persona forbids doses, schedules and protocol
 
 ## Accompaniment, not retention
 
-Practices the practitioner commits to get a check-in when due (daily, every 3 days, or weekly), and the recent record goes into `<person_context>`. The Wheel reading is self-assessed on the Wheel's seven-level scale; Lodestone reads it and never rewrites it. "What Lodestone knows about you" holds only what the practitioner writes or explicitly asks it to remember. There are no streaks, no notifications and no inferred profile. Memory export and import move it all between phone and computer as one JSON file.
+Practices the practitioner commits to get a check-in when due, at the cadence they set, and the recent record goes into `<person_context>`. The Wheel reading is self-assessed on the Wheel's seven-level scale. Lodestone never rewrites it: where the conversation moves a level, the change waits as a proposal the practitioner accepts or declines (`learning.js` `applyWheelUpdates`).
+
+Lodestone does infer. After the practitioner's third message, then every ten, counted across conversations, and on leaving the app when three or more are new (at most once in half an hour; `learning.js` `learnDue`), three calls on the model in use write the profile summary, the Wheel evidence and the current life context, and a fourth keeps what is worth keeping in the life book, quietly, without a card to confirm (since October 26, 2026). All of it is readable and correctable in Settings: an edited summary is no longer rewritten, the practitioner's corrections override whatever the conversation suggests, *Learn now* runs it on demand, and one switch turns the learning off. A turn a rented model answered is learned from with secrets left out; a signed-in device on harmonism.io's hosted models asks `lodestone-learn.php` to do the same on the same cadence (forty a day at most, server-side).
+
+Lodestone may also write first (`outreach.js`): after a silence, or at a turn of the Wheel, at most once a week, as a system notification, through the practitioner's own Telegram bot, or as the first words of the next conversation. It is on by default and off with one switch (Settings → *Lodestone may write first*). The weekly review is off until the practitioner turns it on. Every three hours of continuous use the pause bell says that Lodestone is an AI and invites a return to the body (`presence.js`).
+
+What stays absent is retention by design: no streaks, no counts of days, no score for using the app, and no message that invites the practitioner to keep talking. *Export memory* and import move it all between phone and computer as one file.
 
 ## SDIP conformance
 

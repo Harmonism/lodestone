@@ -101,7 +101,7 @@ function fileHeaders(file, p) {
   // their hour (the corpus pack, the vendored runtimes, the speech model),
   // since a no-cache with no validator would refetch them whole; so do the
   // library's assets.
-  const shell = p.startsWith(APP) && !p.includes("/corpus/") && !p.includes("/vendor/") && !p.includes("/asr/");
+  const shell = p.startsWith(APP) && !p.includes("/corpus/") && !p.includes("/vendor/") && !p.includes("/asr/") && !p.includes("/fonts/");   // fonts (1.15.0) never change under a name
   const cc = (shell || ext === ".html" || ext === ".php" || p.endsWith("sw.js") || p.endsWith(".webmanifest") || p.includes("/corpus/")) ? "no-cache" : "max-age=3600";
   return { "Content-Type": MIME[ext] || "application/octet-stream", "Cache-Control": cc };
 }

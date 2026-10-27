@@ -168,14 +168,14 @@ async function manageScreen() {
     if (m.downloaded) {
       if (!inUse) actions.append(el("button", { class: "primary", onclick: () => wake(m.id) }, "Use this model"));
       if (!inUse) actions.append(el("button", { class: "link", onclick: async () => {
-        if (!confirm(`Remove ${m.label} from this computer? It frees ${gb(m.size)}; you can download it again later.`)) return;
+        if (!await ask(`Remove ${m.label} from this computer? It frees ${gb(m.size)}; you can download it again later.`)) return;
         await D.deleteModel(m.id); manageScreen();
       } }, `Remove (frees ${gb(m.size)})`));
     } else {
       actions.append(el("button", { onclick: () => manageDownload(m.id) }, m.partial ? `Resume download (${gb(m.partial)} of ${gb(m.size)})` : `Download · ${gb(m.size)}${m.parts > 1 ? ` in ${m.parts} parts` : ""}`));
     }
     if (m.custom && !inUse) actions.append(el("button", { class: "link", onclick: async () => {
-      if (!confirm(`Take ${m.label} off the list${m.partial ? ` and delete its files (${gb(m.partial)})` : ""}?`)) return;
+      if (!await ask(`Take ${m.label} off the list${m.partial ? ` and delete its files (${gb(m.partial)})` : ""}?`)) return;
       await D.removeCustom(m.id); manageScreen();
     } }, "Take off the list"));
     const c = card(m);
@@ -438,7 +438,7 @@ function renderLibrary(problem = null) {
     if (pub?.newer) acts.append(el("button", { class: "primary", disabled: libBusy, onclick: () => installLang(l.lang) }, `Update · ${gb(pub.size)}`));
     if (!l.installed && pub) acts.append(el("button", { class: Q.get("lang") === l.lang ? "primary" : "", disabled: libBusy, onclick: () => installLang(l.lang) }, `Download · ${gb(pub.size)}`));
     if (l.installed && !l.shipped && l.lang !== "en") acts.append(el("button", { class: "link", onclick: async () => {
-      if (!confirm(`Remove the ${l.name} library from this computer?`)) return;
+      if (!await ask(`Remove the ${l.name} library from this computer?`)) return;
       await D.removeLanguage(l.lang); L = await D.library(); renderLibrary();
     } }, "Remove"));
     if (acts.childNodes.length) row.append(acts);
