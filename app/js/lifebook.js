@@ -184,7 +184,7 @@ export function newNoteText(path, keys, text) {
 
 /** An addition to a note, under the day's date. */
 export function appendedText(text, now = new Date()) {
-  return `\n### ${now.toISOString().slice(0, 10)}\n\n${String(text).trim()}\n`;
+  return `\n### ${now.toLocaleDateString("sv-SE")}\n\n${String(text).trim()}\n`;
 }
 
 // ─── The life book on every device (October 24, 2026) ────────────────────────

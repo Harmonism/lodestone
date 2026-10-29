@@ -185,20 +185,26 @@ export const threads = {
     return t;
   },
   async remove(id) {
-    const msgs = await messages.forThread(id);
+    const msgs = await messages.forThreadAll(id);
     await tx("messages", "readwrite", s => { msgs.forEach(m => s.delete(m.id)); });
     await tx("threads", "readwrite", s => { s.delete(id); });
   },
 };
 
+// v98: a message deleted by the practitioner stays as a mark ({ deleted, content: "" }),
+// so a sync from another device cannot bring it back; every reader but sync and the
+// cost counters (forThreadAll, allRaw) sees it gone.
+const live = a => a.filter(m => !m.deleted);
 export const messages = {
-  forThread: threadId => tx("messages", "readonly", s => reqP(s.index("thread").getAll(threadId))).then(a => a.sort((x, y) => x.ts - y.ts || x.id - y.id)),
+  forThread: threadId => messages.forThreadAll(threadId).then(live),
+  forThreadAll: threadId => tx("messages", "readonly", s => reqP(s.index("thread").getAll(threadId))).then(a => a.sort((x, y) => x.ts - y.ts || x.id - y.id)),
   // The time is set on the caller's object too (1.13.1): the copy in memory and the stored one agree, and the summary's cut-off is a time.
   add: m => { if (!m.ts) m.ts = Date.now(); return tx("messages", "readwrite", s => reqP(s.add({ ...m }))); },
   put: m => tx("messages", "readwrite", s => { s.put(m); }),
   del: id => tx("messages", "readwrite", s => { s.delete(id); }),
-  since: ts => tx("messages", "readonly", s => reqP(s.index("ts").getAll(IDBKeyRange.lowerBound(ts)))),
-  all: () => tx("messages", "readonly", s => reqP(s.getAll())),
+  since: ts => tx("messages", "readonly", s => reqP(s.index("ts").getAll(IDBKeyRange.lowerBound(ts)))).then(live),
+  all: () => messages.allRaw().then(live),
+  allRaw: () => tx("messages", "readonly", s => reqP(s.getAll())),
 };
 
 export async function exportAll() {

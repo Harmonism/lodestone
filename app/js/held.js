@@ -456,6 +456,12 @@ async function learnSoon() {
 export async function heldFetch(url, init = {}, ctx = {}) {
   let body;
   try { body = JSON.parse(init.body); } catch { return fetch(url, init); }
+  // The device's time zone, so the answer knows the hour of the person's day (the
+  // server keeps the clock; an address cannot say the zone).
+  if (body && typeof body === "object") {
+    try { body.clientTz = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; body.clientOffset = -new Date().getTimezoneOffset(); } catch {}
+    init = { ...init, body: JSON.stringify(body) };
+  }
   const key = body ? await byokKey() : null;
   // Without a memory to carry (signed out, or a browser that cannot hold one), an own-key turn still goes under the key.
   const plain = async () => {

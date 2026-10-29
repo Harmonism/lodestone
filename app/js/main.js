@@ -6,7 +6,7 @@ import { Embedder } from "./embedder.js";
 import { TIERS, MODELS, probeWebGPU, DeviceEngine, ServerEngine, ReaderEngine, isHandheld, isIOS, localInferenceAvailable, defaultModelFor, smallerModelThan, RENTED_CTX, OWNED_CTX } from "./engine.js";
 import { HostedEngine, OpenRouterEngine, hosted, secrets, phoneRoutesAvailable, RECOMMENDED, OFFERED, DEFAULT_REMOTE, refreshRecommended, assess, testOpenRouter, accountLinks, signInWithPassword } from "./phone.js";
 import * as unlock from "./unlock.js";
-import { heldBlock, personContext, buildSystem, fitMessages, estTokens, estSystemTokens, PILLARS, LEVELS, webBlock, foldersBlock, earlierBlock, fullArticleBlock, stripRetrievalNote, summaryBlock, summaryRequest, renderSummary, summaryPlan } from "./prompt.js";
+import { heldBlock, personContext, buildSystem, fitMessages, withReply, estTokens, estSystemTokens, PILLARS, LEVELS, webBlock, foldersBlock, earlierBlock, fullArticleBlock, stripRetrievalNote, summaryBlock, summaryRequest, renderSummary, summaryPlan } from "./prompt.js";
 import { detectLang, detectCrisis, buildCrisisResponse, detectWitness, witnessBlock, governorBlock, crisisLine } from "./safety.js";
 import { careCheck, indirectCare } from "./care.js";
 import * as presence from "./presence.js";
@@ -32,6 +32,9 @@ import * as held from "./held.js";
 import { tidyTranscript, CLEANUP_PROMPT, cleanupRequest, acceptCleanup, SPOKEN_SECRET } from "./tidy.js";
 import { isNative, lanFetch, pairWith, pairing, computerServer, parsePairLink, onAppLink } from "./native.js";
 import * as shareout from "./shareout.js";
+import { t, setLanguage, resolve as resolveUiLang } from "./i18n.js";
+import { Idiomorph } from "../vendor/idiomorph/idiomorph.esm.js";
+import remend from "../vendor/remend/remend.js";
 
 const $ = s => document.querySelector(s);
 const el = (tag, attrs = {}, ...kids) => {
@@ -217,6 +220,10 @@ async function boot() {
   if (syncAvailable()) { try { await held.bind(); } catch (e) { console.warn("[memory]", e?.message || e); } }
   await migrateCaches();
   S.settings = (await store.kv.get("settings")) || { theme: "dark", lang: "auto" };
+  setLanguage(resolveUiLang(S.settings.uiLang || "auto", S.settings.lang));
+  // v99: ask the browser to keep this memory through storage pressure (Safari and
+  // Chrome grant it to an app in use or on the Home Screen); asked once, silently.
+  try { if (navigator.storage?.persist && !(await navigator.storage.persisted())) navigator.storage.persist().catch(() => {}); } catch {}
   // October 24, 2026: the September DeepSeek V4.1 Flash left the tested list
   // for its October 17 snapshot. A saved choice of it moves to the new default once,
   // so the menu does not show both (the old one by its raw id under OpenRouter).
@@ -242,7 +249,7 @@ async function boot() {
     // A newer worker taking over later (it installs itself as soon as it is published)
     // means a newer Lodestone is ready, and runs at the next reload.
     swVersion().then(v => { S.appVersion = v; });
-    navigator.serviceWorker.addEventListener("controllerchange", () => { swVersion().then(v => { if (v && v !== S.appVersion) S.appReady = v; }); });
+    navigator.serviceWorker.addEventListener("controllerchange", () => { swVersion().then(v => { if (v && v !== S.appVersion) { S.appReady = v; if (S.appVersion) offerReload(); } }); });
   }
   bindChrome();
   if (isNative()) onAppLink(handleAppLink);
@@ -722,12 +729,16 @@ async function startMain() {
   renderVaultSide();
   applyLifeBookQueue().catch(e => console.warn("[life book queue]", e));
 
+  // v99: the last conversation is shown at once (it needs only this device's
+  // memory); the corpus loads after it, and only a send waits for it.
+  await openLatestThread();
   engineStatus("Opening the corpus…", 0.05);
   const { corpus, runtime, embeddings } = await corpusPack.load();
   S.pack = { runtime, corpus };
   await new Promise(r => setTimeout(r, 30));
   S.retriever = new Retriever({ corpus, runtime, embeddings });
   console.info(`[retrieval] ${corpus.chunks.length} chunks indexed in ${S.retriever.buildMs} ms`);
+  document.querySelectorAll("#chat .msg.assistant .body.prose").forEach(b => { try { linkArticles(b); } catch {} });
 
   if (embeddings && S.settings.semantic !== false) {
     S.embedder = S.embedder || new Embedder();
@@ -735,7 +746,6 @@ async function startMain() {
       .catch(e => console.warn("[semantic] unavailable, keyword retrieval only:", e.message));
   }
 
-  await openLatestThread();
   syncDock();
   renderCheckins();
   await refreshWhere();
@@ -890,12 +900,13 @@ const HOST_LABEL = { "openrouter.ai": "OpenRouter", "api.anthropic.com": "Anthro
 
 function updateBadge() {
   const b = $("#engineBadge");
-  if (!S.engine) { b.textContent = "offline"; return; }
+  if (!S.engine) { b.textContent = "starting…"; return; }
   // A server engine is the desktop's own (this computer) or a paired computer's
   // (your computer); either may pass each turn on to a rented provider (S.where).
   const relayed = S.engine.kind === "server" && !!S.where;
   const where = relayed ? HOST_LABEL[S.where] || S.where : DESKTOP && S.engine.kind === "server" ? "this computer" : WHERE_LABEL[S.engine.kind] || "this device";
-  b.textContent = S.engine.kind === "reader" ? "reading the corpus" : S.engineReady ? `thinking on ${where}` : `waking on ${where}…`;
+  // v99: the line says where Lodestone thinks; "writing…" only while it writes.
+  b.textContent = S.busy && S.engineReady ? "writing…" : S.engine.kind === "reader" ? "reading the corpus" : S.engineReady ? `thinks on ${where}` : `waking on ${where}…`;
   b.title = `${S.engine.describe()} · ${retrievalMode()}`;
   b.classList.toggle("live", !!S.engineReady);
   b.classList.toggle("rented", S.engine.kind === "hosted" || S.engine.kind === "openrouter" || relayed);
@@ -937,6 +948,20 @@ async function refreshWhere() {
 const OPEN_KEY = "lodestone-open-thread";
 function rememberOpen() { try { sessionStorage.setItem(OPEN_KEY, S.thread?.id || ""); } catch {} }
 
+// v99: what was being written stays with its conversation, on this device: leave
+// a conversation mid-sentence, or close the app, and the words are there on return.
+const DRAFT_KEY = id => "lodestone-draft:" + (id || "new");
+function saveDraft() {
+  const v = $("#input")?.value || "";
+  try { v.trim() ? localStorage.setItem(DRAFT_KEY(S.thread?.id), v) : localStorage.removeItem(DRAFT_KEY(S.thread?.id)); } catch {}
+}
+function restoreDraft() {
+  const input = $("#input"); if (!input) return;
+  let v = ""; try { v = localStorage.getItem(DRAFT_KEY(S.thread?.id)) || ""; } catch {}
+  if (input.value !== v) { input.value = v; autosize(); }
+}
+function clearDraft() { try { localStorage.removeItem(DRAFT_KEY(S.thread?.id)); } catch {} }
+
 async function openLatestThread() {
   const list = await store.threads.list();
   let id = null; try { id = sessionStorage.getItem(OPEN_KEY); } catch {}
@@ -960,6 +985,7 @@ async function loadThread() {
   speaker.stop();
   S.history = S.thread ? await store.messages.forThread(S.thread.id) : [];
   rememberOpen();
+  restoreDraft(); clearReply(); closeFind();
   renderChat();
   renderCostLine();
   if (threadsDocked()) renderThreadList();
@@ -968,7 +994,7 @@ async function loadThread() {
 async function newThread() {
   if (S.busy) { toast("The answer is still being written: wait for it, or Stop it, then begin a new conversation.", 5000); return; }
   speaker.stop();
-  S.thread = null; S.history = []; rememberOpen();
+  S.thread = null; S.history = []; rememberOpen(); restoreDraft(); clearReply(); closeFind();
   renderChat(); renderCostLine(); closeDrawers(); if (threadsDocked()) renderThreadList(); $("#input").focus();
 }
 
@@ -984,7 +1010,7 @@ const live = t => (S.thread && S.thread.id === t.id ? S.thread : t);
 async function usageByThread(threads) {
   const by = new Map();
   const add = (id, u) => { if (!u) return; const a = by.get(id) || { in: 0, out: 0, cost: 0, priced: false }; a.in += u.in || 0; a.out += u.out || 0; if (u.cost != null) { a.cost += u.cost; a.priced = true; } by.set(id, a); };
-  for (const m of await store.messages.all()) if (m.meta?.usage) add(m.threadId, m.meta.usage);
+  for (const m of await store.messages.allRaw()) if (m.meta?.usage) add(m.threadId, m.meta.usage);
   for (const t of threads) if (t.side) add(t.id, t.side);
   return by;
 }
@@ -1030,7 +1056,7 @@ function threadRow(t, u, hit, q, pg) {
   const cost = u?.priced && u.cost > 0 ? fmtCost(u.cost) : "";
   const more = el("button", { class: "more", type: "button", title: "Rename, pin, export or delete", "aria-label": "Conversation actions", "aria-haspopup": "menu", "aria-expanded": "false" }, ico("dots"));
   const li = el("li", { class: "row" + (S.thread && S.thread.id === t.id ? " active" : "") + (t.pinned ? " pinned" : "") },
-    el("button", { class: "t", type: "button", onclick: async () => { if (await openThread(t)) closeDrawers(); } },
+    el("button", { class: "t", type: "button", onclick: async () => { if (await openThread(t)) { closeDrawers(); if (q && hit) openFind(threadQuery.trim()); } } },
       el("span", {}, t.pinned ? el("span", { class: "pin-dot", "aria-label": "Pinned" }, "●") : null, t.title || "Untitled"),
       hit && q ? snippet(hit, q) : null,
       el("small", {}, el("span", {}, date), pg ? el("span", { class: "pg", title: pg.url ? `Read with the browser extension: ${pg.url}` : "Read with the browser extension" }, ico("page"), pg.domain || "a page") : null, cost ? el("span", { class: "c", title: "What this conversation has cost" }, cost) : null)),
@@ -1119,11 +1145,15 @@ const ICON = {
   rename: '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>',
   pin: '<svg viewBox="0 0 24 24"><path d="M9 4h6l-1 6 3.5 3.5h-11L10 10z"/><path d="M12 13.5V20"/></svg>',
   export: '<svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/></svg>',
+  search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg>',
   del: '<svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V4.5h4V7M7 7l1 13h8l1-13"/></svg>',
 };
 
 function closeThreadMenu() {
-  document.querySelector(".row-menu")?.remove();
+  const sheet = document.querySelector(".row-menu.sheet");
+  if (sheet) { sheet.classList.add("leaving"); document.querySelector(".sheet-scrim")?.classList.add("leaving"); setTimeout(() => { sheet.remove(); document.querySelector(".sheet-scrim")?.remove(); }, 180); sheet.classList.remove("row-menu"); }
+  else document.querySelector(".row-menu")?.remove();
+  document.querySelectorAll("#chat .msg.menu-on").forEach(n => n.classList.remove("menu-on"));
   document.querySelectorAll('#threadList button.more[aria-expanded="true"]').forEach(b => b.setAttribute("aria-expanded", "false"));
 }
 
@@ -1138,11 +1168,13 @@ function threadMenu(t, anchor, x = null, y = null) {
   const li = anchor.closest("li");
   const m = el("div", { class: "row-menu", role: "menu", "data-id": t.id },
     item("rename", "Rename", () => startRename(t, li)),
+    item("search", "Search in this conversation", async () => { if (S.thread?.id !== t.id && !(await openThread(t))) return; closeDrawers(); openFind(""); }),
     item("pin", t.pinned ? "Unpin" : "Pin", () => togglePin(t)),
     item("export", "Export as Markdown", () => exportThread(t)),
     el("hr"),
     item("del", "Delete", () => deleteThread(t), "del"));
   document.body.append(m);
+  if (asSheet(m)) { anchor.setAttribute("aria-expanded", "true"); return; }
   const r = anchor.getBoundingClientRect(), w = m.offsetWidth, h = m.offsetHeight;
   const left = x != null ? x : r.right - w, top = y != null ? y : r.bottom + 4;
   m.style.left = Math.max(8, Math.min(left, innerWidth - w - 8)) + "px";
@@ -1211,6 +1243,11 @@ const ACT_SVG = {
   more: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="12" r="1.2" style="fill:currentColor"/><circle cx="12" cy="12" r="1.2" style="fill:currentColor"/><circle cx="18.5" cy="12" r="1.2" style="fill:currentColor"/></svg>',
   remember: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>',
   keep: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5h10.5a2 2 0 0 1 2 2v13H7a2 2 0 0 1-2-2z"/><path d="M5 17.5a2 2 0 0 1 2-2h10.5"/></svg>',
+  reply: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 7L5 12l5 5"/><path d="M5 12h9a5 5 0 0 1 5 5v2"/></svg>',
+  pin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4.5h6l-1 5.5 3.5 3v1.5h-11V13L10 10z"/><path d="M12 14.5v5.5"/></svg>',
+  unpin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4.5h6l-1 5.5 3.5 3v1.5h-11V13L10 10z"/><path d="M12 14.5v5.5M4.5 4.5l15 15"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 7h15M10 7V4.5h4V7M6.5 7l1 13h9l1-13M10 10.5v6M14 10.5v6"/></svg>',
+  close: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>',
   practice: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.2"/><path d="M12 3.5v6.3M12 14.2v6.3M3.5 12h6.3M14.2 12h6.3"/></svg>',
 };
 
@@ -1221,15 +1258,41 @@ function moreButton(items, info = "") {
   return b;
 }
 /** A small menu at an anchor, kept inside the screen; closed by a click elsewhere or Escape (closeThreadMenu). */
-function popMenu(anchor, items, info = "") {
+// v100: on a phone a message's menu rises from the foot of the screen as a sheet,
+// rows a thumb reaches, the message it belongs to lifted above a dimmed page, as
+// the phone's own apps do; on a computer it stays a small menu at the pointer.
+const sheetMode = () => matchMedia("(pointer: coarse)").matches && innerWidth < 760;
+function asSheet(m, msgNode = null) {
+  if (!sheetMode()) return false;
+  m.classList.add("sheet");
+  const preview = msgNode?.querySelector(".body")?.innerText?.replace(/\s+/g, " ").trim();
+  if (preview) m.prepend(el("div", { class: "sheet-preview", dir: "auto" }, preview.slice(0, 220)));
+  m.prepend(el("div", { class: "sheet-grip", "aria-hidden": "true" }));
+  const scrim = el("div", { class: "sheet-scrim", onclick: e => { e.stopPropagation(); closeThreadMenu(); } });
+  document.body.insertBefore(scrim, m);
+  msgNode?.classList.add("menu-on");
+  // drag down to close
+  let y0 = null;
+  m.addEventListener("touchstart", e => { y0 = e.touches[0].clientY; }, { passive: true });
+  m.addEventListener("touchmove", e => { if (y0 == null) return; const dy = Math.max(0, e.touches[0].clientY - y0); m.style.transform = `translateY(${dy}px)`; }, { passive: true });
+  m.addEventListener("touchend", e => { if (y0 == null) return; const dy = (e.changedTouches[0]?.clientY || y0) - y0; y0 = null; if (dy > 70) closeThreadMenu(); else m.style.transform = ""; });
+  return true;
+}
+function popMenu(anchor, items, info = "", msgNode = null) {
   const was = anchor.getAttribute("aria-expanded") === "true";
   closeThreadMenu(); document.querySelectorAll('[aria-expanded="true"].act-icon').forEach(x => x.setAttribute("aria-expanded", "false"));
   if (was) return;
-  const m = el("div", { class: "row-menu", role: "menu" }, items.map(([icon, label, fn]) => {
-    const b = el("button", { type: "button", role: "menuitem", onclick: e => { e.stopPropagation(); closeThreadMenu(); anchor.setAttribute("aria-expanded", "false"); fn(); } });
+  const m = el("div", { class: "row-menu", role: "menu" }, items.map(([icon, label, fn, cls]) => {
+    const b = el("button", { type: "button", role: "menuitem", ...(cls ? { class: cls } : {}), onclick: e => { e.stopPropagation(); closeThreadMenu(); anchor.setAttribute("aria-expanded", "false"); fn(); } });
     b.innerHTML = ACT_SVG[icon] || ""; b.append(label); return b;
   }), info ? el("div", { class: "row-menu-info" }, info) : null);
   document.body.append(m);
+  m.addEventListener("keydown", e => {   // v100: arrows move through the menu; Tab leaves it
+    const items = [...m.querySelectorAll("button")], i = items.indexOf(document.activeElement);
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus(); }
+    else if (e.key === "Tab") { e.preventDefault(); closeThreadMenu(); anchor.setAttribute("aria-expanded", "false"); anchor.focus?.(); }
+  });
+  if (asSheet(m, msgNode || anchor.closest?.(".msg"))) { anchor.setAttribute("aria-expanded", "true"); return; }
   const r = anchor.getBoundingClientRect(), w = m.offsetWidth, h = m.offsetHeight;
   m.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + "px";
   m.style.top = (r.bottom + 4 + h > innerHeight - 8 ? Math.max(8, r.top - h - 4) : r.bottom + 4) + "px";
@@ -1328,7 +1391,7 @@ async function renderUsage(days = usageDays) {
   usageDays = days;
   [...$("#usageTabs").children].forEach(b => b.setAttribute("aria-pressed", String(Number(b.dataset.d) === days)));
   const since = days ? (days === 1 ? new Date(new Date().toDateString()).getTime() : Date.now() - days * 864e5) : 0;
-  const msgs = (await store.messages.all()).filter(m => m.meta?.usage && (m.ts || 0) >= since);
+  const msgs = (await store.messages.allRaw()).filter(m => m.meta?.usage && (m.ts || 0) >= since);
   const threads = await store.threads.list();
   const tot = sumUsage(msgs.map(m => m.meta.usage));
   const side = sumUsage(threads.filter(t => t.side && (t.summaryAt || t.updated || 0) >= since).map(t => t.side));
@@ -1362,7 +1425,13 @@ function openUsage() { renderUsage(); openDrawer("#drawerUsage"); }
 // ─── Chat rendering ──────────────────────────────────────────────────────────
 
 function renderChat() {
-  const chat = $("#chat"); chat.innerHTML = "";
+  const chat = $("#chat");
+  // v99: a redraw of the same conversation (a summary, a setting, a sync) keeps the
+  // reader where they were; only opening a conversation goes to its end.
+  const same = chat.dataset.thread === String(S.thread?.id || "") && chat.childElementCount > 0;
+  const keepTop = same && chat.scrollHeight - chat.scrollTop - chat.clientHeight > 24 ? chat.scrollTop : null;
+  chat.dataset.thread = String(S.thread?.id || "");
+  chat.innerHTML = "";
   if (!S.history.length) {
     // v93: a new conversation is met as someone who has come back: by name and the
     // hour, with what was left open last time a tap away (put in the box, not sent,
@@ -1372,13 +1441,15 @@ function renderChat() {
       const part = h < 5 ? "Good night" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
       const first = String(S.profile?.name || "").trim().split(/\s+/)[0];
       const st = S.learned?.context?.state || {};
-      const open = [...(st.open_commitments || []), ...(st.pending_threads || [])].map(x => String(x).trim()).filter(Boolean).slice(0, 3);
+      // v96: only what they committed to themselves; the topics Lodestone inferred as
+      // left open stay out of the first screen (they can be wrong, and are not theirs).
+      const open = (st.open_commitments || []).map(x => String(x).trim()).filter(Boolean).slice(0, 3);
       chat.append(el("div", { class: "empty greet" },
         sprite("empty-sprite"),
         el("h2", {}, first ? `${part}, ${first}.` : `${part}.`),
         el("p", {}, "What is present for you today?"),
-        open.length ? el("div", { class: "greet-open" }, el("p", { class: "sub-h" }, "Left open"),
-          el("div", { class: "starters" }, open.map(t => el("button", { type: "button", onclick: () => { const i = $("#input"); i.value = `Let's come back to ${t.replace(/[.;]+$/, "")}.`; autosize(); i.focus(); } }, t)))) : null,
+        open.length ? el("div", { class: "greet-open" }, el("p", { class: "sub-h" }, "You committed to"),
+          el("div", { class: "starters" }, open.map(t => el("button", { type: "button", onclick: () => { const i = $("#input"); i.value = `I committed to ${t.replace(/[.;]+$/, "")}. Here is how it is going: `; autosize(); i.focus(); } }, t)))) : null,
         S.assessment ? null : el("p", { class: "hint" }, el("a", { href: "#", onclick: e => { e.preventDefault(); openMe(); } }, "Take the Harmonic Profile assessment"), " and Lodestone reads you through it.")));
       return;
     }
@@ -1392,7 +1463,7 @@ function renderChat() {
       sprite("empty-sprite"),
       el("h2", {}, "Welcome to Lodestone."),
       el("p", {}, "Bring it what is happening in your life, or a question about Harmonism itself; it answers from the corpus on this device. Or begin with one of these."),
-      el("div", { class: "starters" }, starters.map(s => el("button", { type: "button", onclick: () => { $("#input").value = s; send(); } }, s))),
+      el("div", { class: "starters" }, starters.map(s => el("button", { type: "button", onclick: () => { $("#input").value = t(s); send(); } }, s))),
       S.assessment ? null : el("p", { class: "hint" }, el("a", { href: "#", onclick: e => { e.preventDefault(); renderMe(); openDrawer("#drawerMe"); } }, "Take the Harmonic Profile assessment"), " and Lodestone reads you through it.")));
     return;
   }
@@ -1406,8 +1477,341 @@ function renderChat() {
       url ? el("a", { href: url, target: "_blank", rel: "noopener noreferrer", title: "Open the page" }, S.thread.title || hostOf(url)) : el("span", {}, S.thread.title || "A page"),
       url ? el("small", {}, url) : null));
   }
-  for (const m of S.history) chat.append(msgNode(m));
-  chat.scrollTop = chat.scrollHeight;
+  const pb = pinBar(); if (pb) chat.append(pb);
+  let day = "";
+  for (const m of S.history) {
+    const d = m.ts ? new Date(m.ts).toDateString() : day;
+    if (d && d !== day) { chat.append(daySeparator(m.ts)); day = d; }
+    chat.append(msgNode(m));
+  }
+  if (S.busy && S.liveNode && S.liveThread === S.thread?.id) chat.append(S.liveNode);
+  if (FIND && !$("#findBar")?.hidden) runFind($("#findBar input")?.value || "", false);   // v99: a redraw mid-answer keeps the answer
+  if (!S.busy) showUnanswered();
+  chat.scrollTop = keepTop != null ? keepTop : chat.scrollHeight;
+}
+
+// v99: a quiet line where the day changes, as a messaging app marks it.
+function dayLabel(ts) {
+  const d = new Date(ts), now = new Date();
+  const start = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((start(now) - start(d)) / 864e5);
+  if (diff === 0) return t("Today");
+  if (diff === 1) return t("Yesterday");
+  const lang = document.documentElement.lang || undefined;
+  try { return d.toLocaleDateString(lang, diff < 7 ? { weekday: "long" } : { day: "numeric", month: "long", ...(d.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}) }); }
+  catch { return d.toDateString(); }
+}
+function daySeparator(ts) { return el("div", { class: "day-sep", role: "separator" }, el("span", {}, dayLabel(ts))); }
+
+// ─── A message left without an answer (v99) ─────────────────────────────────
+// The network dropped, the provider refused, or the app was closed mid-answer:
+// the practitioner's words stay, and under them Lodestone says it could not
+// answer, with Try again — never a silent end with only a toast.
+// The last exchange when it was left unfinished: a question with no answer, or an
+// answer cut off (meta.cut), or one still marked partial after the app was closed.
+function unfinished() {
+  const h = S.history; let k = h.length;
+  while (k && h[k - 1].meta?.notice) k--;
+  const last = h[k - 1];
+  if (!last || last.id == null || last.meta?.imported || last.meta?.crisis || last.meta?.answerDeleted) return null;
+  if (last.role === "user") return { u: last, a: null };
+  if (last.role === "assistant" && (last.meta?.cut || last.meta?.partial) && h[k - 2]?.role === "user") return { u: h[k - 2], a: last };
+  return null;
+}
+/** A reason a person can read, from an error a provider or the network gave. */
+function plainReason(err) {
+  const raw = String(err?.message || err || "").replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
+  if (navigator.onLine === false || /failed to fetch|network ?error|load failed|networkerror/i.test(raw)) return t("The connection dropped.");
+  if (err?.stalled) return t("The answer stalled: nothing arrived for a while.");
+  if (err?.cut) return t("The connection closed before the answer was finished.");
+  return raw.slice(0, 220);
+}
+function showUnanswered(err = null) {
+  const chat = $("#chat"); if (!chat) return;
+  chat.querySelector(".msg.unanswered")?.remove();
+  const f = unfinished(); if (!f) return;
+  const offline = navigator.onLine === false;
+  const why = err ? plainReason(err) : f.a?.meta?.cut ? plainReason({ message: f.a.meta.cut }) : "";
+  const lead = offline ? t("No connection. Your message is kept; try again when you are back online.")
+    : f.a ? t("The answer was cut off before it was finished.") : t("Lodestone could not answer this message.");
+  const row = el("div", { class: "msg assistant unanswered", role: "status" },
+    el("div", { class: "col", style: "flex:1;min-width:0" },
+      el("div", { class: "unanswered-card" },
+        el("p", {}, lead),
+        why && !offline && why !== lead ? el("p", { class: "muted small" }, why) : null,
+        el("div", { class: "row-btns" },
+          el("button", { type: "button", class: "btn primary", onclick: () => retryUnanswered(f) }, t("Try again")),
+          el("button", { type: "button", class: "btn ghost", onclick: () => editUnanswered(f) }, t("Edit"))))));
+  chat.insertBefore(row, chat.querySelector(".tail-space"));
+}
+const deletionMark = m => ({ id: m.id, threadId: m.threadId || S.thread?.id, uid: m.uid || `${m.ts}-${m.role}`, role: m.role, ts: m.ts, content: "", deleted: Date.now(), meta: m.meta?.usage ? { usage: m.meta.usage } : {} });
+async function takeBackUnanswered(f) {
+  if (S.busy) { toast("Wait for this answer to finish."); return false; }
+  for (const m of [f.a, f.u].filter(Boolean)) {
+    await store.messages.put(deletionMark(m));
+    const i = S.history.indexOf(m); if (i >= 0) S.history.splice(i, 1);
+    recallDrop(["m:" + m.id]);
+    $(`#chat .msg[data-mid="${m.id}"]`)?.remove();
+  }
+  $("#chat .msg.unanswered")?.remove();
+  syncSoon();
+  return true;
+}
+async function retryUnanswered(f) {
+  if (f.u.meta?.files?.length) { editUnanswered(f); toast("Attach the files again, then send."); return; }
+  if (!await takeBackUnanswered(f)) return;
+  send(f.u.content);
+}
+async function editUnanswered(f) {
+  if (!await takeBackUnanswered(f)) return;
+  const input = $("#input"); giveBackTo(f.u.content); input.focus(); autosize();
+}
+addEventListener("online", () => { if ($("#chat .msg.unanswered")) showUnanswered(); });
+
+// ─── One message: pin, delete, the held menu (v98) ───────────────────────────
+// As a messaging app allows: a single message deleted, copied or pinned. A deletion leaves a mark without the text (store.js), so sync
+// cannot bring it back and no model reads it again; a pin carries its time.
+
+function pinDeleteItems(m) {
+  if (m.meta?.crisis) return [];
+  return [
+    ["reply", "Reply", () => setReply(m)],
+    [m.pinned ? "unpin" : "pin", m.pinned ? "Unpin" : "Pin", () => togglePinMsg(m)],
+    ["trash", "Delete this message", () => deleteMsg(m), "del"],
+  ];
+}
+
+async function togglePinMsg(m) {
+  if (m.id == null) return;
+  if (S.busy && m === S.history[S.history.length - 1]) { toast("Wait for this answer to finish."); return; }
+  m.pinned = m.pinned ? 0 : Date.now(); m.pinSet = Date.now();
+  await store.messages.put({ ...m });
+  renderPinned();
+  syncSoon();
+  toast(m.pinned ? "Pinned." : "Unpinned.", 1600);
+}
+
+async function deleteMsg(m) {
+  if (m.id == null) return;
+  if (S.busy && m === S.history[S.history.length - 1]) { toast("Wait for this answer to finish."); return; }
+  if (!await ask(t("Delete this message?") + "\n\n" + t("It is deleted on this device and on those that sync with it. Lodestone will not read it again."), { ok: t("Delete"), cancel: t("Cancel"), danger: true })) return;
+  await store.messages.put(deletionMark(m));
+  const i = S.history.indexOf(m);
+  // An answer deleted on purpose leaves its question answered as far as Try again is concerned.
+  const prev = i > 0 ? S.history[i - 1] : null;
+  if (m.role === "assistant" && prev?.role === "user" && prev.id != null) { prev.meta = { ...(prev.meta || {}), answerDeleted: true }; await store.messages.put({ ...prev }).catch(() => {}); }
+  if (i >= 0) S.history.splice(i, 1);
+  recallDrop(["m:" + m.id]);
+  const node = $(`#chat .msg[data-mid="${m.id}"]`);
+  if (node && S.history.length) { node.remove(); renderPinned(); refreshLastPair(); } else renderChat();
+  renderCostLine(); syncSoon();
+  toast("Deleted.", 1600);
+}
+
+/** After a deletion, the Edit that belongs to the last exchange moves to the one that is now last. */
+function refreshLastPair() {
+  document.querySelectorAll("#chat .last-only").forEach(b => b.remove());
+  const u = lastUser(); if (!u) return;
+  const n = $(`#chat .msg[data-mid="${u.id}"]`); if (n) n.replaceWith(msgNode(u));
+}
+
+/** The pinned messages of this conversation, latest first, held at its top. */
+function pinBar() {
+  const pins = S.history.filter(x => x.pinned).sort((a, b) => b.pinned - a.pinned);
+  if (!pins.length) return null;
+  let at = 0;
+  const label = el("span", { class: "pin-label" });
+  const line = el("span", { class: "pin-line", dir: "auto" });
+  const show = () => {
+    const p = pins[at];
+    label.textContent = pins.length > 1 ? `${t("Pinned message")} · ${at + 1}/${pins.length}` : t("Pinned message");
+    line.textContent = String(p.content || "").replace(/[#*_>`]/g, "").replace(/\s+/g, " ").trim().slice(0, 140);
+  };
+  show();
+  const unpin = el("button", { type: "button", title: t("Unpin"), "aria-label": t("Unpin"), onclick: e => { e.stopPropagation(); togglePinMsg(pins[at]); } });
+  unpin.innerHTML = ACT_SVG.close;
+  const bar = el("div", { class: "pin-bar", role: "button", tabindex: "0", onclick: () => {
+    const n = $(`#chat .msg[data-mid="${pins[at].id}"]`);
+    if (n) { n.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); n.classList.remove("flash"); void n.offsetWidth; n.classList.add("flash"); }
+    if (pins.length > 1) { at = (at + 1) % pins.length; show(); }
+  } }, el("span", { class: "pin-text" }, label, line), unpin);
+  bar.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); bar.click(); } });
+  return bar;
+}
+function renderPinned() {
+  const chat = $("#chat"); if (!chat) return;
+  chat.querySelector(".pin-bar")?.remove();
+  const pb = pinBar(); if (pb) chat.prepend(pb);
+  for (const n of chat.querySelectorAll(".msg[data-mid]")) {
+    const m = S.history.find(x => String(x.id) === n.dataset.mid);
+    n.classList.toggle("pinned", !!m?.pinned);
+    const more = n.querySelector(".actions .act-icon[aria-haspopup]");
+    if (m && more) more.replaceWith(menuButtonFor(m));
+  }
+}
+/** The ⋯ of a message rebuilt after a pin, so the menu says Pin or Unpin rightly. */
+function menuButtonFor(m) {
+  const isUser = m.role === "user";
+  if (isUser) return moreButton([
+    ["remember", "Remember this about me", () => remember(m.content)],
+    lifeBookOn() ? ["keep", "Keep in my life book", () => keepFromMessage(m.content)] : null,
+    ...pinDeleteItems(m),
+  ]);
+  return moreButton([
+    lifeBookOn() ? ["keep", "Keep in my life book", () => keepFromMessage(m.content, "answer")] : null,
+    ["practice", "Make a practice of this", () => { openDrawer("#drawerMe"); renderMe(); $("#prText").focus(); }],
+    ...pinDeleteItems(m),
+  ]);
+}
+
+/** Select text: the message becomes selectable, its text selected, for the system's handles to narrow. */
+function selectInBody(body) {
+  body.classList.add("selectable");
+  try { const r = document.createRange(); r.selectNodeContents(body); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); } catch {}
+  const off = e => { if (!body.contains(e.target)) { body.classList.remove("selectable"); document.removeEventListener("touchstart", off, true); } };
+  setTimeout(() => document.addEventListener("touchstart", off, true), 300);
+}
+
+// ─── Search inside a conversation (v100) ─────────────────────────────────────
+// A bar at the top of the conversation: the words, "3 of 12", up and down, close.
+// Reached from a search in the list of conversations (it opens on the same words),
+// from a conversation's menu, and by ⌘F / Ctrl+F on a computer. Matches are marked
+// with the CSS Highlight API, so the messages themselves are never rewritten.
+let FIND = null;
+function openFind(q = "") {
+  let bar = $("#findBar");
+  if (!bar) {
+    const input = el("input", { type: "text", class: "find-input", placeholder: t("Search in this conversation"), "aria-label": t("Search in this conversation"), enterkeyhint: "search" });
+    const count = el("span", { class: "find-count", "aria-live": "polite" });
+    const btn = (icon, label, fn) => { const b = el("button", { type: "button", class: "icon-btn", title: label, "aria-label": label, onclick: fn }); b.innerHTML = icon; return b; };
+    bar = el("div", { id: "findBar", class: "find-bar", role: "search" }, input, count,
+      btn('<svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>', t("Earlier"), () => stepFind(-1)),
+      btn('<svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>', t("Later"), () => stepFind(1)),
+      btn(ACT_SVG.close, t("Close"), () => closeFind()));
+    let tq; input.addEventListener("input", () => { clearTimeout(tq); tq = setTimeout(() => runFind(input.value), 140); });
+    input.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); stepFind(e.shiftKey ? -1 : 1); } else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeFind(); } });
+    $("#chat").before(bar);
+  }
+  bar.hidden = false;
+  const input = bar.querySelector("input"); input.value = q;
+  input.focus({ preventScroll: true });
+  runFind(q, true);
+}
+function closeFind() {
+  const bar = $("#findBar"); if (bar) bar.hidden = true;
+  FIND = null;
+  try { CSS.highlights?.delete("lodestone-find"); CSS.highlights?.delete("lodestone-find-now"); } catch {}
+}
+function runFind(q, fromEnd = true) {
+  const needle = String(q || "").trim().toLowerCase();
+  const ranges = [];
+  if (needle.length >= 2) {
+    for (const body of document.querySelectorAll("#chat .msg .body")) {
+      const w = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+      for (let n = w.nextNode(); n; n = w.nextNode()) {
+        const v = n.nodeValue.toLowerCase(); let i = v.indexOf(needle);
+        while (i >= 0) { const r = new Range(); r.setStart(n, i); r.setEnd(n, i + needle.length); ranges.push(r); i = v.indexOf(needle, i + needle.length); }
+      }
+    }
+  }
+  FIND = { ranges, at: ranges.length ? (fromEnd ? ranges.length - 1 : 0) : -1 };
+  try { if (window.Highlight && CSS.highlights) CSS.highlights.set("lodestone-find", new Highlight(...ranges)); } catch {}
+  showFind();
+}
+function stepFind(d) {
+  if (!FIND?.ranges.length) return;
+  FIND.at = (FIND.at + d + FIND.ranges.length) % FIND.ranges.length;
+  showFind();
+}
+function showFind() {
+  const c = $("#findBar .find-count"); if (!c) return;
+  const n = FIND?.ranges.length || 0, q = $("#findBar input")?.value.trim() || "";
+  c.textContent = !q || q.length < 2 ? "" : n ? `${FIND.at + 1} / ${n}` : t("None");
+  if (!n) { try { CSS.highlights?.delete("lodestone-find-now"); } catch {} return; }
+  const r = FIND.ranges[FIND.at];
+  try { if (window.Highlight && CSS.highlights) CSS.highlights.set("lodestone-find-now", new Highlight(r)); } catch {}
+  const chat = $("#chat"), box = r.getBoundingClientRect(), cb = chat.getBoundingClientRect();
+  if (box.top < cb.top + 60 || box.bottom > cb.bottom - 20) { chatOwn = true; chatFollow = false; chat.scrollTo({ top: chat.scrollTop + box.top - cb.top - cb.height / 3, behavior: "auto" }); }
+}
+
+// ─── Reply to a message (v100) ────────────────────────────────────────────────
+// As between people: what is answered is quoted above the answer. A swipe from
+// right to left on a message, or Reply in its menu; the quote sits above the
+// composer until sent or set aside. Lodestone is given the quoted words with the
+// message, and the practitioner's bubble carries them, a tap going back to them.
+const excerptOf = t => String(t || "").replace(/[#*_>`]/g, "").replace(/\s+/g, " ").trim().slice(0, 280);
+function setReply(m) {
+  if (m.id == null) return;
+  S.replyTo = { uid: m.uid || `${m.ts}-${m.role}`, role: m.role, text: excerptOf(m.content) };
+  let bar = $("#replyBar");
+  if (!bar) {
+    bar = el("div", { id: "replyBar", class: "reply-bar" });
+    $(".composer-box")?.prepend(bar);
+  }
+  const x = el("button", { type: "button", class: "icon-btn", "aria-label": t("Cancel the reply"), title: t("Cancel the reply"), onclick: () => clearReply() });
+  x.innerHTML = ACT_SVG.close;
+  bar.replaceChildren(el("div", { class: "reply-quote in-bar" }, el("b", {}, m.role === "user" ? t("Your words") : "Lodestone"), el("span", { dir: "auto" }, S.replyTo.text)), x);
+  bar.hidden = false;
+  try { navigator.vibrate?.(8); } catch {}
+  $("#input").focus();
+}
+function clearReply() { S.replyTo = null; const b = $("#replyBar"); if (b) { b.hidden = true; b.replaceChildren(); } }
+function replyQuote(r) {
+  return el("button", { type: "button", class: "reply-quote", onclick: e => { e.stopPropagation(); goToMessage(r.uid); } },
+    el("b", {}, r.role === "user" ? t("Your words") : "Lodestone"), el("span", { dir: "auto" }, r.text));
+}
+function goToMessage(uid) {
+  const m = S.history.find(x => (x.uid || `${x.ts}-${x.role}`) === uid);
+  const n = m && $(`#chat .msg[data-mid="${m.id}"]`);
+  if (!n) { toast(t("That message is no longer here.")); return; }
+  n.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  n.classList.remove("flash"); void n.offsetWidth; n.classList.add("flash");
+}
+
+/** On a touch screen, holding a message opens its whole menu, as Telegram does. */
+function holdForMenu(wrap, body, m) {
+  let timer = 0, x0 = 0, y0 = 0;
+  const cancel = () => { clearTimeout(timer); timer = 0; wrap.classList.remove("held"); };
+  body.addEventListener("touchstart", e => {
+    if (e.touches.length !== 1 || e.target.closest("a, button")) return;
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
+    clearTimeout(wrap._heldT); wrap._heldT = setTimeout(() => { if (timer) wrap.classList.add("held"); }, 160);
+    timer = setTimeout(() => {
+      timer = 0; wrap.classList.remove("held");
+      if (wrap.classList.contains("streaming") || m.id == null) return;
+      wrap._held = true;
+      try { navigator.vibrate?.(12); } catch {}
+      // v100: by how often each is wanted; Delete last, apart.
+      const items = [["reply", "Reply", () => setReply(m)], ["copy", m.role === "user" ? "Copy this message" : "Copy this answer", () => copyAnswer(m.content)], ["edit", "Select text", () => selectInBody(body)]];
+      if (!m.meta?.crisis) items.push([m.pinned ? "unpin" : "pin", m.pinned ? "Unpin" : "Pin", () => togglePinMsg(m)]);
+      if (wrap.querySelector(".listen-btn")) items.push(["listen", "Hear this answer", () => wrap.querySelector(".listen-btn")?.click()]);
+      if (m.role === "user") items.push(["remember", "Remember this about me", () => remember(m.content)]);
+      if (lifeBookOn()) items.push(["keep", "Keep in my life book", () => keepFromMessage(m.content, m.role === "user" ? undefined : "answer")]);
+      if (m.role !== "user") items.push(["save", "Save as a file", () => saveAnswer(m)]);
+      if (!m.meta?.crisis) items.push(["trash", "Delete this message", () => deleteMsg(m), "del"]);
+      // The menu opens where the finger is, not under a long message's foot.
+      let a = document.getElementById("holdAnchor");
+      if (!a) { a = el("span", { id: "holdAnchor", "aria-hidden": "true", style: "position:fixed;width:1px;height:1px;pointer-events:none" }); document.body.append(a); }
+      a.style.left = x0 + "px"; a.style.top = y0 + "px"; a.setAttribute("aria-expanded", "false");
+      popMenu(a, items, "", wrap);
+    }, 480);
+  }, { passive: true });
+  let dragX = 0, horiz = null;
+  const col = wrap.querySelector(".col") || body;
+  body.addEventListener("touchmove", e => {
+    const dx = e.touches[0].clientX - x0, dy = e.touches[0].clientY - y0;
+    if (timer && Math.hypot(dx, dy) > 10) cancel();
+    if (horiz == null && Math.hypot(dx, dy) > 12) horiz = dx < 0 && Math.abs(dx) > Math.abs(dy) * 1.6 && m.id != null && !wrap.classList.contains("streaming");
+    if (horiz) { dragX = Math.max(-90, Math.min(0, dx)); col.style.transform = `translateX(${dragX}px)`; col.style.transition = "none"; wrap.classList.toggle("reply-ready", dragX <= -60); }
+  }, { passive: true });
+  const endDrag = () => {
+    if (horiz && dragX <= -60) setReply(m);
+    if (horiz) { col.style.transition = "transform .22s cubic-bezier(.2,.9,.3,1.2)"; col.style.transform = ""; wrap.classList.remove("reply-ready"); }
+    horiz = null; dragX = 0;
+  };
+  body.addEventListener("touchend", () => { cancel(); endDrag(); });
+  body.addEventListener("touchcancel", () => { cancel(); endDrag(); });
+  body.addEventListener("contextmenu", e => { if (matchMedia("(hover: none)").matches) e.preventDefault(); });
 }
 
 function msgNode(m) {
@@ -1415,7 +1819,8 @@ function msgNode(m) {
   const body = el("div", { class: "body" + (isUser ? "" : " prose") + (voiceOnly.has(m) ? " folded" : ""), dir: "auto" });
   if (isUser) body.textContent = m.content;
   else { body.innerHTML = render(m.content); linkArticles(body); }
-  const wrap = el("div", { class: `msg ${m.role}${m.meta?.crisis ? " crisis" : ""}${m.meta?.notice ? ` notice ${m.meta.notice}` : ""}` });
+  const wrap = el("div", { class: `msg ${m.role}${m.meta?.crisis ? " crisis" : ""}${m.meta?.notice ? ` notice ${m.meta.notice}` : ""}${m.pinned ? " pinned" : ""}` });
+  if (m.id != null) wrap.dataset.mid = String(m.id);
   if (m.meta?.notice) { body.className = "body"; body.textContent = m.content; wrap.append(el("div", { class: "col", style: "flex:1;min-width:0" }, body)); return wrap; }
   if (!isUser) wrap.append(sprite("avatar"));
   const col = el("div", { class: "col", style: isUser ? "display:flex;flex-direction:column;align-items:flex-end;max-width:85%;min-width:0" : "flex:1;min-width:0" }, body);
@@ -1430,6 +1835,7 @@ function msgNode(m) {
     row._msg = m;
     col.prepend(row);
   }
+  if (m.meta?.replyTo) body.prepend(replyQuote(m.meta.replyTo));   // inside the bubble, as a messaging app shows it
   if (isUser && m.meta?.files?.length) col.prepend(el("div", { class: "msg-files" }, m.meta.files.map(f => el("span", { title: f.note || f.kind }, ico("clip"), `${f.name}${f.images ? ` · ${f.images} image${f.images > 1 ? "s" : ""}` : ""}`))));
   if (!isUser && m.meta?.recalled?.length) col.append(recalledNode(m));
   // The corpus articles a reply drew on are kept in its record (the next turn reads them), not shown under it (1.14.1).
@@ -1443,6 +1849,7 @@ function msgNode(m) {
     actions.append(moreButton([
       ["remember", "Remember this about me", () => remember(m.content)],
       lifeBookOn() ? ["keep", "Keep in my life book", () => keepFromMessage(m.content)] : null,
+      ...pinDeleteItems(m),
     ]));
   } else if (!m.meta?.crisis) {
     // 1.14.1: the common actions as icons (copy, listen, save, retry), the two
@@ -1456,6 +1863,7 @@ function msgNode(m) {
     actions.append(moreButton([
       lifeBookOn() ? ["keep", "Keep in my life book", () => keepFromMessage(m.content, "answer")] : null,
       ["practice", "Make a practice of this", () => { openDrawer("#drawerMe"); renderMe(); $("#prText").focus(); }],
+      ...pinDeleteItems(m),
     ], usage));
     if (m.meta?.stopped) actions.append(el("span", { class: "meta stopped" }, "stopped"));
     // The model and its cost under each answer only when asked for (Settings → Display).
@@ -1464,8 +1872,10 @@ function msgNode(m) {
   col.append(actions);
   wrap.append(col);
   body.addEventListener("click", onLinkClick);
+  if (!m.meta?.notice) holdForMenu(wrap, body, m);
   // On a touch screen, a tap on a message shows its actions (a hover does it elsewhere).
   wrap.addEventListener("click", e => {
+    if (wrap._held) { wrap._held = false; return; }
     if (!matchMedia("(hover: none)").matches || e.target.closest("a, button, summary, details, input, textarea") || String(getSelection() || "")) return;
     const on = !wrap.classList.contains("show-actions");
     document.querySelectorAll("#chat .msg.show-actions").forEach(x => x.classList.remove("show-actions"));
@@ -1494,7 +1904,7 @@ function sourcesNode(paths, web = [], yours = []) {
     let host = ""; try { host = new URL(w.url).hostname.replace(/^www\./, ""); } catch {}
     box.append(el("a", { class: "web-src", href: w.url, target: "_blank", rel: "noopener", title: w.url }, ico("out"), host || w.title));
   }
-  const idx = new Map(S.pack.corpus.articles.map((a, i) => [a.p, i]));
+  const idx = new Map((S.pack?.corpus?.articles || []).map((a, i) => [a.p, i]));
   for (const p of paths) {
     const a = idx.get(p);
     if (a == null) continue;
@@ -1669,6 +2079,7 @@ async function prepareTurn(text, history, { getWeb = null, files = [], folders =
   for (;;) {
     system = buildSystem({ tier, runtime, person, where: S.where || null, device: !DESKTOP && isHandheld() ? "device" : "computer", turn: {
       self,
+      times: history,
       files: filesBlock(all, filesBudget),
       folders: away(foldersBlock(yours)),
       lifebook: away(lifebook.lifeBookBlock(lbSel, lbBudget)),
@@ -1687,7 +2098,7 @@ async function prepareTurn(text, history, { getWeb = null, files = [], folders =
       lang,
     } });
     // turns already folded into the summary are not sent a second time
-    fitted = fitMessages({ system, history: screened.filter(m => !m.meta?.crisis && !m.meta?.notice && !(summary && summary.through && (m.ts || 0) <= summary.through)), current: text, tier });
+    fitted = fitMessages({ system, history: screened.filter(m => !m.meta?.crisis && !m.meta?.notice && !(summary && summary.through && (m.ts || 0) <= summary.through)), current: withReply(text, S.turnReply), tier });
     const over = estSystemTokens(system, tier.serverBackboneChars) + estTokens(text) > tier.ctx - tier.maxTokens - 64;
     if (!over) break;
     if (yours.length) { yours = yours.slice(0, -1); continue; }   // small context: shed folder passages first
@@ -1806,11 +2217,11 @@ function giveBackTo(prefill) {
   S.dictated = false;
   const input = $("#input"), draft = input.value.trim();
   if (draft.includes(text)) return;
-  input.value = draft ? `${draft}\n\n${text}` : text; autosize();
+  input.value = draft ? `${draft}\n\n${text}` : text; autosize(); saveDraft();
 }
 
 async function sendOne(prefill) {
-  let turnForNotice = null, noticesDone = false;
+  let turnForNotice = null, noticesDone = false, userKept = false;
   const input = $("#input");
   let text = (prefill ?? input.value).trim();
   if (S.busy) { giveBackTo(prefill); return; }
@@ -1841,9 +2252,13 @@ async function sendOne(prefill) {
     }
   }
   const keep = S.retrying ? null : rememberAsked(text);
+  const replyTo = prefill == null ? S.replyTo : null; S.turnReply = replyTo;
   const spoke = S.dictated; S.dictated = false;
   speaker.stop(); (voice.available() || speakViaProvider()) && primeSpeech();
-  S.busy = true; S.stopRequested = false; input.value = ""; autosize(); setSending(true);
+  S.busy = true; S.stopRequested = false;
+  // v99: only words taken from the box leave it; a retry or a spoken turn leaves what waits there (as 1.13.1 meant).
+  if (prefill == null) { clearDraft(); input.value = ""; autosize(); }
+  setSending(true);
   if (prefill == null) { S.pending = []; renderAttachBar(); }
 
   try {
@@ -1852,7 +2267,7 @@ async function sendOne(prefill) {
 
     const hp = await ingestHPCode(text);
     if (hp) {
-      const uid = await store.messages.add({ threadId: S.thread.id, role: "user", content: "(Harmonic Profile code)" });
+      const uid = await store.messages.add({ threadId: S.thread.id, role: "user", content: "(Harmonic Profile code)" }); userKept = true;
       const am = { threadId: S.thread.id, role: "assistant", content: hp, meta: { model: "harmonic-profile" } };
       am.id = await store.messages.add(am);
       S.history.push({ id: uid, threadId: S.thread.id, role: "user", content: "(Harmonic Profile code)", ts: Date.now() }, am);
@@ -1887,7 +2302,7 @@ async function sendOne(prefill) {
     if (turn.crisis) {
       // The message is kept as stored, marked: no model reads it, now or on a later turn.
       const um = { threadId: S.thread.id, role: "user", content: redact(text), meta: { crisis: turn.crisis.category, ...(asWritten ? { asWritten: true } : {}), ...(files.length ? { files: storedFiles(files) } : {}) } };
-      um.id = await store.messages.add(um);
+      um.id = await store.messages.add(um); userKept = true;
       const am = { threadId: S.thread.id, role: "assistant", content: turn.reply, meta: { crisis: turn.crisis.category, model: "crisis-template" } };
       am.id = await store.messages.add(am);
       S.history.push(um, am);
@@ -1897,23 +2312,24 @@ async function sendOne(prefill) {
     }
     const { tier, fitted, w, web, sources, images } = turn;
 
-    const um = { threadId: S.thread.id, role: "user", content: redact(text), meta: { ...hereMeta(), ...(turn.care ? { care: turn.care.level } : {}), ...(asWritten ? { asWritten: true } : {}), ...(files.length ? { files: storedFiles(files) } : {}) } };
-    um.id = await store.messages.add(um);
+    const um = { threadId: S.thread.id, role: "user", content: redact(text), meta: { ...hereMeta(), ...(replyTo ? { replyTo } : {}), ...(turn.care ? { care: turn.care.level } : {}), ...(asWritten ? { asWritten: true } : {}), ...(files.length ? { files: storedFiles(files) } : {}) } };
+    um.id = await store.messages.add(um); userKept = true;
+    if (replyTo) clearReply();
     S.history.push(um);
     recallAdd(um);
     const chat = $("#chat");
     if (chat.querySelector(".empty")) chat.innerHTML = "";
-    const unode = msgNode(um);
+    const unode = msgNode(um); unode.classList.add("fresh");
     chat.append(unode);
 
     if (S.engine.kind === "reader") {
       const rm = { threadId: S.thread.id, role: "assistant", content: readerReply(turn.hits), meta: { ...hereMeta(), sources, model: "corpus-only" } };
       rm.id = await store.messages.add(rm);
       S.history.push(rm);
-      chat.append(msgNode(rm)); chat.scrollTop = chat.scrollHeight;
+      chat.append(msgNode(rm)); readFromQuestion(unode);
       await touchThread();
       noticesDone = true;
-      await addNotices(turn, S.thread.id, n => { S.history.push(n); chat.append(msgNode(n)); });   // no model here: the care line is the only safety net
+      await addNotices(turn, S.thread.id, n => { S.history.push(n); chat.insertBefore(msgNode(n), chat.querySelector(".tail-space")); });   // no model here: the care line is the only safety net
       return;
     }
 
@@ -1922,9 +2338,26 @@ async function sendOne(prefill) {
     // Not spoken: witness mode, and a care moment (1.13.1), read rather than heard in passing.
     const speak = wantsSpeech(spoke) && !w && !turn.care && (await startSpeaking(am, detectLang(text, S.settings.lang || "auto")));
     if (speak && voiceSettings().mode === "voice") voiceOnly.add(am);
-    const node = msgNode(am); chat.append(node);
+    const node = msgNode(am); node.classList.add("streaming", "fresh"); chat.append(node);
+    S.liveNode = node; S.liveThread = S.thread.id;
     const body = node.querySelector(".body"); body.classList.add("typing");
-    followChat(true);
+    // v99: before the first word, a quiet "Thinking…" with the seconds, not a lone caret.
+    const waitStart = Date.now();
+    const thinking = el("span", { class: "thinking" }, t("Thinking…"));
+    body.append(thinking);
+    const thinkT = setInterval(() => { const sec = Math.round((Date.now() - waitStart) / 1000); if (thinking.isConnected && sec >= 3) thinking.textContent = `${t("Thinking…")} ${sec} s`; }, 1000);
+    readFromQuestion(unode, node);
+    const paint = streamPainter(body, () => { fitTail(unode, node); noteNewBelow(); });
+    // v99: the answer is kept as it arrives (marked partial), so a dropped network,
+    // a locked phone or a closed app leaves what was written, marked cut, not nothing.
+    let saving = Promise.resolve(), savedAt = 0;
+    const keepPartial = () => {
+      const now = Date.now();
+      if (now - savedAt < 2000 && am.id != null) return;
+      savedAt = now;
+      am.content = stripRetrievalNote(out); am.meta.partial = true;
+      saving = saving.then(async () => { if (am.id == null) am.id = await store.messages.add(am); else await store.messages.put({ ...am }); }).catch(e => console.warn("[partial]", e?.message || e));
+    };
 
     let out = "";
     const t0 = performance.now();
@@ -1933,13 +2366,32 @@ async function sendOne(prefill) {
       // Stop pressed while the turn was being prepared: nothing is asked of the model (1.13.1).
       if (!S.stopRequested) for await (const partial of S.engine.stream(withImages(fitted.messages, images), { maxTokens: tier.maxTokens, web: webViaProvider })) {
         out = partial;
-        body.innerHTML = render(stripRetrievalNote(out)); linkArticles(body);
+        if (thinking.isConnected && stripRetrievalNote(out).trim()) { clearInterval(thinkT); thinking.remove(); }
+        paint(stripRetrievalNote(out));
         if (speak && speaker.key === am) speaker.feed(stripRetrievalNote(out));
-        followChat();
+        if (out.trim()) keepPartial();
       }
+      paint.flush();
     } catch (e) {
-      if (!S.stopRequested) { node.remove(); throw e; }
+      clearInterval(thinkT);
+      if (!S.stopRequested) {
+        await saving;
+        const kept = stripRetrievalNote(out).trim();
+        if (kept) {
+          // What was written stays, marked cut, with Try again under it.
+          am.content = kept; am.meta.partial = false; am.meta.cut = String(e?.message || e).slice(0, 200);
+          if (am.id == null) am.id = await store.messages.add(am).catch(() => null); else await store.messages.put({ ...am }).catch(() => {});
+          S.history.push(am);
+          node.replaceWith(msgNode(am));
+        } else {
+          node.remove();
+          if (am.id != null) { await store.messages.put({ id: am.id, threadId: am.threadId, uid: `${am.ts}-assistant`, role: "assistant", ts: am.ts, content: "", deleted: Date.now(), meta: {} }).catch(() => {}); }
+        }
+        logDiag("turn", e?.message || e); showUnanswered(e); throw e;
+      }
     }
+    await saving;
+    clearInterval(thinkT);
     body.classList.remove("typing");
     if (speak && speaker.key === am) { if (S.stopRequested) speaker.stop(); else speaker.feed(stripRetrievalNote(out), true); }
     if (S.stopRequested) am.meta.stopped = true;
@@ -1947,20 +2399,21 @@ async function sendOne(prefill) {
     if (turn.care && presence.hasCareMark(out)) { turn.careMarked = true; am.meta.care = "marked"; }
     out = stripRetrievalNote(out).trim() || (S.stopRequested ? "(stopped before answering)" : "…");
     guard.clear();   // it loaded and answered: nothing for the loop guard to catch
-    am.content = out; am.meta.ms = Math.round(performance.now() - t0);
+    am.content = out; am.meta.ms = Math.round(performance.now() - t0); delete am.meta.partial;
     const usage = usageNow();
     if (usage) am.meta.usage = usage;
     const label = currentModelLabel();
     if (label) am.meta.modelLabel = label;
-    am.id = await store.messages.add(am);
+    if (am.id != null) await store.messages.put({ ...am }); else am.id = await store.messages.add(am);
     S.history.push(am);
     chat.querySelectorAll(".last-only").forEach(b => b.remove());   // Retry and Edit move to the new last exchange
     const settle = n => (n.classList.add("settled"), n);   // v89: the finished answer takes the streaming one's place without arriving twice
     node.replaceWith(settle(msgNode(am)));
+    announce(`${t("Lodestone answered:")} ${String(out).replace(/[#*_>`]/g, "").split(/(?<=[.!?])\s/)[0].slice(0, 200)}`);
     if (unode.isConnected) unode.replaceWith(settle(msgNode(um)));
     await touchThread();
     noticesDone = true;
-    await addNotices(turn, S.thread.id, n => { S.history.push(n); chat.append(msgNode(n)); followChat(true); });
+    await addNotices(turn, S.thread.id, n => { S.history.push(n); chat.insertBefore(msgNode(n), chat.querySelector(".tail-space")); });
     renderCostLine();
     capWarn();
     afterTurn(turn);
@@ -1969,14 +2422,15 @@ async function sendOne(prefill) {
     console.error(e);
     // The free messages used for today: said as it is, with the way past it, not as a failure (October 24, 2026).
     const capped = e?.code === "daily_cap" || /free messages are used/.test(String(e?.message || e));
-    toast(capped ? String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, "") : `Something failed: ${e.message || e}`, capped ? 15000 : undefined);
+    if (capped || !$("#chat .msg.unanswered")) toast(capped ? String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, "") : `Something failed: ${e.message || e}`, capped ? 15000 : undefined);
     // The answer failed, the care line does not: it was never the model's to give.
     if (turnForNotice?.care?.level === "refer" && !noticesDone && S.thread) {
       noticesDone = true;
       await addNotices({ ...turnForNotice }, S.thread.id, n => { S.history.push(n); $("#chat").append(msgNode(n)); }).catch(() => {});
     }
   } finally {
-    S.busy = false; setSending(false);
+    S.busy = false; setSending(false); S.liveNode = null; S.liveThread = null;
+    if (prefill == null && !userKept && text && !$("#input").value.includes(text)) giveBackTo(text);   // v99: words never stored go back to the box
     if (threadsDocked()) renderThreadList();
     syncSoon(5000);
     maybeLearn();
@@ -2349,6 +2803,87 @@ function scheduleSummary(thread, history, fit = null) {
 // leaves them where they are, and follows again once they are back at the bottom
 // or send the next message. Instant jumps: a smooth scroll would fight the reader.
 let chatFollow = true, chatOwn = false;
+// ─── Streaming, painted once a frame (v99) ───────────────────────────────────
+// Rebuilding the whole answer on every chunk costs more as the answer grows and
+// resets any selection; instead the text is healed (an unclosed **, a
+// half-written link closed for the moment: remend, Apache-2.0, vendor/remend/),
+// rendered once per frame at most, and morphed into place (idiomorph, 0BSD,
+// vendor/idiomorph/), so only what changed is touched.
+const HEAL = { katex: false, inlineKatex: false, singleTilde: false, strikethrough: false };
+function healed(md) {
+  try { return remend(md, HEAL).replace(/\[([^\]]*)\]\(streamdown:incomplete-link\)/g, "$1"); } catch { return md; }
+}
+function streamPainter(body, onPaint) {
+  let text = "", queued = 0, last = "";
+  const frame = () => {
+    queued = 0;
+    const html = render(healed(text));
+    if (html === last) return;
+    last = html;
+    try { Idiomorph.morph(body, html, { morphStyle: "innerHTML" }); } catch { body.innerHTML = html; }
+    onPaint?.();
+  };
+  const paint = t => { text = t; if (!queued) queued = requestAnimationFrame(frame); };
+  paint.flush = () => { if (queued) { cancelAnimationFrame(queued); queued = 0; } frame(); };
+  return paint;
+}
+
+// ─── Jump to the latest (v99) ────────────────────────────────────────────────
+// Scrolled up while an answer arrives, the reader is left where they are; a round
+// button above the composer brings them down, marked when something new is below.
+function jumpButton() {
+  let b = $("#jumpBottom");
+  if (b) return b;
+  b = el("button", { id: "jumpBottom", type: "button", class: "jump-bottom", hidden: true, title: "Jump to the latest", "aria-label": "Jump to the latest", onclick: () => {
+    const c = $("#chat"); chatFollow = true; chatOwn = true;
+    c.scrollTo({ top: c.scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    b.classList.remove("new"); b.hidden = true;
+  } });
+  b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v13M6 12l6 6 6-6"/></svg>';
+  document.body.append(b);
+  return b;
+}
+function placeJump() {
+  const b = $("#jumpBottom"), comp = $("#composer"), c = $("#chat");
+  if (!b || !comp || !c) return;
+  const r = comp.getBoundingClientRect(), cr = c.getBoundingClientRect();
+  b.style.bottom = Math.max(12, innerHeight - r.top + 12) + "px";
+  b.style.left = (cr.left + cr.width / 2 - 20) + "px";
+}
+function updateJump() {
+  const c = $("#chat"); if (!c) return;
+  const far = c.scrollHeight - c.scrollTop - c.clientHeight > 240;
+  const b = jumpButton();
+  if (far && b.hidden) { placeJump(); b.hidden = false; }
+  else if (!far && !b.hidden) { b.hidden = true; b.classList.remove("new"); }
+}
+function noteNewBelow() {
+  const b = $("#jumpBottom");
+  if (b && !b.hidden && !chatFollow) b.classList.add("new");
+}
+
+// v99: a question sent rises to the top of the screen and the answer is written
+// beneath it, read from its first line, as the flagship apps now do; the view does
+// not chase the end of a long answer. Room below (.tail-space) lets the question
+// rise even before there is much answer; it shrinks as the answer fills it.
+function readFromQuestion(unode, anode = null) {
+  const c = $("#chat"); if (!c || !unode?.isConnected) return;
+  let sp = c.querySelector(".tail-space");
+  if (!sp) sp = el("div", { class: "tail-space", "aria-hidden": "true" });
+  c.append(sp);
+  chatFollow = false;
+  fitTail(unode, anode);
+  chatOwn = true;
+  const top = unode.offsetTop - 12;
+  c.scrollTo({ top, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+}
+function fitTail(unode, anode) {
+  const c = $("#chat"), sp = c?.querySelector(".tail-space"); if (!sp || !unode?.isConnected) return;
+  if (sp.nextSibling) c.append(sp);
+  const used = (anode?.isConnected ? anode.offsetTop + anode.offsetHeight : unode.offsetTop + unode.offsetHeight) - unode.offsetTop + 12;
+  sp.style.height = Math.max(0, c.clientHeight - used - 24) + "px";
+}
+
 function followChat(force = false) {
   const c = $("#chat"); if (!c) return;
   if (force) chatFollow = true;
@@ -2358,7 +2893,9 @@ function followChat(force = false) {
 }
 function watchChatScroll() {
   const c = $("#chat");
-  c.addEventListener("scroll", () => { if (chatOwn) { chatOwn = false; return; } chatFollow = c.scrollHeight - c.scrollTop - c.clientHeight < 24; }, { passive: true });
+  c.addEventListener("scroll", () => { updateJump(); if (chatOwn) { chatOwn = false; return; } chatFollow = c.scrollHeight - c.scrollTop - c.clientHeight < 24; }, { passive: true });
+  addEventListener("resize", placeJump, { passive: true });
+  visualViewport?.addEventListener("resize", placeJump, { passive: true });
   c.addEventListener("wheel", e => { if (e.deltaY < 0) chatFollow = false; }, { passive: true });
 }
 
@@ -2438,7 +2975,27 @@ function listenButton(m) {
   return el("span", { class: "listen-pair" }, p, b);
 }
 
+// v99: a newer Lodestone installed while this one runs is said once, at the top,
+// with Reload; never while an answer is being written (it waits for the end).
+/** A screen reader hears that an answer arrived, and its first sentence (v99). */
+function announce(text) {
+  let r = $("#srLive");
+  if (!r) { r = el("div", { id: "srLive", class: "sr-only", "aria-live": "polite", role: "status" }); document.body.append(r); }
+  r.textContent = ""; setTimeout(() => { r.textContent = text; }, 60);
+}
+
+function offerReload() {
+  if ($("#updateBar")) return;
+  if (S.busy) { setTimeout(offerReload, 3000); return; }
+  const bar = el("div", { id: "updateBar", class: "update-bar", role: "status" },
+    el("span", {}, t("Lodestone was updated.")),
+    el("button", { type: "button", class: "btn primary", onclick: () => location.reload() }, t("Reload")),
+    el("button", { type: "button", class: "icon-btn", "aria-label": t("Close"), onclick: () => bar.remove() }, ico("x")));
+  document.body.append(bar);
+}
+
 function setSending(on) {
+  try { updateBadge(); } catch {}
   const b = $("#sendBtn");
   b.classList.toggle("stop", on);
   b.setAttribute("aria-label", on ? "Stop" : "Send");
@@ -2462,7 +3019,7 @@ async function takeBackLast() {
   const u = lastUser(), k = pairEnd();
   if (!u) return null;
   const gone = S.history.slice(k - 2);
-  for (const m of gone) await store.messages.del(m.id);
+  for (const m of gone) await store.messages.put(deletionMark(m));   // v99: a mark, so sync cannot bring the exchange back
   S.history.splice(k - 2);
   recallDrop(gone.map(m => "m:" + m.id));
   renderChat(); renderCostLine(); syncSoon();
@@ -2491,7 +3048,7 @@ const monthStart = () => { const d = new Date(); return new Date(d.getFullYear()
 async function monthSpend() {
   const since = monthStart();
   let c = 0;
-  for (const m of await store.messages.all()) if ((m.ts || 0) >= since && m.meta?.usage?.cost != null) c += m.meta.usage.cost;
+  for (const m of await store.messages.allRaw()) if ((m.ts || 0) >= since && m.meta?.usage?.cost != null) c += m.meta.usage.cost;
   for (const t of await store.threads.list()) {
     if (t.side?.log) { for (const x of t.side.log) if (x.ts >= since) c += x.cost || 0; }
     else if (t.side?.cost && (t.summaryAt || t.updated || 0) >= since) c += t.side.cost;   // before 1.13.1: one total
@@ -4101,7 +4658,7 @@ async function learnLocally({ force = false, leaving = false } = {}) {
     if (S.where) convo = leaveOut(convo);   // learning on a rented model reads no secrets either (1.13.1)
     if (small && convo.length > 12000) convo = convo.slice(-12000);
     // What they reported of their practices is evidence too, in their own words.
-    const prac = (S.practices || []).filter(p => !p.archived && p.log?.length).map(p => `- [${p.pillar}] ${p.text}: ${p.log.slice(-6).map(l => `${l.status} ${new Date(l.ts).toISOString().slice(0, 10)}`).join(", ")}`);
+    const prac = (S.practices || []).filter(p => !p.archived && p.log?.length).map(p => `- [${p.pillar}] ${p.text}: ${p.log.slice(-6).map(l => `${l.status} ${new Date(l.ts).toLocaleDateString("sv-SE")}`).join(", ")}`);
     const evidence = prac.length ? `${convo}\n\nTheir own practice check-ins (held / partly / not):\n${prac.join("\n")}` : convo;
     // v92: what the practitioner corrected stands over what the conversation suggests.
     const fix = S.learned.corrections?.trim() ? `\n\nThe practitioner's own corrections. They are true and override the conversation and any earlier note: remove or rewrite whatever they contradict, and do not infer it again.\n${S.learned.corrections.trim().slice(0, 2000)}` : "";
@@ -4559,6 +5116,20 @@ function renderLearned() {
   $("#wheelScore").replaceChildren(el("b", {}, String(score)), el("span", {}, ` of ${learning.MAX_SCORE}`));
   const pencil = () => { const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("aria-hidden", "true"); s.innerHTML = '<path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>'; return s; };
   const lines = t => t.split("\n").map(x => x.trim()).filter(Boolean);
+  // v95: a field one taps to change: its name and Clear above it, the box as tall
+  // as its text (no scrolling inside a two-line box), and no <label> wrapped round
+  // the box, where iOS's selection handles jumped and select-all misbehaved.
+  let fieldN = 0;
+  const field = (label, value, { multi = true, placeholder = "Tap to write" } = {}) => {
+    const id = `lf-${++fieldN}-${Date.now().toString(36)}`;
+    const t = multi ? el("textarea", { id, rows: "1", placeholder }) : el("input", { id, type: "text", placeholder });
+    t.value = value || "";
+    const fit = () => { if (multi) { t.style.height = "auto"; t.style.height = (t.scrollHeight + 2) + "px"; } };
+    const clr = el("button", { class: "lf-clear", type: "button", hidden: !t.value, "aria-label": `Clear ${label}`, onclick: () => { t.value = ""; fit(); clr.hidden = true; t.focus(); } }, "Clear");
+    t.addEventListener("input", () => { fit(); clr.hidden = !t.value; });
+    requestAnimationFrame(fit);
+    return [el("div", { class: "lf" }, el("div", { class: "lf-head" }, el("label", { for: id }, label), clr), t), t];
+  };
 
   // v92: the notes read as text, the whole of them a tap away, and edited on purpose
   // (on a phone the box scrolled inside itself, and nothing said it could be changed).
@@ -4572,7 +5143,7 @@ function renderLearned() {
       ta.focus();
       return;
     }
-    if (!L.summary?.trim()) { notes.replaceChildren(el("p", { class: "learned-notes-empty" }, "Nothing yet. Lodestone writes its notes here after every ten of your messages."), el("div", { class: "learned-tools" }, el("button", { class: "btn ghost", type: "button", onclick: () => drawNotes(true) }, "Write them yourself"))); return; }
+    if (!L.summary?.trim()) { notes.replaceChildren(el("p", { class: "learned-notes-empty" }, "Nothing yet. Lodestone writes its notes here as you talk: first after your third message, then every ten."), el("div", { class: "learned-tools" }, el("button", { class: "btn ghost", type: "button", onclick: () => drawNotes(true) }, "Write them yourself"))); return; }
     const view = el("div", { class: "learned-notes clamped prose" }); view.innerHTML = render(L.summary);
     const more = el("button", { class: "btn ghost", type: "button", hidden: true, onclick: () => { const c = view.classList.toggle("clamped"); more.textContent = c ? "Read all" : "Show less"; } }, "Read all");
     notes.replaceChildren(view, el("div", { class: "learned-tools" }, more, el("button", { class: "btn ghost", type: "button", onclick: () => drawNotes(true) }, "Edit")));
@@ -4586,20 +5157,26 @@ function renderLearned() {
     const draw = (editing = false) => {
       const p = L.wheel?.[k] || {};
       if (!editing) {
-        const bits = [p.strengths && `strong: ${p.strengths}`, p.concerns && `concern: ${p.concerns}`, p.edges && `edge: ${p.edges}`, p.resistance && "you seem to keep this one at a distance"].filter(Boolean);
+        const bits = [p.strengths && `strong: ${p.strengths}`, p.concerns && `concern: ${p.concerns}`, p.edges && `edge: ${p.edges}`, p.resistance && "you tend to avoid it"].filter(Boolean);
         li.classList.toggle("lp-empty", !bits.length);
-        li.replaceChildren(el("span", { class: "lp-text" }, el("b", {}, n), " — ", bits.length ? bits.join(" · ") : "nothing read yet"),
+        li.replaceChildren(el("span", { class: "lp-text", role: "button", tabindex: "0", title: "Tap to correct", onclick: () => draw(true), onkeydown: ev => { if (ev.key === "Enter") draw(true); } }, el("b", {}, n), " — ", bits.length ? bits.join(" · ") : "nothing read yet"),
           el("button", { class: "lp-edit", type: "button", "aria-label": `Correct what Lodestone reads in ${n}`, title: "Correct", onclick: () => draw(true) }, pencil()));
         return;
       }
-      const f = (label, v) => { const t = el("textarea", { rows: "2" }); t.value = v || ""; return [el("label", {}, label, t), t]; };
-      const [l1, s] = f("Strong", p.strengths), [l2, c] = f("Concern", p.concerns), [l3, e] = f("Edge", p.edges);
-      const r = el("input", { type: "checkbox" }); r.checked = !!p.resistance;
-      li.replaceChildren(el("div", { class: "lp-form" }, el("b", {}, n), l1, l2, l3,
-        el("label", { class: "check" }, r, el("span", {}, "I seem to keep this one at a distance")),
+      const [l1, s] = field("Strong", p.strengths), [l2, c] = field("Concern", p.concerns), [l3, e] = field("Edge", p.edges);
+      // v95: no checkbox asking everyone to judge their own avoidance. Only where the
+      // learning has noticed it is it said, with a way to refuse it; a refusal stands,
+      // and the learning does not mark that pillar again (learning.js applyWheelUpdates).
+      const avoid = p.resistance ? el("div", { class: "lp-avoid" }, el("span", {}, "Lodestone notices you tend to avoid this area."),
+        el("button", { class: "btn ghost", type: "button", onclick: async () => {
+          L.wheel = { ...(L.wheel || {}), [k]: { ...(L.wheel?.[k] || {}), resistance: false, resistanceDenied: Date.now() } };
+          await saveLearned(); avoid.remove(); toast("Noted. Lodestone will not read this area as avoided.", 4000);
+        } }, "Not true")) : null;
+      li.replaceChildren(el("div", { class: "lp-form" }, el("b", {}, n),
+        el("p", { class: "lp-hint" }, "Tap a box to change it. An empty box is forgotten."), l1, l2, l3, avoid,
         el("div", { class: "learned-tools" },
           el("button", { class: "btn primary", type: "button", onclick: async () => {
-            const v = { ...p, strengths: s.value.trim(), concerns: c.value.trim(), edges: e.value.trim(), resistance: r.checked, edited: Date.now() };
+            const v = { ...(L.wheel?.[k] || p), strengths: s.value.trim(), concerns: c.value.trim(), edges: e.value.trim(), edited: Date.now() };
             L.wheel = { ...(L.wheel || {}), [k]: v }; await saveLearned(); renderLearned();
           } }, "Save"),
           el("button", { class: "btn ghost", type: "button", onclick: () => draw() }, "Cancel"),
@@ -4619,11 +5196,10 @@ function renderLearned() {
   const drawCtx = (editing = false) => {
     const c = L.context || {}, st = c.state || {};
     if (editing) {
-      const cap1 = el("input", { type: "text" }); cap1.value = c.capsule || "";
-      const com = el("textarea", { rows: "3" }); com.value = (st.open_commitments || []).join("\n");
-      const pen = el("textarea", { rows: "3" }); pen.value = (st.pending_threads || []).join("\n");
-      ctxBox.replaceChildren(el("div", { class: "learned-edit" },
-        el("label", {}, "Now", cap1), el("label", {}, "You committed to (one per line)", com), el("label", {}, "Left open (one per line)", pen),
+      const [f1, cap1] = field("Now", c.capsule, { multi: false });
+      const [f2, com] = field("You committed to (one per line)", (st.open_commitments || []).join("\n"));
+      const [f3, pen] = field("Left open (one per line)", (st.pending_threads || []).join("\n"));
+      ctxBox.replaceChildren(el("div", { class: "learned-edit" }, f1, f2, f3,
         el("div", { class: "learned-tools" },
           el("button", { class: "btn primary", type: "button", onclick: async () => {
             L.context = { ...c, capsule: cap1.value.trim(), state: { ...st, open_commitments: lines(com.value), pending_threads: lines(pen.value) } };
@@ -4657,7 +5233,7 @@ function renderLearned() {
   const moves = (L.history || []).filter(h => h.to !== h.from).slice(-8).reverse();
   const learnCost = sumUsage((L.costLog || []).filter(x => x.ts > Date.now() - 30 * 864e5));
   box.replaceChildren(...[
-    el("label", { class: "check" }, learnT, el("span", {}, "Learn from our conversations: every ten of your messages, Lodestone reads them back and updates its notes and your Wheel's evidence. It runs on the model you use, on this computer when the model is here.")),
+    el("label", { class: "check" }, learnT, el("span", {}, "Learn from our conversations: after your third message, then every ten and when you leave the app, Lodestone reads them back and updates its notes and your Wheel's evidence. It runs on the model you use, on this computer when the model is here.")),
     el("h5", { class: "sub-h" }, "Lodestone's notes on you"),
     notes,
     el("h5", { class: "sub-h" }, "What it reads in your Wheel"),
@@ -5426,6 +6002,7 @@ async function renderSettings() {
 
   [...$("#setTheme").children].forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === (S.settings.theme || "dark"))));
   $("#setLang").value = S.settings.lang || "auto";
+  if ($("#setUiLang")) $("#setUiLang").value = S.settings.uiLang || "auto";
   $("#setShowCost").checked = !!S.settings.showCost;
   const p = S.pack.runtime.pack;
   $("#setCorpus").innerHTML = "";
@@ -5463,6 +6040,7 @@ async function renderSettings() {
   line.append(detail);
   $("#setCorpus").append(line);
 
+  renderDiag();
   $("#setAbout").textContent = DESKTOP
     ? (S.where
         ? `Lodestone${S.desktopVersion ? " " + S.desktopVersion : ""}. Retrieval, the safeguards and memory run on this computer; each turn's question and context go to ${S.where}, which answers it. There is no telemetry. Lodestone, the corpus and the library update only when you ask.`
@@ -5510,7 +6088,7 @@ const reloadButton = (label = "Reload Lodestone") => el("button", { class: "btn 
 // Focus goes into what opens and comes back where it was (1.13.1): with the
 // cursor left in the hidden message box, Enter sent a message under Settings.
 let drawerReturn = null;
-function openDrawer(sel, { back = false } = {}) {
+function openDrawer(sel, { back = false, swiped = false } = {}) {
   // What was open beneath is where Back returns (October 26, 2026): Usage from
   // Settings goes back to Settings, Page readings to the conversations.
   const under = [...document.querySelectorAll(".drawer")].find(x => !x.hidden && !isDocked(x) && "#" + x.id !== sel);
@@ -5519,6 +6097,8 @@ function openDrawer(sel, { back = false } = {}) {
   if (!back && d.hidden) d._parent = under ? "#" + under.id : null;
   if (!drawerReturn || !document.contains(drawerReturn)) drawerReturn = document.activeElement;
   d.classList.remove("leaving"); $("#scrim").classList.remove("leaving");
+  // v96: brought in by a swipe, it is already in place: no entrance animation.
+  if (!swiped) { d.classList.remove("swiped"); $("#scrim").classList.remove("swiped"); }
   d.hidden = false; $("#scrim").hidden = false;
   if (!d.hasAttribute("role")) { d.setAttribute("role", "dialog"); const h = d.querySelector(".drawer-head h3"); if (h) { h.id = h.id || d.id + "Title"; d.setAttribute("aria-labelledby", h.id); } }
   if (d.classList.contains("page") && !back) openPage(d);
@@ -5660,11 +6240,19 @@ function navDepth() {
     n += w(d);
     for (let p = d._parent, i = 0; p && $(p) && i < 4; p = $(p)._parent, i++) n += w($(p));
     if (d.id === "drawerLibrary" && d.classList.contains("reading") && narrowMQ.matches) n++;
-  } else if (narrowMQ.matches) n++;
+  } else if (narrowMQ.matches && !iosWebApp()) n++;
   return n;
 }
-const NAV = { depth: 0, skip: 0 };
+// v95: in the Home Screen app on an iPhone the conversation takes no entry of its
+// own. iOS draws its edge swipe from a picture of the entry it returns to, taken
+// when that entry was left, and the list was never on screen then: the swipe
+// showed the same conversation, mirrored. With no entry below the conversation
+// iOS offers no swipe of its own, and Lodestone's swipe opens the list from the
+// edge as from anywhere else.
+function iosWebApp() { return isIOS() && (navigator.standalone === true || matchMedia("(display-mode: standalone)").matches); }
+const NAV = { depth: 0, skip: 0, hold: false };
 function navSync() {
+  if (NAV.hold) return;   // v96: not while a swipe is still moving things
   const want = navDepth();
   if (want === NAV.depth) return;
   try {
@@ -5703,6 +6291,15 @@ function initBack() {
   for (const n of [...document.querySelectorAll(".drawer"), $("#profileView"), $("#setup"), $("#main")].filter(Boolean)) watch.observe(n, { attributes: true, attributeFilter: ["hidden", "class"] });
   addEventListener("popstate", () => {
     if (NAV.skip) { NAV.skip--; return; }
+    const to = Number(history.state?.lodestone) || 0;
+    if (to > NAV.depth) {
+      // Forward (iOS's swipe from the right edge, a browser's forward button): from the
+      // list on a phone it returns to the conversation; anywhere else there is no layer
+      // to reopen, and the history is put back where Lodestone stands.
+      if (narrowMQ.matches && !$("#drawerThreads").hidden && !threadsDocked()) { NAV.depth = to; closeDrawers(); return; }
+      NAV.skip++; history.go(NAV.depth - to);
+      return;
+    }
     if (NAV.depth > 0) { NAV.depth--; goBack(); }
   });
   document.addEventListener("click", e => { if (e.target.closest?.("[data-back]")) { e.preventDefault(); goBack(); } });
@@ -5772,16 +6369,113 @@ function initSwipeBack() {
   const cue = swipeCue = el("div", { class: "swipe-cue", "aria-hidden": "true" });
   cue.innerHTML = '<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>';
   document.body.append(cue);
+  const scrim = $("#scrim");
   let s = null;
   const reset = () => { s = null; cue.classList.remove("on", "go"); cue.style.removeProperty("--p"); };
   const canBack = () => navDepth() > 0 || (!wideMQ.matches && !$("#main").hidden);
+
+  // v96: on a phone the swipe moves the thing itself, under the finger, as the
+  // phone's own apps do: the list of conversations slides in from the left and
+  // follows the finger; a page, a drawer or the Harmonic Profile slides off to the
+  // right, showing what it was opened over; on release it finishes or springs back,
+  // by how far it went and how fast. Wider windows keep the cue.
+  function plan(dir) {
+    if (!narrowMQ.matches || !$("#setup").hidden || $("#main").hidden) return null;
+    const pv = $("#profileView");
+    if (pv && !pv.hidden) return dir > 0 ? { kind: "layer", el: pv, under: null, fade: false } : null;
+    const d = openLayers()[0];
+    if (!d) return dir > 0 ? { kind: "open", el: $("#drawerThreads") } : null;
+    if (d.id === "drawerThreads") return dir < 0 ? { kind: "close", el: d } : null;
+    if (d.id === "drawerLibrary" && d.classList.contains("reading")) return null;   // the cue: the article gives way to the list
+    if (dir < 0) return null;
+    const under = d._parent && $(d._parent);
+    return { kind: "layer", el: d, under, fade: !under };
+  }
+  function begin(pl) {
+    NAV.hold = true;
+    const { el: n } = pl;
+    // v97: the list is not slid over the conversation; the conversation is pushed aside to show it.
+    pl.push = (pl.kind === "open" || pl.kind === "close") && document.documentElement.classList.contains("threads-push");
+    if (pl.push) {
+      const m = $("#main");
+      document.documentElement.classList.add("push-drag");
+      m.style.transition = "none";
+      if (pl.kind === "open") { m.style.transform = "translateX(0px)"; m.style.setProperty("--dim", "0"); renderThreadList(); n.hidden = false; }
+      pl.w = n.getBoundingClientRect().width || innerWidth;
+      return;
+    }
+    if (pl.kind === "open") { renderThreadList(); n.hidden = false; }
+    n.classList.add("swiped", "dragging");
+    n.style.transition = "none";
+    pl.w = n.getBoundingClientRect().width || innerWidth;
+    if (pl.kind === "open") { n.style.transform = `translateX(${-pl.w}px)`; scrim.hidden = false; scrim.classList.add("swiped"); scrim.style.transition = "none"; scrim.style.opacity = "0"; }
+    if (pl.under) { pl.under.classList.add("swiped"); pl.under.hidden = false; }
+    if (pl.fade) { scrim.style.transition = "none"; }
+  }
+  function move(pl, dx) {
+    let x, o;
+    if (pl.kind === "open") { x = Math.max(-pl.w, Math.min(0, dx - pl.w)); o = (x + pl.w) / pl.w; }
+    else if (pl.kind === "close") { x = Math.max(-pl.w, Math.min(0, dx)); o = 1 + x / pl.w; }
+    else { x = Math.max(0, Math.min(pl.w, dx)); o = 1 - x / pl.w; }
+    pl.x = x;
+    if (pl.push) { const m = $("#main"); m.style.transform = `translateX(${x + pl.w}px)`; m.style.setProperty("--dim", Math.max(0, Math.min(1, o)).toFixed(3)); return; }
+    pl.el.style.transform = `translateX(${x}px)`;
+    if (pl.kind !== "layer" || pl.fade) scrim.style.opacity = String(Math.max(0, Math.min(1, o)));
+  }
+  function end(pl, commit) {
+    const n = pl.el, ms = matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 220;
+    const target = pl.kind === "open" ? (commit ? 0 : -pl.w) : pl.kind === "close" ? (commit ? -pl.w : 0) : (commit ? pl.w : 0);
+    const shown = pl.kind === "open" ? commit : !commit;
+    if (pl.push) {
+      const m = $("#main");
+      document.documentElement.classList.remove("push-drag");
+      m.style.transition = `transform ${ms}ms cubic-bezier(.22, .8, .24, 1)`;
+      m.style.transform = `translateX(${target + pl.w}px)`;
+      m.style.setProperty("--dim", shown ? "1" : "0");
+      setTimeout(() => {
+        if (pl.kind === "open") { if (commit) openDrawer("#drawerThreads", { swiped: true }); else n.hidden = true; }
+        else if (commit) { n.hidden = true; scrim.hidden = true; }
+        m.style.transform = ""; m.style.transition = ""; m.style.removeProperty("--dim");
+        NAV.hold = false; navSync();
+      }, ms + 20);
+      return;
+    }
+    n.style.transition = `transform ${ms}ms cubic-bezier(.22, .8, .24, 1)`;
+    n.style.transform = `translateX(${target}px)`;
+    if (pl.kind !== "layer" || pl.fade) { scrim.style.transition = `opacity ${ms}ms ease`; scrim.style.opacity = shown ? "1" : "0"; }
+    setTimeout(() => {
+      const clear = x => { x.style.transform = ""; x.style.transition = ""; };
+      n.classList.remove("dragging");
+      if (pl.kind === "open") {
+        if (commit) { clear(n); openDrawer("#drawerThreads", { swiped: true }); }
+        else { n.hidden = true; clear(n); n.classList.remove("swiped"); scrim.hidden = true; }
+      } else if (pl.kind === "close") {
+        if (commit) { n.hidden = true; n.classList.remove("swiped"); scrim.hidden = true; }
+        clear(n);
+      } else if (commit) {
+        if (n.id === "profileView") { closeProfileView(); clear(n); }
+        else {
+          n.hidden = true; clear(n); n.classList.remove("swiped"); n._parent = null;
+          if (pl.under) { if (pl.under.id === "drawerThreads") renderThreadList(); openDrawer("#" + pl.under.id, { back: true, swiped: true }); }
+          else scrim.hidden = true;
+        }
+      } else {
+        clear(n);
+        if (pl.under) { pl.under.hidden = true; pl.under.classList.remove("swiped"); }
+      }
+      scrim.style.opacity = ""; scrim.style.transition = "";
+      if (scrim.hidden) scrim.classList.remove("swiped");
+      NAV.hold = false; navSync();
+    }, ms + 20);
+  }
+
   document.addEventListener("touchstart", e => {
-    if (e.touches.length !== 1 || !swipeAllowed(e.target) || String(getSelection?.() || "")) { reset(); return; }
+    if (e.touches.length !== 1 || NAV.hold || !swipeAllowed(e.target) || String(getSelection?.() || "")) { reset(); return; }
     const t = e.touches[0];
-    // The screen's left edge is iOS's own back gesture; it reaches goBack through
-    // the history, so the two never both act on one swipe.
-    if (isIOS() && t.clientX < 22) { reset(); return; }
-    s = { x: t.clientX, y: t.clientY, at: Date.now(), dir: 0 };
+    // In Safari the screen's left edge is iOS's own back gesture, which reaches
+    // goBack through the history; in the Home Screen app it is Lodestone's (v95).
+    if (isIOS() && !iosWebApp() && t.clientX < 22) { reset(); return; }
+    s = { x: t.clientX, y: t.clientY, at: Date.now(), dir: 0, pl: null, v: [] };
   }, { passive: true });
   document.addEventListener("touchmove", e => {
     if (!s || e.touches.length !== 1) return;
@@ -5790,21 +6484,40 @@ function initSwipeBack() {
       if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
       if (Math.abs(dx) < Math.abs(dy) * 1.6) { reset(); return; }
       s.dir = dx > 0 ? 1 : -1;
-      if (s.dir > 0 && !canBack()) { reset(); return; }
+      s.pl = plan(s.dir);
+      if (s.pl) { s.off = s.dir * 12; begin(s.pl); }
+      else if (s.dir > 0 && !canBack()) { reset(); return; }
     }
     s.dx = dx; s.dy = dy;
+    if (s.pl) {
+      e.preventDefault();   // the page does not scroll under a drag
+      move(s.pl, dx - s.off);
+      s.v.push([performance.now(), t.clientX]); if (s.v.length > 6) s.v.shift();
+      return;
+    }
     if (s.dir > 0) { const p = Math.min(1, dx / 72); cue.style.setProperty("--p", p.toFixed(3)); cue.classList.add("on"); cue.classList.toggle("go", p >= 1); }
-  }, { passive: true });
+  }, { passive: false });
   document.addEventListener("touchend", () => {
     const g = s; reset();
-    if (!g?.dir || Date.now() - g.at > 900) return;
+    if (!g?.dir) return;
+    if (g.pl) {
+      const a = g.v[0], b = g.v[g.v.length - 1];
+      // px per ms over the last moves; over the whole gesture when they came too close together to measure
+      const vx = a && b && b[0] - a[0] >= 8 ? (b[1] - a[1]) / (b[0] - a[0]) : (g.dx || 0) / Math.max(16, Date.now() - g.at);
+      const dist = Math.abs(g.pl.x - (g.pl.kind === "open" ? -g.pl.w : 0));
+      const fast = g.pl.kind === "close" ? vx < -0.35 : vx > 0.35;
+      const back = g.pl.kind === "close" ? vx > 0.2 : vx < -0.2;
+      end(g.pl, !back && (dist / g.pl.w > 0.4 || (fast && dist > 24)));
+      return;
+    }
+    if (Date.now() - g.at > 900) return;
     const level = Math.abs(g.dy || 0) < Math.abs(g.dx || 0) * 0.6;
     if (g.dir > 0 && g.dx >= 72 && level) {
       if (goBack()) return;
       if (!wideMQ.matches && !$("#main").hidden) { renderThreadList(); openDrawer("#drawerThreads"); }
     } else if (g.dir < 0 && -g.dx >= 72 && level && !$("#drawerThreads").hidden && !threadsDocked()) closeDrawers();
   }, { passive: true });
-  document.addEventListener("touchcancel", reset, { passive: true });
+  document.addEventListener("touchcancel", () => { const g = s; reset(); if (g?.pl) end(g.pl, false); }, { passive: true });
 }
 
 // Conversations stay docked on the left in a wide window (the default); the
@@ -5821,7 +6534,25 @@ function syncDock() {
   document.documentElement.classList.toggle("threads-docked", on);
   if (on) { $("#drawerThreads").hidden = false; renderThreadList(); }
   else if (was) $("#drawerThreads").hidden = true;
+  syncPush();
 }
+// v97: on a phone the list of conversations lies beneath the conversation, which
+// moves aside to the right to show it and comes back over it, as Claude's app and
+// the phone's own apps do; whatever opens or closes the list (the button, a swipe,
+// choosing a conversation) moves the conversation. What shows of it on the right
+// is dimmed, and a tap there or a swipe to the left brings it back.
+function syncPush() {
+  const h = document.documentElement, d = $("#drawerThreads");
+  const on = narrowMQ.matches && !threadsDocked();
+  h.classList.toggle("threads-push", on);
+  h.classList.toggle("threads-shown", on && !d.hidden && !d.classList.contains("leaving"));
+}
+new MutationObserver(syncPush).observe($("#drawerThreads"), { attributes: true, attributeFilter: ["hidden", "class"] });
+narrowMQ.addEventListener("change", syncPush);
+$("#main").addEventListener("click", e => {
+  if (e.target === $("#main") && document.documentElement.classList.contains("threads-shown")) { e.preventDefault(); e.stopPropagation(); closeDrawers(); }
+});
+syncPush();
 function setDock(on) { try { localStorage.setItem(DOCK_KEY, on ? "1" : "0"); } catch {} syncDock(); }
 wideMQ.addEventListener("change", syncDock);
 
@@ -6371,7 +7102,7 @@ async function micToggle() {
   try {
     if (!(await ensureSpeechModel())) return;
     try { stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } }); }
-    catch (e) { toast(e?.name === "NotAllowedError" ? (DESKTOP ? "The microphone is not allowed. On a Mac: System Settings → Privacy & Security → Microphone → Lodestone." : "The microphone is not allowed for this page. Allow it in the browser's settings for harmonism.io, then try again.") : `The microphone could not be opened: ${e.message || e}`, 7000); return; }
+    catch (e) { toast(e?.name === "NotAllowedError" ? (DESKTOP ? "The microphone is not allowed. On a Mac: System Settings → Privacy & Security → Microphone → Lodestone." : isIOS() ? "The microphone is not allowed. On an iPhone: Settings → Apps → Safari → Microphone → Allow; then close Lodestone and open it again." : "The microphone is not allowed for this page. Allow it in the browser's settings for harmonism.io, then try again.") : `The microphone could not be opened: ${e.message || e}`, 7000); return; }
   } finally { D.starting = false; }
   if (D.rec || T.on) { stream.getTracks().forEach(t => t.stop()); return; }
   const mime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find(t => MediaRecorder.isTypeSupported?.(t)) || "";
@@ -6533,7 +7264,7 @@ async function renderDictation() {
 async function renderUsageSummary() {
   const kv = $("#setUsageKv"); if (!kv) return;
   const month = Date.now() - 30 * 864e5;
-  const recent = sumUsage((await store.messages.all()).filter(m => m.meta?.usage && (m.ts || 0) >= month).map(m => m.meta.usage));
+  const recent = sumUsage((await store.messages.allRaw()).filter(m => m.meta?.usage && (m.ts || 0) >= month).map(m => m.meta.usage));
   const conv = sumUsage([...S.history.map(m => m.meta?.usage), S.thread?.side]);
   const cap = Number(S.settings.spendCap) || 0;
   $("#setCap").value = cap > 0 ? String(cap) : "";
@@ -6558,7 +7289,8 @@ function bindChrome() {
     const mod = (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey;
     if ($("#main").hidden) return;
     if (mod && e.key.toLowerCase() === "n") { e.preventDefault(); newThread(); }
-    else if (mod && e.key.toLowerCase() === "f") {
+    else if (mod && e.key.toLowerCase() === "f" && S.history.length) { e.preventDefault(); openFind($("#findBar input")?.value || ""); }
+    else if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === "f") {
       e.preventDefault();
       if (!threadsDocked()) { if (wideMQ.matches) setDock(true); else { renderThreadList(); openDrawer("#drawerThreads"); } }
       setTimeout(() => { $("#threadSearch").focus(); $("#threadSearch").select(); }, 50);
@@ -6630,6 +7362,7 @@ function bindChrome() {
   renderVoiceChip();
   $("#voiceChip").onclick = e => { e.stopPropagation(); toggleVoiceMenu(); };
   fitFoot(); addEventListener("resize", fitFoot); addEventListener("orientationchange", () => setTimeout(fitFoot, 300));
+  watchKeyboard();
   // A composer menu opened near a screen edge is kept inside the screen, on any width.
   for (const menu of document.querySelectorAll(".composer .model-menu")) new MutationObserver(() => { if (!menu.hidden) fitMenu(menu); }).observe(menu, { attributes: true, attributeFilter: ["hidden"] });
   document.addEventListener("click", e => { if (!e.target.closest("#voiceWrap")) { $("#voiceMenu").hidden = true; $("#voiceChip").setAttribute("aria-expanded", "false"); } });
@@ -6677,7 +7410,7 @@ function bindChrome() {
     }
     setWebNext(!S.webNext); $("#input").focus();
   };
-  $("#input").addEventListener("input", autosize);
+  $("#input").addEventListener("input", () => { autosize(); saveDraft(); });
   // Attachments on every surface: the desktop, the web app and the phone read them alike.
   $("#attachBtn").onclick = () => $("#fileInput").click();
   $("#fileInput").onchange = e => { addFiles([...e.target.files]); e.target.value = ""; };
@@ -6763,6 +7496,12 @@ function bindChrome() {
     S.settings.theme = v; applyTheme(v); await store.kv.set("settings", S.settings); renderSettings();
   };
   $("#setLang").onchange = async e => { S.settings.lang = e.target.value; await store.kv.set("settings", S.settings); };
+  // v98: the app's own words. A change redraws the whole page in the new language.
+  $("#setUiLang").onchange = async e => {
+    const was = resolveUiLang(S.settings.uiLang || "auto", S.settings.lang);
+    S.settings.uiLang = e.target.value; await store.kv.set("settings", S.settings); syncSoon();
+    if (resolveUiLang(S.settings.uiLang, S.settings.lang) !== was) location.reload();
+  };
   $("#setShowCost").onchange = async e => { S.settings.showCost = e.target.checked; await store.kv.set("settings", S.settings); renderChat(); };
   if (FOLDERS?.foldersAdd) {
     $("#setFolderAdd").onclick = async () => { try { if (!DESKTOP) $("#setFoldersStats").textContent = "Reading…"; renderFolders(await FOLDERS.foldersAdd()); } catch (e) { toast(String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ""), 6000); } };
@@ -6879,7 +7618,7 @@ addEventListener("focus", followAccount);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) followAccount(); });
 addEventListener("storage", e => { if (e.key && e.key.startsWith("sb-") && e.key.endsWith("-auth-token")) followAccount(); });
 
-boot().then(() => askDeviceMemory()).catch(e => { console.error(e); document.body.insertAdjacentHTML("beforeend", `<p style="padding:20px">Lodestone could not start: ${String(e.message || e)}</p>`); });
+boot().then(() => askDeviceMemory()).catch(e => { console.error(e); document.body.append(el("div", { class: "boot-fail", role: "alert" }, el("h3", {}, t("Lodestone could not start.")), el("p", { class: "muted" }, String(e?.message || e)), el("button", { type: "button", class: "btn primary", onclick: () => location.reload() }, t("Reload")))); });
 
 
 // --- The screen's foot and the composer's menus (v88) ---
@@ -6888,6 +7627,73 @@ boot().then(() => askDeviceMemory()).catch(e => { console.error(e); document.bod
 // phone, the page then does not reach the home indicator, so the composer drops the
 // bottom inset there. The shortfall is measured, never assumed: a page that reaches
 // the foot (Android edge to edge, an iPhone without the bug, any browser tab) keeps it.
+// ─── Diagnostics, kept on this device (v100) ─────────────────────────────────
+// Uncaught errors and failed answers, with the version and the route, never a
+// word of a conversation: a ring of sixty lines in this browser. Nothing is sent;
+// Settings → About → Diagnostics copies a report the practitioner may pass on.
+const DIAG_KEY = "lodestone-diagnostics";
+function readDiag() { try { return JSON.parse(localStorage.getItem(DIAG_KEY) || "[]"); } catch { return []; } }
+function logDiag(kind, msg, where = "") {
+  try {
+    const list = readDiag();
+    list.push({ at: new Date().toISOString(), kind, msg: String(msg || "").replace(/sk-[\w-]{8,}/g, "sk-…").slice(0, 300), where: String(where || "").slice(0, 120), v: S.appVersion || "", route: S.engine?.kind || "" });
+    localStorage.setItem(DIAG_KEY, JSON.stringify(list.slice(-60)));
+  } catch {}
+}
+addEventListener("error", e => logDiag("error", e.message, e.filename ? `${String(e.filename).split("/").pop()}:${e.lineno}:${e.colno}` : ""));
+addEventListener("unhandledrejection", e => logDiag("promise", e.reason?.message || e.reason, String(e.reason?.stack || "").split("\n")[1]?.trim().replace(/^at /, "").replace(/https?:\/\/[^/]+/, "") || ""));
+async function diagReport() {
+  const list = readDiag();
+  let persisted = "unknown"; try { persisted = String(await navigator.storage?.persisted?.()); } catch {}
+  let tz = ""; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch {}
+  const head = [
+    `Lodestone diagnostics · ${new Date().toISOString()}`,
+    `Version: ${S.appVersion || "?"} · ${DESKTOP ? "Lodestone Desktop" : iosWebApp() ? "iPhone Home Screen app" : isHandheld() ? "phone browser" : "browser"}`,
+    `Route: ${S.engine?.kind || "none"} · ${S.engine?.describe?.() || ""}`,
+    `Device: ${navigator.userAgent}`,
+    `Language: ${navigator.language} · App language: ${document.documentElement.lang} · Time zone: ${tz}`,
+    `Storage kept: ${persisted} · Online: ${navigator.onLine}`,
+    `Events (${list.length}):`,
+  ];
+  return head.concat(list.map(x => `${x.at} [${x.kind}] ${x.msg}${x.where ? ` (${x.where})` : ""}${x.route ? ` · ${x.route}` : ""}`)).join("\n");
+}
+function renderDiag() {
+  const box = $("#diagBody"); if (!box) return;
+  const n = readDiag().length;
+  box.replaceChildren(
+    el("p", { class: "hint" }, n ? `${n} ${t(n === 1 ? "event recorded on this device." : "events recorded on this device.")}` : t("Nothing has gone wrong on this device.")),
+    el("div", { class: "row-btns" },
+      el("button", { type: "button", class: "btn ghost", onclick: async () => { await copyAnswer(await diagReport()); } }, t("Copy report")),
+      n ? el("button", { type: "button", class: "btn ghost", onclick: () => { try { localStorage.removeItem(DIAG_KEY); } catch {} renderDiag(); } }, t("Clear")) : null));
+}
+
+// ─── The iPhone's keyboard (v100) ────────────────────────────────────────────
+// iOS does not shorten the page when its keyboard opens: it slides the page up
+// under the keyboard, carrying the header off the screen. While the keyboard is
+// open, the app is sized to the visible part of the screen and kept on it (the
+// visual viewport, measured on the phone itself), the conversation keeps
+// its last line in view, and the composer drops the inset kept for the home bar.
+function watchKeyboard() {
+  const vv = window.visualViewport; if (!vv || !isIOS()) return;
+  const app = $("#app"), root = document.documentElement;
+  let raf = 0;
+  const fit = () => {
+    raf = 0;
+    const kb = Math.round(innerHeight - vv.height);
+    const open = kb > 120 && /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName || "");
+    const chat = $("#chat");
+    const atEnd = chat && chat.scrollHeight - chat.scrollTop - chat.clientHeight < 40;
+    root.classList.toggle("kb-open", open);
+    if (open) { app.style.height = vv.height + "px"; app.style.bottom = "auto"; app.style.transform = `translateY(${Math.round(vv.offsetTop)}px)`; }
+    else { app.style.height = ""; app.style.bottom = ""; app.style.transform = ""; }
+    if (open && atEnd && chat) chat.scrollTop = chat.scrollHeight;
+    placeJump();
+  };
+  const soon = () => { if (!raf) raf = requestAnimationFrame(fit); };
+  vv.addEventListener("resize", soon); vv.addEventListener("scroll", soon);
+  addEventListener("focusin", soon); addEventListener("focusout", () => setTimeout(soon, 60));
+}
+
 function fitFoot() {
   const root = document.documentElement;
   const installed = navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
@@ -6909,7 +7715,7 @@ function fitMenu(menu) {
 function leave(node, ms = 200) {
   node.classList.add("leaving");
   clearTimeout(node._leaveT);
-  node._leaveT = setTimeout(() => { if (node.classList.contains("leaving")) { node.classList.remove("leaving"); node.hidden = true; } }, ms);
+  node._leaveT = setTimeout(() => { if (node.classList.contains("leaving")) { node.classList.remove("leaving", "swiped"); node.hidden = true; } }, ms);
 }
 
 // ─── A question asked in Lodestone's own sheet (v89) ─────────────────────────
@@ -6920,6 +7726,7 @@ function leave(node, ms = 200) {
 const ASK_VERBS = { delete: "Delete", erase: "Erase", remove: "Remove", forget: "Forget", withdraw: "Withdraw", release: "Release", replace: "Replace", pair: "Pair", stop: "Stop syncing", "sign": "Sign out", think: "Use it", "make": "Make it so", "start": "Start again", look: "Look it up" };
 const ASK_DANGER = /^(delete|erase|remove|forget|withdraw|stop syncing|sign out|release)\b/i;
 function ask(text, { ok = "", cancel = "Cancel", danger = null } = {}) {
+  const en = String(text); text = t(en);   // v98: a question the table knows whole is asked in the app's language; its verb and danger read from the English
   return new Promise(resolve => {
     const paras = String(text).split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
     let okDesc = "", cancelDesc = "";
@@ -6929,12 +7736,17 @@ function ask(text, { ok = "", cancel = "Cancel", danger = null } = {}) {
       if (o) okDesc = o[1]; else if (c) cancelDesc = c[1]; else if (line.trim()) body.push(line.trim());
     }
     const first = body.shift() || "";
-    const isDanger = danger ?? ASK_DANGER.test(first);
-    const w = (first.match(/^[A-Za-z]+/)?.[0] || "").toLowerCase();
-    const okLabel = ok || (/download it now\?|downloaded once/i.test(text) ? "Download" : ASK_VERBS[w] || "OK");
+    const enFirst = en.split("\n").map(x => x.trim()).find(Boolean) || first;
+    const isDanger = danger ?? ASK_DANGER.test(enFirst);
+    const w = (enFirst.match(/^[A-Za-z]+/)?.[0] || "").toLowerCase();
+    const okLabel = ok || (/download it now\?|downloaded once/i.test(en) ? "Download" : ASK_VERBS[w] || "OK");
     const done = v => { document.removeEventListener("keydown", onKey, true); leave(sheet, 180); setTimeout(() => sheet.remove(), 200); resolve(v); };
     const onKey = e => {
       if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); done(false); }
+      else if (e.key === "Tab") {   // v99: focus stays inside the question while it is open
+        const f = [...card.querySelectorAll("button, [href], input, textarea, select")].filter(x => !x.disabled);
+        if (f.length) { const i = f.indexOf(document.activeElement); e.preventDefault(); f[(i + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus(); }
+      }
       else if (e.key === "Enter" && !e.shiftKey && document.activeElement?.closest?.(".ask-card") && document.activeElement.tagName !== "BUTTON") { e.preventDefault(); done(true); }
     };
     const choice = (label, desc, v, cls) => el("button", { type: "button", class: `ask-choice ${cls}`, onclick: () => done(v) }, el("b", {}, label), el("span", {}, desc));

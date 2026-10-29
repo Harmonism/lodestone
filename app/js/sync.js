@@ -270,7 +270,7 @@ export async function readLocal(lid, secret) {
   if (kind === "t") {
     const thread = await store.threads.get(name);
     if (!thread) return null;
-    const messages = (await store.messages.forThread(name)).map(cleanMsg);
+    const messages = (await store.messages.forThreadAll(name)).map(cleanMsg);
     return { thread, messages };
   }
   if (kind === "k") { const v = await store.kv.get(name); return v == null ? null : v; }
@@ -294,7 +294,7 @@ export async function writeLocal(lid, body, secret, before = null) {
     const was = new Map((before.messages || []).map(m => [m.uid, stable(m)]));
     const mineNow = new Map(now.messages.map(m => [m.uid, m]));
     const touched = m => !was.has(m.uid) || was.get(m.uid) !== stable(m);
-    const messages = body.messages.map(m => mineNow.has(m.uid) && touched(mineNow.get(m.uid)) ? mineNow.get(m.uid) : m);
+    const messages = body.messages.map(m => !m.deleted && mineNow.has(m.uid) && touched(mineNow.get(m.uid)) ? mineNow.get(m.uid) : m);
     const inBody = new Set(body.messages.map(m => m.uid));
     for (const m of now.messages) if (!inBody.has(m.uid) && !was.has(m.uid)) messages.push(m);
     messages.sort((a, b) => (a.ts || 0) - (b.ts || 0) || String(a.uid).localeCompare(String(b.uid)));
@@ -302,7 +302,7 @@ export async function writeLocal(lid, body, secret, before = null) {
   } else if (moved) body = merge(lid, now, body);
   if (kind === "t") {
     await store.threads.put({ ...body.thread, id: name });
-    const local = await store.messages.forThread(name);
+    const local = await store.messages.forThreadAll(name);
     const have = new Map(local.map(m => [uidOf(m), m]));
     const want = new Set();
     const seen = new Set((before?.messages || []).map(m => m.uid));
@@ -434,7 +434,13 @@ export function merge(lid, mine, theirs) {
     for (const m of theirs.messages || []) by.set(m.uid, m);
     for (const m of mine.messages || []) {
       const t = by.get(m.uid);
-      if (!t || String(m.content || "").length >= String(t.content || "").length) by.set(m.uid, m);
+      // v98: a deletion on either device holds (the mark carries no text); a pin
+      // or an unpin carries its own time (pinSet), and the later one holds.
+      if (t && (t.deleted || m.deleted)) { by.set(m.uid, t.deleted ? t : m); continue; }
+      const keep = !t || String(m.content || "").length >= String(t.content || "").length ? m : t;
+      const other = keep === m ? t : m;
+      if (other && (other.pinSet || 0) > (keep.pinSet || 0)) by.set(m.uid, { ...keep, pinned: other.pinned || 0, pinSet: other.pinSet });
+      else by.set(m.uid, keep);
     }
     const messages = [...by.values()].sort((a, b) => (a.ts || 0) - (b.ts || 0) || String(a.uid).localeCompare(String(b.uid)));
     const newer = (mine.thread.updated || 0) >= (theirs.thread.updated || 0) ? mine.thread : theirs.thread;

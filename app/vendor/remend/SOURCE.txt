@@ -1,0 +1,2 @@
+remend 1.4.0 (npm), dist/index.js unmodified, renamed remend.js. Apache-2.0: see LICENSE.
+SHA-256 d773979aecb01675c21860964cb2e9bedb2593bbd221c219caae15c3465642c0

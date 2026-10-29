@@ -223,7 +223,7 @@ export function renderProfile(d) {
   const rows = Object.keys(NAMES).map(k => `<tr><td style="color:${COLORS[k]}">${NAMES[k]}</td><td>${LEVELS[d.wheel[k]]}</td><td>${d.scores[k] ? `F ${d.scores[k].f} · D ${d.scores[k].d}` : ""}</td></tr>`).join("");
   out.push(`<section class="pv-section"><h2>The Wheel</h2>${d.has ? radar(d.wheel) : `<p class="pv-muted">No Wheel reading yet: take the assessment, or set your Wheel under Your path.</p>`}
     <table class="pv-table"><thead><tr><th>Pillar</th><th>Where you stand</th><th>Assessment (functional · developmental, of 10)</th></tr></thead><tbody>${rows}</tbody></table>
-    <p class="pv-facts"><span>Strongest: <b>${d.highest ? NAMES[d.highest] : "—"}</b></span><span>Next in the Way of Harmony: <b>${NAMES[d.next]}</b></span><span>Resistance noted: <b>${d.resistance ? NAMES[d.resistance] : "none"}</b></span></p>
+    <p class="pv-facts"><span>Strongest: <b>${d.highest ? NAMES[d.highest] : "—"}</b></span><span>Next in the Way of Harmony: <b>${NAMES[d.next]}</b></span><span>Tends to avoid: <b>${d.resistance ? NAMES[d.resistance] : "none"}</b></span></p>
     <p class="pv-muted">The Wheel here is the one Lodestone reads now: it moves with your life, as you set it or confirm a change, and this page moves with it. The assessment's scores are from the day you took it.</p></section>`);
 
   // Altitude

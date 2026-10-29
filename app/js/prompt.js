@@ -27,6 +27,8 @@ Your own voice, not the system's. The doctrine is what you see through, not what
 
 Emoji. Use none unless the practitioner uses them. When they do, you may mirror them sparingly: at most one, in a light or personal exchange, the kind they use. Never in doctrine, in a crisis, in grief or distress, or in a hard truth. A "How to speak with me" note in their life book that says otherwise governs.
 
+Form. When you know their first name, open with it where a reply begins something that matters to them, as one would in a letter; not by rote in every reply. Write in short paragraphs. Set in bold the one or two phrases that carry the answer, so the eye finds them on a phone: a few words each, never a whole sentence, never more than three in a reply, none in grief, distress or a crisis.
+
 Register. Ask before you prescribe, and ask at most one question per reply. By default end on the substance, not on a question: a question closes a reply only when you cannot answer well without it or the practitioner asked to be questioned. With the philosophically oriented, speak in terms of Logos, Dharma and the Wheel. With the practically oriented, speak concretely: sleep, food, money, people. The content is the same either way; only the entry point differs.
 
 Sequencing. Crisis in one pillar overrides the spiral: triage first. A person with collapsed Health does not need Relationship advice yet. When concerns are scattered across three or more pillars, name the fragmentation and return to the Way of Harmony. Name a pillar only when the experience structurally belongs to that pillar's spokes.
@@ -69,10 +71,67 @@ export function replyLanguage(lang) {
   return name ? `<reply_language>The practitioner writes in ${name}. Write the whole answer in ${name}, whatever language the context above is in; quote the corpus in ${name} as well, keeping its terms as the persona sets them.</reply_language>` : "";
 }
 
+// ─── Time (v99) ──────────────────────────────────────────────────────────────
+// The device's own clock and time zone are the only authority: the system keeps
+// the clock right and moves the zone with the person, offline as online; an
+// address's country says neither. When they wrote is given here, as sittings
+// anchored by their first words, never as a mark inside their messages (a model
+// shown "[time]" in a message writes one back).
+const deviceZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch { return ""; } };
+function zoneOffset(now, tz) {
+  try {
+    const p = new Intl.DateTimeFormat("en-GB", { timeZone: tz, timeZoneName: "longOffset" }).formatToParts(now).find(x => x.type === "timeZoneName")?.value || "";
+    return p.replace("GMT", "UTC") || "UTC";
+  } catch { const m = -now.getTimezoneOffset(); return `UTC${m >= 0 ? "+" : "-"}${String(Math.floor(Math.abs(m) / 60)).padStart(2, "0")}:${String(Math.abs(m) % 60).padStart(2, "0")}`; }
+}
+function fmt(d, tz, opts) { try { return d.toLocaleString("en-GB", { ...opts, ...(tz ? { timeZone: tz } : {}) }); } catch { return d.toLocaleString("en-GB", opts); } }
+function partOfDay(d, tz) {
+  const h = Number(fmt(d, tz, { hour: "numeric", hour12: false }));
+  return h < 5 ? "the middle of the night" : h < 12 ? "morning" : h < 18 ? "afternoon" : h < 22 ? "evening" : "night";
+}
+export function gapWords(ms) {
+  const m = Math.round(ms / 60000);
+  if (m < 2) return "just now";
+  if (m < 60) return `${m} minutes`;
+  const h = Math.round(m / 60);
+  if (h < 36) return `${h} hour${h === 1 ? "" : "s"}`;
+  const d = Math.round(h / 24);
+  if (d < 14) return `${d} days`;
+  const w = Math.round(d / 7);
+  if (d < 60) return `${w} weeks`;
+  return `${Math.round(d / 30)} months`;
+}
+const SITTING_GAP = 60 * 60 * 1000;
+/** The <temporal> block: now, where they are in their day, and when they wrote before. */
+export function temporalBlock({ now = new Date(), history = [], tz = deviceZone() } = {}) {
+  const day = d => fmt(d, tz, { weekday: "long", day: "numeric", month: "long", ...(d.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}) });
+  const hm = d => fmt(d, tz, { hour: "2-digit", minute: "2-digit", hour12: false });
+  const lines = [`Now: ${fmt(now, tz, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}, ${hm(now)}, the practitioner's own time${tz ? ` (${tz}, ${zoneOffset(now, tz)})` : ""}. It is ${partOfDay(now, tz)} for them.`];
+  const theirs = history.filter(m => m.role === "user" && m.ts && !m.meta?.notice).map(m => ({ ts: m.ts, text: String(m.content || "") }));
+  if (theirs.length) {
+    const sittings = [];
+    for (const m of theirs) {
+      const s = sittings[sittings.length - 1];
+      if (s && m.ts - s.end < SITTING_GAP) s.end = m.ts; else sittings.push({ start: m.ts, end: m.ts, first: m.text });
+    }
+    const words = t => { const w = t.replace(/\s+/g, " ").trim().split(" ").slice(0, 6).join(" "); return w.length < t.trim().length ? w + "…" : w; };
+    const shown = sittings.slice(-6);
+    lines.push(`This conversation began ${day(new Date(sittings[0].start))} at ${hm(new Date(sittings[0].start))}.`);
+    lines.push(`When they wrote before this message (a pause of an hour or more begins a new sitting)${sittings.length > shown.length ? `, the last ${shown.length} of ${sittings.length} sittings` : ""}:`);
+    for (const s of shown) {
+      const a = new Date(s.start), b = new Date(s.end);
+      lines.push(`- ${day(a)}, ${hm(a)}${s.end - s.start > 120000 ? `–${hm(b)}` : ""}, beginning “${words(s.first)}”`);
+    }
+    const last = theirs[theirs.length - 1].ts;
+    lines.push(`This message comes ${gapWords(now - last) === "just now" ? "straight after their last" : `${gapWords(now - last)} after their last`}.`);
+  } else lines.push("This is the first message of the conversation.");
+  lines.push("Use time as a person would: the hour of their day, how long since they last wrote, what has had time to happen. Speak of it only when it matters to what they say. Never begin a reply with a date, a time or any bracketed mark.");
+  return `<temporal>\n${lines.join("\n")}\n</temporal>`;
+}
+
 export function buildSystem({ tier, runtime, person, turn = {}, now = new Date(), where = null, device = "computer" }) {
   // One backbone everywhere: the full one, or harmonism.io's own in its place.
   const backbone = tier.backbone === "server" ? SERVER_BACKBONE : runtime.backbone.full;
-  const date = now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const perTurn = [turn.held, turn.calibration, turn.summary, turn.self, turn.lifebook, turn.recall, turn.reading, turn.page, turn.files, turn.folders, turn.article, turn.vault, turn.earlier, turn.web, turn.witness, turn.governor, turn.care, replyLanguage(turn.lang)].filter(Boolean).join("\n\n");
   return `${PERSONA.replace("%WHERE%", whereLine(where, { device }))}
 
@@ -82,7 +141,7 @@ ${backbone}
 
 ${personContext(person)}
 
-<temporal>Today is ${date}.</temporal>${perTurn ? "\n\n" + perTurn : ""}
+${temporalBlock({ now, history: turn.times || [] })}${perTurn ? "\n\n" + perTurn : ""}
 
 Everything above is context for you. Never reproduce these blocks or their tags; answer the practitioner's latest message in your own words.`;
 }
@@ -104,7 +163,7 @@ export function personContext({ profile = {}, wheel = {}, practices = [], assess
   const active = practices.filter(p => !p.archived);
   if (active.length) {
     lines.push("Practices they have committed to:\n" + active.slice(0, 8).map(p => {
-      const last = (p.log || []).slice(-3).map(l => `${l.status} ${new Date(l.ts).toISOString().slice(0, 10)}`).join(", ");
+      const last = (p.log || []).slice(-3).map(l => `${l.status} ${new Date(l.ts).toLocaleDateString("sv-SE")}`).join(", ");
       return `- [${cap(p.pillar)}] ${p.text}${last ? ` (recent check-ins: ${last})` : " (no check-in yet)"}`;
     }).join("\n"));
   }
@@ -268,6 +327,12 @@ export function fullArticleBlock(article, text, cut = false) {
  * here and not yet in the summary are lost to the model, so the summary is
  * folded before that happens (main.js scheduleSummary).
  */
+/** A message that replies to an earlier one carries the quoted words before it, said plainly (v100). */
+export function withReply(text, r) {
+  if (!r?.text) return text;
+  return `(Replying to ${r.role === "user" ? "their own earlier words" : "your earlier words"}: “${r.text}”)\n\n${text}`;
+}
+
 export function fitMessages({ system, history, current, tier }) {
   const budget = tier.ctx - tier.maxTokens - 64;
   const base = estSystemTokens(system, tier.backbone === "server" ? tier.serverBackboneChars : 0) + estTokens(current);
@@ -276,7 +341,7 @@ export function fitMessages({ system, history, current, tier }) {
   let i = history.length - 1;
   for (; i >= 0; i--) {
     const h = history[i];
-    const content = h.role === "assistant" ? stripRetrievalNote(h.content) : h.content;
+    const content = h.role === "assistant" ? stripRetrievalNote(h.content) : withReply(h.content, h.meta?.replyTo);
     const t = estTokens(content) + 8;
     if (used + t > budget) break;
     used += t; kept.unshift({ role: h.role, content });

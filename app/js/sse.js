@@ -20,11 +20,21 @@ export function normUsage(u) {
 }
 
 /** `onUsage`, if given, receives the provider's usage block when the stream carries one. */
+// A stream that sends nothing for this long has stalled (v99). Before the first
+// word a model may be reading a long prompt on the practitioner's own computer,
+// so the wait is longer; providers send keep-alive comments meanwhile, which count.
+const STALL_FIRST_MS = 180000, STALL_MS = 60000;
+function stalled(ms) { return new Promise((_, rej) => { const t = setTimeout(() => rej(Object.assign(new Error("The answer stalled: nothing arrived for a while. Try again."), { stalled: true })), ms); stalled.t = t; }); }
+
 export async function* readSSE(res, onUsage = null) {
   const reader = res.body.getReader(); const dec = new TextDecoder();
   let buf = "", raw = "", finished = false, reason = "";
   for (;;) {
-    const { done, value } = await reader.read();
+    let r;
+    try { r = await Promise.race([reader.read(), stalled(raw ? STALL_MS : STALL_FIRST_MS)]); }
+    catch (e) { if (e?.stalled) reader.cancel().catch(() => {}); throw e; }
+    finally { clearTimeout(stalled.t); }
+    const { done, value } = r;
     if (done) break;
     buf += dec.decode(value, { stream: true });
     let nl;
@@ -32,7 +42,7 @@ export async function* readSSE(res, onUsage = null) {
       const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
       if (!line.startsWith("data:")) continue;
       const payload = line.slice(5).trim();
-      if (payload === "[DONE]") { reader.cancel().catch(() => {}); break; }
+      if (payload === "[DONE]") { finished = true; reader.cancel().catch(() => {}); break; }
       let j;
       try { j = JSON.parse(payload); } catch { continue; }
       if (j.error) throw new Error(j.error.message || "The provider stopped.");
@@ -46,6 +56,9 @@ export async function* readSSE(res, onUsage = null) {
   // phone that locked or left the page, a dropped network, a server time limit),
   // not an empty answer. Said as an error, so the turn offers Retry instead of "…".
   if (!finished && !stripThink(raw).trim()) throw new Error("The connection closed before Lodestone answered. Try again.");
+  // v99: closed part-way, with neither an end marker nor [DONE]: what was written is
+  // kept by the caller, marked cut, never saved as if it were the whole answer.
+  if (!finished) throw Object.assign(new Error("The connection closed before the answer was finished."), { cut: true });
   // The model reached its token limit before writing a word: it spent the turn
   // deliberating (a reasoning model without a cap). Said as an error, so the turn
   // offers Retry instead of "…".

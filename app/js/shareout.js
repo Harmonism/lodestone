@@ -76,7 +76,7 @@ const bounded = phrase => new RegExp(`(?<![\\p{L}\\p{N}])${esc(phrase).replace(/
 /**
  * The names a conversation seems to hold: [{ key, phrase, forms, count, known, sure }].
  * `sure` (ticked at first): a capitalised word met at least once after a
- * lower-case word, a digit or a comma ("avec Tarik", "Non, Salwa", "de Jade"),
+ * lower-case word, a digit or a comma,
  * that the corpus does not use as its own term and this conversation never
  * writes in lower case. Offered but not ticked: one met only where any word
  * takes a capital (a sentence's first word). `known`: the practitioner's own

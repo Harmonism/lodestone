@@ -523,6 +523,12 @@
           <div class="seg" id="setTheme">
             <button type="button" data-v="dark">Dark</button><button type="button" data-v="light">Light</button><button type="button" data-v="auto">Auto</button>
           </div>
+          <label class="no-i18n">App language · Langue de l’application
+            <select id="setUiLang">
+              <option value="auto">Auto</option>
+              <option value="en">English</option><option value="fr">Français</option>
+            </select>
+          </label>
           <label>Reply language
             <select id="setLang">
               <option value="auto">Match what I write</option>
@@ -544,6 +550,11 @@
           <button class="btn ghost block" type="button" data-open-help>Using Lodestone</button>
           <a class="btn ghost block" href="safety.html" target="_blank" rel="noopener">How Lodestone handles a crisis</a>
           <p class="fine">Lodestone is an AI, not a person. Made for adults: companion chatbots may not be suitable for some minors.</p>
+        </section>
+        <section data-nav="Diagnostics">
+          <h4><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12h4l2.5-6 4 12 2.5-6h4"/></svg>Diagnostics</h4>
+          <p class="hint">When something goes wrong, Lodestone notes it here, on this device only: the error and the version, never your words. Nothing is sent. Copy the report to pass it on if you wish.</p>
+          <div id="diagBody"></div>
         </section>
         <section data-nav="Help Lodestone improve" id="improveBox">
           <h4><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-7.5-10A4.2 4.2 0 0 1 12 8a4.2 4.2 0 0 1 7.5 2.5c0 5.4-7.5 10-7.5 10z"/></svg>Help Lodestone improve</h4>

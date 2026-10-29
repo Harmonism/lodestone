@@ -132,7 +132,8 @@ export const EMOTIONS = ["lonely", "afraid", "grateful", "ashamed", "hopeful", "
 /** The conversation as the learning calls read it, oldest first. */
 export function conversationText(messages) {
   return messages.filter(m => !m.meta?.crisis).map(m => {
-    const d = new Date(m.ts || Date.now()).toISOString().slice(0, 16).replace("T", " ");
+    const x = new Date(m.ts || Date.now()), z = n => String(n).padStart(2, "0");
+    const d = `${x.getFullYear()}-${z(x.getMonth() + 1)}-${z(x.getDate())} ${z(x.getHours())}:${z(x.getMinutes())}`;   // the practitioner's own time, not UTC
     return `[${d}] ${m.role === "user" ? "Person" : "Lodestone"}: ${String(m.content || "").slice(0, 3000)}`;
   }).join("\n\n");
 }
@@ -217,7 +218,8 @@ export function applyWheelUpdates(self = {}, learned = {}, updates = {}, now = D
     if ("primary_concerns" in u) p.concerns = clip(u.primary_concerns);
     if ("strengths" in u) p.strengths = clip(u.strengths);
     if ("growth_edges" in u) p.edges = clip(u.growth_edges);
-    if ("resistance_noted" in u) p.resistance = !!u.resistance_noted;
+    // A practitioner who said "Not true" to it is not marked again (v95).
+    if ("resistance_noted" in u) p.resistance = !!u.resistance_noted && !p.resistanceDenied;
     p.lastDiscussed = now; p.discussions = (p.discussions || 0) + 1;
     const to = levelIndex(u.engagement_level);
     const from = Number(self[k]) || 0;
