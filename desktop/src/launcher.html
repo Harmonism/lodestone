@@ -6,6 +6,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'">
 <title>Lodestone</title>
 <link rel="stylesheet" href="setup.css">
+<script src="theme.js"></script>
 </head>
 <body>
 <main class="wrap">
@@ -78,8 +79,8 @@
       <div class="grow"><h1>Model</h1><p class="lede" id="manageText"></p></div>
       <button id="back" class="primary back">Back</button>
     </header>
-    <details class="adv" id="hostedBox">
-      <summary>Your harmonism.io account: DeepSeek V4.1 Flash, ten free messages a day</summary>
+    <h2 class="sub-head">Your harmonism.io account — ten free messages a day</h2>
+    <div class="card" id="hostedBox">
       <p class="fine">Nothing to download and no key of your own; DeepSeek V4.1 Flash unless you choose another. Lodestone thinks with the models it runs on at harmonism.io and on Telegram, each tested against the doctrine. The corpus, the retrieval, the crisis gate, witness mode, your memory and your practices stay on this computer. What leaves is each turn's question with its context, to harmonism.io and on to the model provider, which keep none of it. Ten messages a day for your first month, then five, in total across harmonism.io, Telegram and this app.</p>
       <div id="hSignedOut">
         <label class="field">Email <input id="hEmail" type="email" autocomplete="username" spellcheck="false"></label>
@@ -93,21 +94,22 @@
         <span class="row"><button id="hUse" class="primary">Use my harmonism.io account</button><button id="hSignOut" class="link">Sign out</button></span>
       </div>
       <p id="hError" class="bad-box" hidden></p>
-    </details>
-    <details class="adv" id="remoteBox">
-      <summary>OpenRouter or another provider, with your own key: no daily limit</summary>
+    </div>
+    <h2 class="sub-head">OpenRouter or another provider — your own key, no daily limit</h2>
+    <div class="card" id="remoteBox">
       <p class="fine">Nothing to download and no daily limit: with OpenRouter, DeepSeek V4.1 Flash and the other models hosted Lodestone runs on, or a frontier model's depth. The corpus, the retrieval, the crisis gate, witness mode, your memory and your practices stay on this computer and work as before. What leaves is each turn's question with its context, to the provider you choose, which can read it; you pay that provider for what you use. The key is kept encrypted by this computer's keychain and is sent only to that provider.</p>
       <p id="remoteNow" class="ok-box" hidden></p>
       <label class="field">Provider <select id="rPreset"></select></label>
       <p id="rNote" class="fine"></p>
       <label class="field" id="rUrlRow">Address <input id="rUrl" type="url" placeholder="https://…/v1" spellcheck="false"></label>
       <label class="field">API key <input id="rKey" type="password" autocomplete="off" spellcheck="false"> <a id="rKeyLink" href="#" class="fine" hidden>Get a key</a></label>
-      <label class="field">Model <span class="row"><input id="rModel" type="text" list="rModels" spellcheck="false" placeholder="model id"><datalist id="rModels"></datalist><button id="rList" class="link">List the models this key can use</button></span></label>
+      <div class="field">Model <span class="row"><input id="rModel" type="text" spellcheck="false" autocomplete="off" placeholder="model id — click to choose, or type to search" aria-label="Model" role="combobox" aria-expanded="false" aria-controls="rPick"><button id="rList" class="link">List the models this key can use</button></span><div id="rPick" class="pick-list" role="listbox" hidden></div></div>
       <p id="rAssess" class="fine" hidden></p>
-      <div id="rRecBox" hidden><p class="fine">Recommended: the models Lodestone runs on at harmonism.io and on Telegram, each tested against the doctrine. Any other model the provider lists can be typed or picked above; it has not been assessed.</p><span id="rRec" class="row"></span></div>
+      <details id="rInfo" class="fine" hidden><summary>More info</summary><p></p></details>
+      <div id="rRecBox" hidden><p class="fine">Recommended: the models Lodestone runs on at harmonism.io and on Telegram, each tested against the doctrine. Any other model the provider lists can be typed or picked in the box; it has not been assessed.</p><span id="rRec" class="row"></span></div>
       <span class="row"><button id="rSave" class="primary">Connect and use</button><button id="rClear" class="link" hidden>Stop using it</button></span>
       <p id="rError" class="bad-box" hidden></p>
-    </details>
+    </div>
     <h2 class="sub-head">On this computer — nothing leaves it</h2>
     <div class="card">
       <div id="mdl" class="progress" hidden>

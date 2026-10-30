@@ -19,7 +19,14 @@
   --sans: 'Source Sans 3', 'Source Sans Pro', system-ui, -apple-system, 'Segoe UI', sans-serif;
   color-scheme: dark;
 }
-/* Always dark, like the app and its icon. */
+/* Light when the app is light (theme.js reads ?theme= from Lodestone Desktop); values as in app/styles.css. */
+[data-theme="light"] {
+  --bg: #f8f6f2; --surface: #ffffff; --elevated: #f0ede8; --hover: #e8e4de;
+  --text: #2a2a3a; --muted: #6a6a80; --heading: #1a1a2e;
+  --accent: #7B2D8E; --accent-2: #7B2D8E; --link: #6E2A82;
+  --border: #d8d4ce; --border-2: #c8c4be; --danger: #b0303e; --ok: #1A8A6E;
+  color-scheme: light;
+}
 * { box-sizing: border-box; margin: 0; padding: 0; }
 [hidden] { display: none !important; }
 body { background: var(--bg); color: var(--text); font: 15.5px/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
@@ -44,7 +51,7 @@ button:disabled { opacity: .5; cursor: default; }
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 button.primary:hover:not(:disabled) { filter: brightness(1.1); background: var(--accent); }
 button.link { background: none; border: 0; padding: 0; color: var(--link); text-decoration: underline; text-underline-offset: 2px; }
-input[type=text], input[type=url], input[type=password] {
+input[type=text], input[type=url], input[type=password], input[type=email] {
   flex: 1; min-width: 0; font: 14px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--text);
   background: var(--bg); border: 1px solid var(--border-2); border-radius: 10px; padding: 9px 11px;
 }
@@ -113,6 +120,14 @@ code { font: 14px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
 .field select { font: inherit; font-weight: 400; }
 .field input { font-weight: 400; }
 .field .row { align-items: center; }
+/* The model picker under the Model box: the recommended first, then what the key lists. */
+.pick-list { max-height: 300px; overflow-y: auto; border: 1px solid var(--border-2); border-radius: 10px; background: var(--bg); padding: 4px; font-weight: 400; }
+.pick-list .group { margin: 6px 8px 2px; }
+.pick-list .fine { margin: 4px 8px; }
+.pick-item { display: flex; width: 100%; gap: 10px; justify-content: space-between; align-items: baseline; text-align: left; background: none; border: 0; border-radius: 7px; padding: 6px 8px; font: 13.5px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--text); }
+.pick-item .s { font: 12.5px var(--sans); color: var(--muted); white-space: nowrap; }
+.pick-item:hover, .pick-item.on { background: var(--hover); }
+.pick-item[aria-selected="true"] { color: var(--heading); box-shadow: 0 0 0 1px var(--accent) inset; }
 #rPreset { padding: 8px 10px; border-radius: 10px; background: var(--elevated); color: inherit; border: 1px solid var(--border-2); }
 .fine.warn { color: var(--danger); }
 

@@ -83,7 +83,7 @@ Respond with ONLY valid JSON, no other text. Format:
   "pillar_name": {
     "engagement_level": "level",
     "level_change_confidence": "high",
-    "evidence": "the person's own words or the fact that moved the level (empty string if unchanged)",
+    "evidence": "what moved the level, written to the person in the second person (\"You supervise doctoral work\"), since they read it; their own words only inside quotation marks (empty string if unchanged)",
     "primary_concerns": "current active issues (empty string if none)",
     "strengths": "what they're doing well (empty string if none)",
     "growth_edges": "where growth is available (empty string if none)",

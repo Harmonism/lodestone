@@ -26,9 +26,9 @@ export function normUsage(u) {
 const STALL_FIRST_MS = 180000, STALL_MS = 60000;
 function stalled(ms) { return new Promise((_, rej) => { const t = setTimeout(() => rej(Object.assign(new Error("The answer stalled: nothing arrived for a while. Try again."), { stalled: true })), ms); stalled.t = t; }); }
 
-export async function* readSSE(res, onUsage = null) {
+export async function* readSSE(res, onUsage = null, onReasoning = null) {
   const reader = res.body.getReader(); const dec = new TextDecoder();
-  let buf = "", raw = "", finished = false, reason = "";
+  let buf = "", raw = "", finished = false, reason = "", thought = "";
   for (;;) {
     let r;
     try { r = await Promise.race([reader.read(), stalled(raw ? STALL_MS : STALL_FIRST_MS)]); }
@@ -48,6 +48,9 @@ export async function* readSSE(res, onUsage = null) {
       if (j.error) throw new Error(j.error.message || "The provider stopped.");
       if (j.usage && onUsage) { try { onUsage(j.usage); } catch {} }
       if (j.choices?.[0]?.finish_reason) { finished = true; reason = j.choices[0].finish_reason; }
+      // v107: the model's thinking, when it is asked for (OpenRouter's delta.reasoning), goes to the page apart from the answer.
+      const rz = j.choices?.[0]?.delta?.reasoning;
+      if (rz && onReasoning) { thought += rz; try { onReasoning(thought); } catch {} }
       const d = j.choices?.[0]?.delta?.content;
       if (d) { raw += d; yield stripThink(raw); }
     }
@@ -62,7 +65,7 @@ export async function* readSSE(res, onUsage = null) {
   // The model reached its token limit before writing a word: it spent the turn
   // deliberating (a reasoning model without a cap). Said as an error, so the turn
   // offers Retry instead of "…".
-  if (reason === "length" && !stripThink(raw).trim()) throw new Error("The model used its whole allowance thinking and wrote no answer. Try again, or choose another model.");
+  if (reason === "length" && !stripThink(raw).trim()) throw Object.assign(new Error("The model used its whole allowance thinking and wrote no answer. Try again, or choose another model."), { spent: true });
 }
 
 /** A provider's refusal, in plain words (the same wording as the desktop's remote.js). */

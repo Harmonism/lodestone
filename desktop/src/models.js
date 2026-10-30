@@ -6,8 +6,8 @@
 // doctrinal backbone is ~17,500 tokens; the window holds it plus retrieval plus
 // the conversation).
 //
-// Minimum (29 Sep 2026): the Gemma 3 12B class, which needs 16 GB of memory.
-// Below that class answers misrepresent the system often enough that no answer
+// Minimum (30 Oct 2026): 32 GB of memory (raised from 16 GB: small models tested
+// locally were inconsistent). Below that answers misrepresent the system often enough that no answer
 // is better; Qwen3.5 9B (NatInt 16.1 with thinking off) was withdrawn for that.
 //
 // `ugi` is always the thinking-off row: { w: willingness /10, natint, lean },
@@ -98,6 +98,23 @@ const BUNDLED = [
     minMem: 48, hand: "Alibaba",
     why: "For 48 GB computers and up. The most faithful to Lodestone's doctrine in Harmonia's tests, autism included, where most models fall back on the consensus. Only 3 billion of its 35 billion parameters work on each word, so it answers quickly.",
   },
+  // Added 30 Oct 2026 at Tahir's request: the floor is 32 GB, so the 32 GB
+  // tier gets the strongest model that fits it. In the forty-model suite of
+  // 24 Oct 2026 (System Reports/Lodestone Fidelity Suite — 2026-10-24-openrouter-
+  // 40-models) Qwen 3.8 27B scored 0.975, first of every model a 32 GB computer
+  // holds (Gemma 4 31B 0.975 with weaker sub-scores, Qwen 3.5 35B-A3B 0.925,
+  // Gemma 4 26B 0.875, Ministral 3 14B 0.925 at 16 GB). That run used medium
+  // reasoning; Lodestone runs thinking off, so its own-mode probe is still owed.
+  // Unmodified. Sizes and hashes from the HF API, 30 Oct 2026.
+  {
+    id: "qwen38-27b",
+    label: "Qwen 3.8 27B · unmodified",
+    repo: "unsloth/Qwen3.8-27B-GGUF",
+    files: [{ path: "Qwen3.8-27B-UD-Q4_K_M.gguf", size: 16464440224, sha256: "322e194ff79741c7baa497c240f677f54b201b0efab44ca8e50f122b39123482" }],
+    mmproj: { repo: "unsloth/Qwen3.8-27B-GGUF", path: "mmproj-F16.gguf", size: 927607488, sha256: "cbb841a9ee0636b2ec172f5bb8df2ea8dfeb01e90fe7c6126581d662a0b4e43e" },
+    minMem: 32, hand: "Alibaba",
+    why: "For 32 GB computers and up. The most faithful to Lodestone's doctrine of the models a 32 GB computer can hold, in Harmonia's October tests. Every parameter works on every word, so it is slower than Gemma 4 26B.",
+  },
   {
     id: "qwen35-27b",
     retired: true,   // off the offered list since 15 Oct 2026; kept for those who have it
@@ -110,12 +127,13 @@ const BUNDLED = [
   },
   {
     id: "ministral-14b",
+    retired: true,   // off the offered list since 30 Oct 2026: built for 16–24 GB, below the floor; kept for those who have it
     label: "Ministral 3 14B · unmodified",
     repo: "mistralai/Ministral-3-14B-Instruct-2512-GGUF",
     files: [{ path: "Ministral-3-14B-Instruct-2512-Q4_K_M.gguf", size: 8239593024, sha256: "824e0f3373e69b84f2cae46fdcb9bd1ebc6ab3bfc7acc125d818b7b8178cc613" }],
     mmproj: { repo: "mistralai/Ministral-3-14B-Instruct-2512-GGUF", path: "Ministral-3-14B-Instruct-2512-BF16-mmproj.gguf", size: 879258784, sha256: "ab7616148b7081030fd38e410c9213ce8346a8b0588291c8ca279058e78cfae7" },
-    minMem: 16, hand: "Mistral",
-    why: "For 16 and 24 GB computers. Held Lodestone's doctrine in every test, and answered on topic where Gemma 3 12B sometimes recited doctrine instead. A European lineage, from Mistral's own files.",
+    minMem: 32, hand: "Mistral",
+    why: "For 32 GB computers. Held Lodestone's doctrine in every test, and answered on topic where Gemma 3 12B sometimes recited doctrine instead. A European lineage, from Mistral's own files.",
   },
   {
     id: "gemma3-12b",
@@ -126,9 +144,9 @@ const BUNDLED = [
     mmproj: { repo: "ggml-org/gemma-3-12b-it-GGUF", path: "mmproj-model-f16.gguf", size: 854200224, sha256: "30c02d056410848227001830866e0a269fcc28aaf8ca971bded494003de9f5a5" },   // the base model's projector: the abliterated repo has none, and abliteration leaves the vision tower untouched
     minMem: 16, hand: "Google",
     ugi: { w: 9.2, natint: 21.3, lean: -6.4, base: { w: 3.0, natint: 18.7, lean: -11.7 } },
-    why: "Lodestone's minimum standard, for 16 GB computers. Uncensoring it made it more capable, and moved it toward the political centre.",
+    why: "Lodestone's minimum standard for 16 GB computers until the floor rose to 32 GB. Uncensoring it made it more capable, and moved it toward the political centre.",
   },
-  // Added 18 Oct 2026 at Tahir's request, offered as untested; recommended from 16 GB up to 45 GB since 19 Oct; about 5.8 GB resident when loaded.
+  // Added 18 Oct 2026 at Tahir's request, offered as untested; recommended from 32 GB up to 45 GB since 19 Oct (floor raised from 16 GB on 30 Oct); about 5.8 GB resident when loaded.
   // Ternary weights (PTQ1_0) that only the Prism ML fork of llama.cpp can run, so
   // this entry carries `engine: "prism"`: the first time it is downloaded, that
   // engine is fetched too (PRISM_ENGINE below) and the model runs on it alone.
@@ -138,6 +156,10 @@ const BUNDLED = [
   // on the downloaded file.
   {
     id: "bonsai2-27b-heretic",
+    // Off the offered list 30 Oct 2026: ternary weights, never through the suite, and
+    // inconsistent in Tahir's own trials. Back the same day at his request as the last resort
+    // for a computer under 32 GB: listed, never recommended, never chosen by default.
+    lastResort: true,
     untested: true,
     engine: "prism",
     label: "Bonsai 2 27B · uncensored (Heretic), ternary",
@@ -145,7 +167,7 @@ const BUNDLED = [
     files: [{ path: "Ternary-Bonsai-2-27B-Uncensored-Heretic-PTQ1_0.gguf", size: 5946648928, sha256: "a18c3e17da397838305522b3ee877f9d2cbf4facd04ba01a394b22f3f3a477be" }],
     mmproj: { repo: "OS-Software/Ternary-Bonsai-2-27B-Uncensored-Heretic-GGUF", path: "mmproj-Q8_0.gguf", size: 629246976, sha256: "6807ede61d570bb86ba34b756a0fa109edc33668604de867c6ea6d8f1d631903" },
     minMem: 16, hand: "PrismML, on Alibaba's Qwen",
-    why: "A 27-billion-parameter model compressed to ternary weights, so it fits in 6 GB and runs on a 16 GB laptop. Not yet tested against Lodestone's doctrine: the model it was built from gave the consensus answer on autism in Harmonia's tests. It runs on a second engine, Prism ML's, downloaded with it (about 12–36 MB).",
+    why: "Only if no other way is open: on a computer under 32 GB, without the harmonism.io account or an OpenRouter key. A 27-billion-parameter model compressed to ternary weights, so it fits in 6 GB, but it answered inconsistently in Harmonia's own trials and has not been through the doctrinal tests; the model it was built from gave the consensus answer on autism. Where you can, think with DeepSeek V4.1 Flash on the account or your own key instead. It runs on a second engine, Prism ML's, downloaded with it (about 12–36 MB).",
   },
   // Retired 25 Oct 2026: a model Lodestone offers must hold the whole doctrinal
   // backbone with the conversation beside it, and a 9B model does not. Kept for
@@ -203,10 +225,10 @@ if (process.env.MUNAI_TEST_MODEL === "tiny") BUNDLED.push({
   minMem: 1, hand: "Alibaba", why: "For testing the app only.",
 });
 
-// 16 GB is the floor: below it no model that holds the doctrine fits. Under 16 GB
+// 32 GB is the floor (30 Oct 2026): below it no model tested holds the doctrine consistently. Under 32 GB
 // Lodestone recommends DeepSeek V4.1 Flash on the account or the practitioner's
 // own key, and says the computer needs more memory to think on its own.
-const MIN_MEM = 16;
+const MIN_MEM = 32;
 /** The least memory any model offered on this computer needs. */
 const minMemHere = () => MIN_MEM;
 
@@ -215,27 +237,26 @@ const minMemHere = () => MIN_MEM;
 // Both arrays are changed in place, so every module holding them sees the change.
 const CATALOG = [...BUNDLED];
 // [minimum memory in GB, model id], largest first. A "32 GB" machine reports ~31.x,
-// a "256 GB" Mac Studio ~255; below 16 GB the last entry is shown with a warning.
+// a "256 GB" Mac Studio ~255; below 32 GB the last entry is shown with a warning.
 // One model per family, one per common memory size: small, medium, high, workstation.
-const BUNDLED_DEFAULTS = [[240, "deepseek-v4-flash"], [46, "qwen35-35b-a3b"], [30, "gemma4-26b-heretic"], [0, "ministral-14b"]];
+const BUNDLED_DEFAULTS = [[240, "deepseek-v4-flash"], [30, "qwen38-27b"], [0, "qwen38-27b"]];   // Qwen 3.8 27B outscored Qwen 3.5 35B-A3B too
 const DEFAULTS = BUNDLED_DEFAULTS.map(d => [...d]);
 
-// The local model recommended where it runs, the one exception to "never a default":
-// Bonsai 2 27B Heretic, on computers of 16 GB up to the
-// class where a larger model fits (46 GB, Qwen 3.5 35B). Still shown as untested.
+// The local model recommended ahead of the memory defaults. None since 30 Oct 2026
+//: Bonsai 2 27B Heretic held the place from 19 Oct and is retired.
 // A model on this computer is no longer the first-launch default: DeepSeek V4.1
 // Flash, on the account or under the practitioner's key, is (launcher.html).
-const PREFERRED_LOCAL = { id: "bonsai2-27b-heretic", from: 15, below: 46 };   // 15: a "16 GB" PC can report a little under 16
-// Under 16 GB nothing is recommended to run here (the 9B Bonsai was retired on
+const PREFERRED_LOCAL = null;
+// Under 32 GB nothing is recommended to run here (the 9B Bonsai was retired on
 // 25 Oct 2026): the list's smallest model is shown with the memory warning.
 
 /** The model recommended for a machine with `memGB` of RAM (unified memory on Apple silicon). */
 function defaultFor(memGB) {
   if (process.env.MUNAI_TEST_MODEL === "tiny") return "tiny";
   const has = id => prismAsset() && CATALOG.some(m => m.id === id && !m.retired);
-  if (memGB >= PREFERRED_LOCAL.from && memGB < PREFERRED_LOCAL.below && has(PREFERRED_LOCAL.id)) return PREFERRED_LOCAL.id;
+  if (PREFERRED_LOCAL && memGB >= PREFERRED_LOCAL.from && memGB < PREFERRED_LOCAL.below && has(PREFERRED_LOCAL.id)) return PREFERRED_LOCAL.id;
   for (const [min, id] of DEFAULTS) if (memGB >= min && CATALOG.some(m => m.id === id && !m.retired)) return id;
-  return CATALOG.filter(m => !m.retired).pop()?.id;
+  return CATALOG.filter(m => !m.retired && !m.lastResort).pop()?.id;   // the last resort is never the default
 }
 
 // ─── The catalog as data ─────────────────────────────────────────────

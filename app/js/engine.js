@@ -12,6 +12,7 @@
 // The stream reader lives apart so a page that never runs a model on the
 // device (website Lodestone, held.js) need not load an engine to read a stream.
 import { readSSE, providerError, stripThink, normUsage } from "./sse.js";
+import { CLASSIFIER_PROMPT } from "./route.js";
 export { readSSE, providerError, normUsage };
 
 // No model runs inside the browser any more (see the head of this file). The
@@ -19,11 +20,27 @@ export { readSSE, providerError, normUsage };
 export const MODELS = {};
 
 // The window each route gives Lodestone. A rented model tested against the
-// doctrine takes 65,536 tokens: the backbone, the turn's passages and a long
-// conversation, at a fraction of a cent a turn. A model the practitioner runs
-// keeps 32,768 unless they set more: its memory, not its price, is the limit.
-// main.js (windowFor) lowers a rented model that was not tested to 32,768.
-export const RENTED_CTX = 65536, OWNED_CTX = 32768;
+// doctrine takes 131,072 tokens: the backbone, the articles read whole, the
+// summary and a long conversation, still about an eighth of the window the
+// hosted models accept, at a fraction of a cent a turn. It holds only while the
+// fidelity suite passes with the window filled (harmonia-astro/scripts/
+// lodestone-fidelity-suite.py --pad); a model that loses the doctrine deep in a
+// long context goes back to 65,536. A model the practitioner runs keeps 32,768
+// unless they set more: its memory, not its price, is the limit.
+// Under the practitioner's own key, main.js (windowFor) gives any model its whole window (below).
+export const RENTED_CTX = 131072, OWNED_CTX = 32768;
+// A model under the practitioner's own key (OpenRouter, or a provider set in Lodestone Desktop),
+// tested or not, gets its whole window: as OpenRouter reports it (phone.js orContext), else
+// OPEN_CTX; an untested one may deliberate by default, so its answer gets OPEN_MAX_TOKENS (October 29, 2026),
+// or, where OpenRouter lists the model's own output limit, that limit up to OPEN_MAX_CAP, never more than
+// half its window (1.17.1: Opus 5.5 with adaptive thinking spent 16,000 tokens deliberating and wrote nothing).
+// The cap is a ceiling, not a charge; OPEN_MAX_CAP bounds the credit OpenRouter asks to be able to cover.
+export const OPEN_CTX = 1000000, OPEN_MAX_TOKENS = 16000, OPEN_MAX_CAP = 64000;
+// Per model, where a long-context run shows the backbone slipping: a model listed here keeps
+// the smaller window until a padded run at the larger one scores as its plain run.
+// Empty since October 29, 2026: DeepSeek V4.1 Flash, capped at 65,536, held the positions
+// at ~124,000 tokens on backbone 2.10 and scored 0.76 against 0.77 plain.
+export const MODEL_CTX = {};
 
 export const TIERS = {
   server: {
@@ -35,7 +52,7 @@ export const TIERS = {
   // "server" backbone: harmonism.io puts its own doctrinal backbone in place of
   // a placeholder, so the phone does not send 80 KB with every message.
   hosted: {
-    label: "My harmonism.io account", sub: "Ten free messages a day in total across harmonism.io, Telegram and Lodestone's apps, with DeepSeek V4.1 Flash or another open-weight model tested against the doctrine. harmonism.io reads each message. For no daily limit, use your own OpenRouter key.",
+    label: "My harmonism.io account", sub: "Ten free messages a day for the first month, then five a day, counted once across harmonism.io and Lodestone's apps, with DeepSeek V4.1 Flash or another open-weight model tested against the doctrine. harmonism.io reads each message. For no daily limit, use your own OpenRouter key.",
     engine: "hosted", models: [], ctx: RENTED_CTX,
     backbone: "server", rag: { k: 5, maxChars: 12000 }, maxTokens: 1200,
   },
@@ -147,15 +164,37 @@ export class ServerEngine {
   }
   async isCached() { return true; }
   async load() {}
-  async *stream(messages, { maxTokens, temperature = 0.7, background = false } = {}) {
+  // v107: on Lodestone Desktop with a rented model on OpenRouter (`rented()`, set by
+  // main.js makeEngine), the turn's settings ride along as `lodestone` and remote.js
+  // applies them: `depth`, the hybrid's `model`, `thinking` shown, `background`,
+  // `lighter` (the second try of a turn whose thinking spent the cap). Never sent to any
+  // other server. A turn that spent the cap thinking is asked again once, as on the web.
+  async *stream(messages, opts = {}) {
+    try { yield* this.once(messages, opts); }
+    catch (e) { if (!e?.spent || !this.rented?.()) throw e; yield* this.once(messages, { ...opts, lighter: true }); }
+  }
+  async classify(text, model) {
+    if (!this.rented?.()) return "deep";
+    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 5000);
+    try {
+      const res = await (this.fetchImpl || fetch)(this.baseUrl + "/chat/completions", { method: "POST", headers: { "Content-Type": "application/json", ...(this.headers ? await this.headers() : {}) },
+        body: JSON.stringify({ model: this.model, messages: [{ role: "system", content: CLASSIFIER_PROMPT }, { role: "user", content: String(text || "").slice(0, 2000) }], stream: true, temperature: 0, max_tokens: 16, lodestone: { model, classify: true } }), signal: ctrl.signal });
+      if (!res.ok) return "deep";
+      let out = ""; for await (const p of readSSE(res)) out = p;
+      return /\bSIMPLE\b/i.test(out) ? "light" : "deep";
+    } catch { return "deep"; }
+    finally { clearTimeout(timer); }
+  }
+  async *once(messages, { maxTokens, temperature = 0.7, background = false, depth = null, model = null, onThinking = null, lighter = false } = {}) {
     const ctrl = new AbortController(); if (background) this.bgUsage = null; else { this.ctrl = ctrl; this.lastUsage = null; }   // a background call (learning, a summary) is not what Stop stops (1.13.1)
+    const extra = this.rented?.() ? { lodestone: { depth: depth || "deep", model: model || null, thinking: !!onThinking, background, lighter } } : {};
     // include_usage: the server reports the turn's tokens in a last chunk
     // (llama.cpp, Ollama, LM Studio, vLLM; one that does not know it ignores it).
     // Lodestone Desktop passes it on to a rented model, with OpenRouter's cost.
     const res = await (this.fetchImpl || fetch)(this.baseUrl + "/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(this.headers ? await this.headers() : {}) },
-      body: JSON.stringify({ model: this.model, messages, stream: true, temperature, top_p: 0.8, presence_penalty: 1.0, max_tokens: maxTokens, stream_options: { include_usage: true } }),
+      body: JSON.stringify({ model: this.model, messages, stream: true, temperature, top_p: 0.8, presence_penalty: 1.0, max_tokens: maxTokens, stream_options: { include_usage: true }, ...extra }),
       signal: ctrl.signal,
     });
     if (!res.ok) {
@@ -165,8 +204,8 @@ export class ServerEngine {
       let msg = ""; try { const j = JSON.parse(t); msg = typeof j.error === "string" ? j.error : (j.error?.message || ""); } catch {}
       throw new Error(msg || `Model server answered ${res.status}: ${t.slice(0, 200)}`);
     }
-    yield* readSSE(res, u => { if (background) this.bgUsage = u; else this.lastUsage = u; });
+    yield* readSSE(res, u => { if (background) this.bgUsage = u; else this.lastUsage = u; }, extra.lodestone ? onThinking : null);
   }
   interrupt() { try { this.ctrl?.abort(); } catch {} }
-  describe() { if (this.name) return `Lodestone Desktop · ${this.name}`; return `${this.model} · ${this.baseUrl.includes(location.host) || !this.baseUrl.startsWith("http") ? "your computer" : new URL(this.baseUrl).host}`; }
+  describe(model = null) { if (model) return `${model} · Lodestone Desktop`; if (this.name) return `Lodestone Desktop · ${this.name}`; return `${this.model} · ${this.baseUrl.includes(location.host) || !this.baseUrl.startsWith("http") ? "your computer" : new URL(this.baseUrl).host}`; }
 }

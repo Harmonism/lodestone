@@ -46,9 +46,15 @@ const PATTERNS = {
     [/^(Good morning|Good afternoon|Good evening|Good night)(?:, (.+))?\.$/, m => `${FR_PART[m[1]]}${m[2] ? `, ${m[2]}` : ""}.`],
     [/^Delete “(.+)” from this device\?$/, m => `Supprimer « ${m[1]} » de cet appareil ?`],
     [/^(\d+) messages?$/, m => `${m[1]} message${m[1] === "1" ? "" : "s"}`],
+    [/^\((\d+) chosen\)$/, m => `(${m[1]} choisi${m[1] === "1" ? "" : "s"})`],
+    [/^(.+) — ends (.+), (\d+) openings? left $/, m => `${m[1]} — prend fin le ${m[2]}, ${m[3]} ouverture${m[3] === "1" ? "" : "s"} restante${m[3] === "1" ? "" : "s"} `],
+    [/^No link made: (.+)$/, m => `Aucun lien créé : ${t(m[1])}`],
+    [/^Not revoked: (.+)$/, m => `Non révoqué : ${t(m[1])}`],
     [/^thinks on (.+)$/, m => `réfléchit via ${PLACE_FR[m[1]] || m[1]}`],
     [/^waking on (.+)…$/, m => `réveil via ${PLACE_FR[m[1]] || m[1]}…`],
     [/^Something failed: (.+)$/s, m => `Un problème est survenu : ${m[1]}`],
+    [/^([1-6]) of 6$/, m => `${m[1]} sur 6`],
+    [/^(\d+) areas are on your Wheel$/, m => `${m[1]} domaines sont dans votre Roue`],
   ],
 };
 

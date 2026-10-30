@@ -1,16 +1,40 @@
 #!/usr/bin/env bash
 # publish-public.sh — build the public tree of Lodestone from this working folder.
 #
-#   tools/publish-public.sh [DEST]        default DEST: ../lodestone-public
+#   tools/publish-public.sh [--commit|--push] [--desktop] [-m MESSAGE] [DEST]
+#                                          default DEST: ../lodestone-public
 #
 # The working folder is never modified. This copies it into DEST without the
 # fetched and built files (see .gitignore), the Android signing key, the local
 # held-subject list and the .bak copies, then refuses to finish if anything
-# internal or secret survives. DEST keeps its own .git; commit and push there.
+# internal or secret survives, and writes SHA256SUMS: the SHA-256 of every
+# file of the tree, which tools/verify.mjs compares a copy of Lodestone with.
+#
+# --commit  commits DEST and tags the release: web-vN, N the shell VERSION in
+#           app/sw.js. A tag names one content for ever: when web-vN already
+#           names other files under app/, it refuses until VERSION is raised.
+# --desktop also tags desktop-vX.Y.Z (desktop/package.json), under the same rule
+#           for app/ and desktop/; run it with the build of a Desktop release, so
+#           the tag holds what the installers were built from.
+# --push    --commit, then pushes the branch and the new tags to origin
+#           (Codeberg, with GitHub as a second push address).
+# Without --commit or --push it only builds and checks DEST, as before.
 set -euo pipefail
 
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DEST="${1:-$SRC/../lodestone-public}"
+COMMIT=0; PUSH=0; DESKTOP=0; MSG=""; DEST=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --commit) COMMIT=1 ;;
+    --push) COMMIT=1; PUSH=1 ;;
+    --desktop) DESKTOP=1 ;;
+    -m) MSG="${2:-}"; shift ;;
+    -*) echo "unknown option: $1" >&2; exit 2 ;;
+    *) DEST="$1" ;;
+  esac
+  shift
+done
+DEST="${DEST:-$SRC/../lodestone-public}"
 mkdir -p "$DEST"
 
 # DEST's .git is moved aside for the copy and restored after: macOS's own rsync
@@ -57,4 +81,51 @@ if [ -n "$bad_files" ]; then echo "  ✘ files that must not be published:"; ech
 
 if [ "$fail" -ne 0 ]; then echo "==> refused: fix the source, then run again"; exit 1; fi
 echo "  ✔ clean ($(find "$DEST" -path "$DEST/.git" -prune -o -type f -print | wc -l | tr -d ' ') files, $(du -sh --exclude=.git "$DEST" 2>/dev/null | cut -f1 || du -sh "$DEST" | cut -f1))"
+
+echo "==> SHA256SUMS"
+python3 - "$DEST" <<'PY'
+import hashlib, os, sys
+root = sys.argv[1]; lines = []
+for d, dirs, files in os.walk(root):
+    dirs[:] = sorted(x for x in dirs if not (d == root and x == ".git"))
+    for f in files:
+        p = os.path.join(d, f); rel = os.path.relpath(p, root).replace(os.sep, "/")
+        if rel == "SHA256SUMS" or os.path.islink(p): continue
+        with open(p, "rb") as fh: lines.append(f"{hashlib.sha256(fh.read()).hexdigest()}  {rel}")
+lines.sort(key=lambda l: l[66:])
+open(os.path.join(root, "SHA256SUMS"), "w", encoding="utf-8", newline="\n").write("\n".join(lines) + "\n")
+print(f"  ✔ {len(lines)} files")
+PY
+
 if [ -d "$DEST/.git" ]; then echo "==> changes:"; git -C "$DEST" status --short | head -40; fi
+[ "$COMMIT" -eq 1 ] || exit 0
+[ -d "$DEST/.git" ] || { echo "==> refused: $DEST has no .git (see Deploy Commands § Lodestone public repository)"; exit 1; }
+
+# ---- the release: one tag, one content -----------------------------------------
+SHELL_N="$(sed -nE 's/^const VERSION = "[^"]*-v([0-9]+)".*/\1/p' "$DEST/app/sw.js" | head -1)"
+DESK_V="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$DEST/desktop/package.json")"
+[ -n "$SHELL_N" ] || { echo "==> refused: no VERSION in app/sw.js"; exit 1; }
+G() { git -C "$DEST" "$@"; }
+G add -A
+TAGS=()
+want_tag() {   # tag, paths it covers
+  local tag="$1"; shift
+  if G rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+    if G diff --cached --quiet "$tag" -- "$@"; then echo "  ✔ $tag already names these files"; return 0; fi
+    echo "==> refused: $tag already names other files under $*:"
+    G diff --cached --stat "$tag" -- "$@" | tail -8 | sed 's/^/    /'
+    case "$tag" in web-v*) echo "    Raise VERSION in app/sw.js (shell v$SHELL_N), then publish again." ;; *) echo "    Raise the version in desktop/package.json ($DESK_V), then build and publish again." ;; esac
+    exit 1
+  fi
+  TAGS+=("$tag")
+}
+want_tag "web-v$SHELL_N" app
+[ "$DESKTOP" -eq 0 ] || want_tag "desktop-v$DESK_V" app desktop
+if G diff --cached --quiet; then echo "==> nothing new to commit"; else
+  G -c user.name="Harmonia" -c user.email="harmonia@harmonism.io" commit -q -m "${MSG:-Lodestone: web shell v$SHELL_N, desktop $DESK_V}"
+  echo "==> committed $(G rev-parse --short HEAD)"
+fi
+for t in "${TAGS[@]+"${TAGS[@]}"}"; do G tag -a "$t" -m "Lodestone $t" && echo "==> tagged $t"; done
+[ "$PUSH" -eq 1 ] || { echo "==> not pushed (--commit): push with git -C \"$DEST\" push origin HEAD --follow-tags"; exit 0; }
+G push origin HEAD --follow-tags
+echo "==> pushed to $(G remote get-url --push --all origin | tr '\n' ' ')"

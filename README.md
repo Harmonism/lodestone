@@ -1,16 +1,16 @@
 # Lodestone — the web app, Lodestone Desktop and the computer folder
 
-*The web app is **Lodestone** at harmonism.io/lodestone-app/; the installable app is **Lodestone Desktop**. The browser database is named `munai-offline`.*
+*The web app is **Lodestone** at lodestone.harmonism.io/app/; the installable app is **Lodestone Desktop**. The browser database is named `munai-offline`.*
 
 Lodestone runs on hardware the practitioner owns: a laptop, a desktop, or a model server on their own computer, reached from a phone over their own network. The published corpus is downloaded once and retrieved from locally. Conversations, practices and notes stay in the browser's storage on that device. After the one-time download it makes no network calls and sends no telemetry. Nothing goes to Harmonia unless the practitioner shares a conversation themselves (Settings → Help Lodestone improve): one at a time, names replaced on the device, the whole copy shown before it goes, withdrawable afterwards. On owned hardware, practitioner inference never reaches a third party, which meets the owned-hardware condition of SDIP, the Sovereign Doctrinal Inference Protocol. A phone with no computer behind it may also think on harmonism.io's hosted models under the practitioner's account, or on OpenRouter under their own key (§ Phone mode below); the corpus, retrieval, the safeguards and memory stay on the phone, and only the assembled turn leaves, to the service named. SDIP's seven invariants (`components/sdip/` in the Integral Knowledge Architecture repository) are addressed in § SDIP conformance below.
 
 Why a practitioner would run Lodestone on their own computer is set out in *Lodestone* § Where Lodestone Runs. This folder is that path at practitioner scale: inference on the practitioner's own laptop with no server administration.
 
-It reaches practitioners three ways: the web app at harmonism.io/lodestone-app/; **the installable desktop app** for macOS, Windows and Linux (`desktop/`, see its README), the recommended path on a computer; and the double-click folder (`lodestone-computer.zip`, the `.command` / `.bat` launchers), kept for anyone who would rather not install anything.
+It reaches practitioners three ways: the web app at lodestone.harmonism.io/app/; **the installable desktop app** for macOS, Windows and Linux (`desktop/`, see its README), the recommended path on a computer; and the double-click folder (`lodestone-computer.zip`, the `.command` / `.bat` launchers), kept for anyone who would rather not install anything.
 
-**Only the 7–8B class and above is offered anywhere.** The constraint is not memory — Llama-3.2-1B fits inside iOS Safari's ceiling and Qwen3-1.7B runs on any laptop — it is that a model that small, speaking in Lodestone's register, produces confident answers that misrepresent the system it speaks for. A wrong answer in that voice is a worse outcome than no answer; it is the one failure mode the whole architecture exists to prevent. There is deliberately no smaller fallback: a machine that cannot hold these is told to run the model outside the browser, where it can hold far more.
+**Only the 7–8B class and above is offered anywhere.** The constraint is not memory — Llama-3.2-1B fits inside iOS Safari's ceiling and Qwen3-1.7B runs on any laptop — it is that a model that small, speaking in Lodestone's register, produces confident answers that misrepresent the system it speaks for. A wrong answer in that voice is a worse outcome than no answer; it is the one failure mode the whole architecture exists to prevent. There is deliberately no smaller fallback, and no model runs inside the browser: every route carries the full backbone with the conversation beside it, and no local model is recommended on a computer with less than 16 GB of memory.
 
-**On-device inference is not offered on phones or tablets at all** (`localInferenceAvailable()` in `app/js/engine.js`, false for any handheld). A handheld reaches a model on a computer the practitioner owns, which also carries the full backbone rather than the compressed one, or one of the phone routes of § Phone mode. An install carrying a tier this build no longer has — the withdrawn `light` tier, or a device tier on a phone — is sent back to the setup screen on next open with nothing pre-selected, keeping its corpus, memory and server address.
+**On-device inference is not offered on phones or tablets at all** (`localInferenceAvailable()` in `app/js/engine.js`, false for any handheld). A handheld reaches a model on a computer the practitioner owns, or one of the phone routes of § Phone mode. An install carrying a tier this build no longer has — the withdrawn `light` tier, or a device tier on a phone — is sent back to the setup screen on next open with nothing pre-selected, keeping its corpus, memory and server address.
 
 ## This repository
 
@@ -31,7 +31,6 @@ lodestone/
 │   ├── icons/                the Lodestone sprite, extracted from LodestoneSprite.astro
 │   └── corpus/               BUILD OUTPUT: corpus.json, runtime.json, embeddings.*, exclusions.txt
 ├── doctrine/
-│   └── backbone-light.md     compressed Tier-1 backbone for 4–8k-context models (see Doctrine)
 ├── tools/
 │   ├── build-corpus.py       vault → corpus pack
 │   ├── embed-corpus.mjs      optional multilingual vectors for hybrid retrieval
@@ -63,36 +62,30 @@ Rebuild after any deploy that changes articles. Practitioners are not pushed upd
 
 | Mode | Where inference happens | Model (default · alternative) | Context | Backbone | Download |
 |---|---|---|---|---|---|
-| This device | the computer's GPU via WebGPU | Qwen3-8B (5.7 GB VRAM) · OLMo-2-7B (fully open, 6.5 GB) | 8k | light | ~6 GB |
 | Model server | Ollama / LM Studio / llama.cpp on a computer you own | chosen by installed memory (below); `model.txt` or the desktop app's model list for anything else | 32k (set by serve.py / the app for Ollama) | **full** | 6–27 GB, once |
-| harmonism.io account | harmonism.io's hosted models (`lodestone-desktop-api.php`, same origin) | the hosted list (`llm-models.php`) | 32k | the server's own, in place of a placeholder | none |
-| OpenRouter | OpenRouter, under the practitioner's own key | the hosted list as recommendations, or any OpenRouter id | 32k | **full** | none |
+| harmonism.io account | harmonism.io's hosted models (`lodestone-desktop-api.php`, same origin) | the hosted list (`llm-models.php`) | 128k | the server's own, in place of a placeholder | none |
+| OpenRouter | OpenRouter, under the practitioner's own key | the hosted list as recommendations, or any OpenRouter id | the model's whole window, tested or not (as OpenRouter reports it, else 1M) | **full** | none |
 | No model | none: a question returns the passages that bear on it | — | — | — | none |
 
-**Server-tier defaults of the double-click folder.** Drawn from the open-weight ranking (*Open-Weight AI Models Ranked — Censorship, Capability and Bias*) and the UGI leaderboard, read in Lodestone's own mode, thinking off and a 32k window. Figures are willingness /10 · NatInt · political lean, thinking off. The two launchers use this table. The desktop app does not: it offers one model per family per memory size, chosen on the doctrinal-fidelity suite (`desktop/README.md` § Models).
+**Server-tier defaults of the double-click folder.** The two launchers pick by installed memory, only among models that hold the full backbone in Lodestone's own mode (thinking off, a 32k window); the desktop app offers its own list, one model per family per memory size, chosen on the doctrinal-fidelity suite (`desktop/README.md` § Models).
 
-| Memory | Model (all `hf.co/mradermacher/…` GGUFs) | Download | UGI |
-|---|---|---|---|
-| 64 GB + | Gemma 4 26B-A4B uncensored Heretic, Q8_0 | 26.9 GB | 9.2 · 34.1 · −22.2 |
-| 32 GB + | Gemma 4 26B-A4B uncensored Heretic, Q4_K_M | 16.8 GB | 9.2 · 34.1 · −22.2 |
-| 16 GB + | Gemma 3 12B norm-preserved biprojected abliterated, Q4_K_M | 7.3 GB | 9.2 · 21.3 · −6.4 |
-| under 16 GB | Qwen3.5 9B Heretic v2, Q4_K_M | 5.6 GB | 9.2 · 16.1 · −7.3 |
+| Memory | Model (GGUF, Q4_K_M) | Download |
+|---|---|---|
+| 46 GB + | Qwen 3.5 35B-A3B (`hf.co/unsloth/…`) | 22 GB |
+| 30 GB + | Gemma 4 26B-A4B uncensored Heretic (`hf.co/mradermacher/…`) | 17 GB |
+| under 30 GB | none: the launcher says Lodestone needs 32 GB to think on this computer and opens the web app (30 Oct 2026; Ministral 3 14B, the 16 GB pick before, is replaced) | — |
 
-A `model.txt` naming `qwen3:32b`, `14b` or `8b` (vendor weights, refusals intact) is treated as an automatic pick and replaced. Mistral Small 3.2 24B, the article's laptop pick, needs ~14 GB of weights plus ~5 GB of cache at 32k, so it fits nothing below 32 GB, where Gemma 4 26B leads on every column. The doctrinal-fidelity suite has been run on the desktop app's models, not on these.
+A `model.txt` naming `qwen3:32b`, `14b` or `8b` (vendor weights, refusals intact) is treated as an automatic pick and replaced. So is a pick an earlier launcher made (Gemma 3 12B, Qwen 3.5 9B, Gemma 4 26B at Q8_0).
 
 **The retrieval model runs from local files only.** `app/vendor/models/Xenova/multilingual-e5-small/` holds the tokenizer and the ONNX weights (113 MB, fetched by `tools/fetch-assets.sh`), and `embed-worker.js` sets `allowLocalModels = true` with `allowRemoteModels = false`. `allowRemoteModels = false` makes the dependency impossible rather than unlikely: missing local files fail loudly instead of reaching out. Verified with every route to huggingface.co and hf.co aborted at the network layer — setup reports deep retrieval *done*, the badge and Settings both report hybrid retrieval, zero requests are attempted, and hybrid retrieval survives a reload with the network fully offline.
 
-GLM is not an option on the device tier: MLC publishes no GLM build, so WebLLM cannot run one. DeepSeek exists there only as R1 distills, which are reasoning models whose chain-of-thought is stripped before display — wasted compute for a companion register. Both are available on the server tier, where `model.txt` selects them.
-
-WebGPU is available in Chrome and Edge on desktop and Android, and in Safari on iOS/macOS 26 and later. When a browser lacks it, the setup screen offers only Server mode.
-
-The default is chosen on the openness gradient: open-weight Qwen3 for multilingual strength on small hardware, with OLMo-2 (weights, data and code all open) one tap away in every device tier. Browser mode cannot yet meet SDIP's refusal-direction-stripped invariant, because WebLLM ships only the vendors' own weights. Server mode can meet it with any abliterated GGUF.
+Server mode meets SDIP's refusal-direction-stripped invariant with any abliterated GGUF; GLM and DeepSeek run there too, selected by `model.txt`.
 
 ### Phone mode
 
 On a phone or tablet the setup screen offers four routes: the practitioner's own computer (below), their harmonism.io account, OpenRouter under their own key, and no model. Both internet routes live in `app/js/phone.js`, ported from the desktop's `hosted.js` and `remote.js`, and are offered only on a secure page (https, or localhost), because they need WebCrypto.
 
-- **harmonism.io account.** Supabase sign-in (email and password, the website's own project); the refresh token is stored encrypted, the access token held in memory. Each turn goes to `lodestone-desktop-api.php` on the same origin, so no CORS is involved, with a placeholder between the `<doctrinal_backbone>` tags that the server replaces with its own backbone (80 KB not sent per message). Ten messages a day in total across every surface; Settings shows the count and the server's model list.
+- **harmonism.io account.** Supabase sign-in (email and password, the website's own project); the refresh token is stored encrypted, the access token held in memory. Each turn goes to `lodestone-desktop-api.php` on the same origin, so no CORS is involved, with a placeholder between the `<doctrinal_backbone>` tags that the server replaces with its own backbone (about 69 KB not sent per message). Ten messages a day for the first month from the first message, then five a day, counted once across every surface; Settings shows the count and the server's model list.
 - **OpenRouter.** The key is tested with one short request before Begin is allowed, then stored encrypted. Recommended models (the hosted list, read from `/lodestone-app/models/catalog.json` when the setup opens, bundled otherwise) run as hosted Lodestone runs them: reasoning off or a token floor, `provider.data_collection: deny`. Any other id is allowed and labelled by `assess()` (closed weights marked). OpenRouter's CORS answers `*` for every header this sends (checked October 16, 2026). Venice and Anthropic are not offered on the phone.
 - **No model.** The crisis gate and retrieval run as always; the reply is the retrieved passages under their titles, with the articles listed to open offline.
 
@@ -161,7 +154,7 @@ python3 tools/serve.py --lan --model <name> --check   # prints http://<your-comp
 
 Open the printed address on the phone (same Wi-Fi). The setup screen detects the computer's model server by itself. `serve.py` serves the app and forwards `/v1/*` to the model server on one origin, so there is no CORS setup and no mixed-content block. It uses only the Python standard library and logs nothing. `--model` points an Ollama model named `lodestone` at the one given, with the 32k window baked in, and `--check` asks it one question before serving (exit status 3 if it cannot answer, which the launchers turn into "update Ollama").
 
-**Ollama.** Its OpenAI-compatible `/v1` endpoint ignores `num_ctx` and runs at its default window (4,096 tokens on any machine with under 24 GB of VRAM), which would cut the full backbone (~17,500 tokens); the Ollama desktop app does not read `OLLAMA_CONTEXT_LENGTH` from a Terminal's environment. Reasoning models think by default on `/v1`, which with the app's `max_tokens` can return an empty reply. `serve.py` and the desktop app therefore send chat to Ollama's native `/api/chat` with `num_ctx: 32768` and `think: false` where the model thinks. Measured through `serve.py`: 17,497 prompt tokens reached the model, none truncated. A non-Ollama upstream is passed through untouched, and needs its own window set to 24k or more.
+**Ollama.** Its OpenAI-compatible `/v1` endpoint ignores `num_ctx` and runs at its default window (4,096 tokens on any machine with under 24 GB of VRAM), which would cut the full backbone (about 14,000 tokens); the Ollama desktop app does not read `OLLAMA_CONTEXT_LENGTH` from a Terminal's environment. Reasoning models think by default on `/v1`, which with the app's `max_tokens` can return an empty reply. `serve.py` and the desktop app therefore send chat to Ollama's native `/api/chat` with `num_ctx: 32768` and `think: false` where the model thinks. Measured through `serve.py`: 17,497 prompt tokens reached the model, none truncated. A non-Ollama upstream is passed through untouched, and needs its own window set to 24k or more.
 
 ### Hosting on harmonism.io
 
@@ -186,8 +179,7 @@ Then check that the pack landed: `https://harmonism.io/lodestone-app/corpus/runt
 
 ## Doctrine
 
-- **Full backbone** (server mode): `doctrinal-backbone.md`, verbatim, the same Tier-1 text production runs.
-- **Light backbone** (device modes): `doctrine/backbone-light.md`, about 1,300 words. It is compressed by extraction: sentences carried from the full backbone and shortened by omission, with no new claim. It carries `derived_from_version`, and the build warns when the live backbone moves past that version; re-validate whenever the build warns that the live backbone has moved past `derived_from_version`. The app's Help drawer (Settings → Using Lodestone offline) carries the plain-language instructions for installing it on a phone; the technical paths live in this file.
+- **Full backbone** (every route): `doctrinal-backbone.md`, verbatim, the same Tier-1 text production runs.
 - **Persona** (`app/js/prompt.js`) is condensed from `companion-api.php`.
 
 ## Safety
@@ -212,10 +204,10 @@ What stays absent is retention by design: no streaks, no counts of days, no scor
 
 | Invariant | Status |
 |---|---|
-| Sovereign substrate | ✔ device GPU or owned server · ✘ by the practitioner's choice on a phone's harmonism.io and OpenRouter routes, said in every turn's persona |
-| Always-in-context backbone | ✔ light on device, full on server |
+| Sovereign substrate | ✔ owned computer or owned server · ✘ by the practitioner's choice on a phone's harmonism.io and OpenRouter routes, said in every turn's persona |
+| Always-in-context backbone | ✔ full, on every route |
 | Corpus-grounded retrieval | ✔ hybrid, on device |
-| Refusal-direction stripped | ✔ server mode: every default is abliterated · ✘ browser mode (vendor weights only) |
+| Refusal-direction stripped | ◐ available on an owned computer with any abliterated GGUF; some defaults are the vendors' own weights, chosen on the fidelity suite · ✘ rented routes |
 | No telemetry | ✔ |
 | Practitioner-initiated update | ✔ |
 | Open-source harness | ✔ plain files, CC0 like the framework repository |

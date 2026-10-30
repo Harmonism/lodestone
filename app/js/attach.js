@@ -20,7 +20,7 @@
 // Limits are on what the device can hold, not on the file's name: each kind has
 // a size it is read up to (LIMITS), said plainly when a file is over it.
 
-export const MAX_FILE_CHARS = 60000;    // per file, before the window budget trims further
+export const MAX_FILE_CHARS = 1000000;  // per file (about 220,000 tokens), before the window budget trims further; 60,000 until October 29, 2026
 const MAX_SIDE = 1568;
 const SCAN_PAGES = 4;
 export const MAX_ARCHIVE_FILES = 25;
@@ -28,7 +28,7 @@ const MB = 1e6;      // sizes as people read them: 300 MB is 300,000,000 bytes
 // Bytes each kind is read up to. Text is read from its start, so a larger text
 // file is not refused: its first part is read and marked shortened.
 export const LIMITS = {
-  text: 8 * MB,           // read from the start (60,000 characters are kept anyway)
+  text: 8 * MB,           // read from the start (MAX_FILE_CHARS are kept)
   pdf: 300 * MB,
   office: 300 * MB,       // .docx .xlsx .pptx .odt .epub .zip …: read part by part, never whole
   image: 80 * MB,

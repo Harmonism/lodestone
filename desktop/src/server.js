@@ -178,10 +178,11 @@ async function remoteModel(rc, req, res, sub, body) {
  *           companion: import("./companion").Companion,
  *           getConfig: () => { upstream: string|null, isEngine: boolean, remote?: object|null } }} opts
  */
-// The Lodestone app for Android opens harmonism.io/lodestone-app/ and reaches this
-// server across the home network, so its requests carry that origin.
+// The Lodestone app for Android opens lodestone.harmonism.io/app/ (builds
+// before it opened harmonism.io/lodestone-app/) and reaches this server across the
+// home network, so its requests carry that origin.
 // Only the routes it needs answer it: the model, pairing and sync.
-const NATIVE_ORIGINS = new Set(["https://harmonism.io"]);
+const NATIVE_ORIGINS = new Set(["https://lodestone.harmonism.io", "https://harmonism.io"]);
 const NATIVE_PATHS = /^\/(v1\/|lodestone-app\/v1\/|munai-app\/v1\/|munai-pair$|munai-sync$)/;
 function cors(req, res, p, origins = NATIVE_ORIGINS) {
   const o = req.headers.origin;
@@ -223,7 +224,7 @@ function createServer({ webRoot, corpusRoot, site, companion, getConfig, asrRoot
 
   async function model(req, res, sub) {
     const { upstream, isEngine, remote, key } = getConfig();
-    if (remote) return remoteModel(remote, req, res, sub, req.method === "POST" ? await readBody(req) : undefined);
+    if (remote) return remoteModel(remote, req, res, sub, req.method === "POST" ? await readBody(req, 64 * 1024 * 1024) : undefined);   // a whole window of text and its images
     if (!upstream) return send(res, 503, { error: "Lodestone's model is not running. Open the Lodestone menu → Model… to start it." });
     let body = req.method === "POST" ? await readBody(req) : undefined;
     if (isEngine && req.method === "POST" && sub.split("?")[0] === "/chat/completions") {
@@ -231,6 +232,7 @@ function createServer({ webRoot, corpusRoot, site, companion, getConfig, asrRoot
       try {
         const o = JSON.parse(body.toString("utf8"));
         o.chat_template_kwargs = { ...(o.chat_template_kwargs || {}), enable_thinking: false };
+        delete o.lodestone;   // v107: Lodestone's turn settings are for a rented model only (remote.js)
         body = Buffer.from(JSON.stringify(o));
       } catch {}
     }

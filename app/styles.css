@@ -173,6 +173,9 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-seco
 .top-actions { display: flex; gap: 2px; }
 .icon-btn { background: none; border: 0; width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; font-size: 1.4rem; line-height: 1; color: var(--text-muted); }
 .icon-btn:hover { background: var(--bg-elevated); color: var(--text); }
+/* A focused button keeps a quiet grey ring, never the system's blue (focus lands on a layer's close button as it opens). */
+button:focus { outline: none; }
+button:focus-visible { outline: 1.5px solid color-mix(in srgb, var(--text-muted) 45%, transparent); outline-offset: 1px; }
 .icon-btn svg { width: 22px; height: 22px; }
 /* The toolbar names what each icon opens; on a narrow screen the names give way to the icons. */
 .icon-btn.labeled { width: auto; min-width: 40px; padding: 0 11px 0 9px; display: inline-flex; align-items: center; gap: 7px; font-size: .9rem; text-decoration: none; color: var(--text-muted); }
@@ -520,7 +523,21 @@ html.threads-docked .toast { left: calc(50% + 140px); }
 .wheel-score { float: right; font-family: var(--font-body); font-size: .85rem; color: var(--text-muted); }
 .wheel-score b { font-size: 1.15rem; color: var(--accent-secondary); font-variant-numeric: tabular-nums; }
 .checkin.proposal { border-left-width: 4px; }
-.checkin.proposal .pr-ev { color: var(--text-muted); font-style: italic; }
+.checkin.proposal .pr-ev { color: var(--text-muted); font-size: .9rem; margin-top: 4px; }
+.checkin.proposal .pr-ev > span:first-child { font-style: normal; font-weight: 600; }
+.checkin.proposal .pr-ev .no-i18n { font-style: italic; }
+.checkin .fs-gloss, .checkin .fs-means { color: var(--text-muted); }
+.checkin .pr-level b { color: var(--text-heading); }
+.checkin .pr-level > span { color: var(--text-muted); font-size: .85em; font-variant-numeric: tabular-nums; }
+.checkin.first-sketch { border-left-color: var(--accent-secondary); }
+.checkin.first-sketch .fs-title { font-family: var(--font-header); font-size: 1.1rem; margin-bottom: 4px; }
+.checkin.first-sketch .fs-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 10px; }
+.checkin.first-sketch .fs-list > li { border-left: 3px solid var(--pc); padding: 2px 0 2px 10px; }
+.checkin.first-sketch .fs-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; align-items: baseline; }
+.checkin.first-sketch .fs-means { font-size: .9rem; }
+.checkin.first-sketch .fs-list .row { margin-top: 4px; }
+.checkin.first-sketch .fs-foot { margin-top: 12px; }
+.checkin .row button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .checkin.lifebook .lb-text { white-space: pre-wrap; margin-top: 6px; }
 .checkin.lifebook .lb-diff del { color: var(--text-muted); }
 .checkin.lifebook .lb-diff ins { text-decoration: none; font-weight: 600; }
@@ -855,6 +872,21 @@ html.threads-docked .top-settings { display: none; }
 .share-name { display: grid; grid-template-columns: auto 1fr minmax(8em, 11em); gap: 8px; align-items: center; font-size: .9rem; }
 .share-name small { color: var(--text-muted); }
 .share-name input[type="text"] { font-size: .85rem; padding: 4px 6px; min-width: 0; }
+/* Share with your guide: what goes in, the whole document, the link. */
+.gs-pick { margin: 8px 0; border: 1px solid var(--border-light); border-radius: 10px; padding: 4px 12px; }
+.gs-pick summary { cursor: pointer; color: var(--text); padding: 6px 0; }
+.gs-pick .hint { margin: 2px 0 4px; }
+.gs-count { color: var(--text-muted); font-size: .88rem; }
+.gs-list { max-height: 260px; overflow-y: auto; padding-bottom: 6px; }
+.gs-list .check { margin: 6px 0; }
+.gs-preview { max-height: 60vh; overflow-y: auto; border: 1px solid var(--border-light); border-radius: 12px; padding: 14px 18px; background: var(--bg-surface); margin: 6px 0 4px; }
+.gs-opts label { display: flex; align-items: center; gap: 6px; font-size: .9rem; color: var(--text-muted); }
+.gs-made { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--border-light); border-radius: 12px; background: var(--bg-surface); margin-top: 6px; }
+.gs-made input { width: 100%; font-size: .85rem; }
+.gs-pass { margin: 4px 0 2px 26px; }
+.gs-pass input { flex: 1 1 12em; min-width: 0; font-family: ui-monospace, Menlo, monospace; letter-spacing: .04em; }
+.gs-made-pass { font-size: .95rem; }
+.gs-made-pass code { font-size: 1rem; letter-spacing: .06em; padding: 2px 8px; }
 .share-preview { max-height: 60vh; overflow: auto; display: grid; gap: 8px; padding: 8px; border: 1px solid var(--border-light); border-radius: 10px; background: var(--bg-surface); }
 .share-msg { padding: 8px 10px; border-radius: 8px; background: var(--bg); font-size: .86rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 .share-msg.user { background: var(--user-bubble); }
@@ -1284,6 +1316,13 @@ button.x > svg.ico, button.lu-x > svg.ico, .attach-bar button > svg.ico { margin
 /* v99: before the first word. */
 .msg .body .thinking { color: var(--text-muted); font-size: .92rem; font-style: italic; animation: ls-breathe 1.6s ease-in-out infinite; }
 .msg .body.typing:has(.thinking)::after { content: none; }
+/* v107: the model's thinking, folded above the answer (Settings → Display). */
+.msg .reason { margin: 0 0 .5rem; font-size: .88rem; color: var(--text-muted); }
+.msg .reason summary { cursor: pointer; font-style: italic; list-style: none; }
+.msg .reason summary::-webkit-details-marker { display: none; }
+.msg .reason summary::before { content: "›"; display: inline-block; margin-right: .35rem; transition: transform .15s; }
+.msg .reason[open] summary::before { transform: rotate(90deg); }
+.msg .reason .reason-body { white-space: pre-wrap; max-height: 16rem; overflow-y: auto; margin-top: .35rem; padding-left: .8rem; border-left: 2px solid var(--border, rgba(127,127,127,.25)); }
 @keyframes ls-breathe { 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .msg .body .thinking { animation: none; } }
 /* v99: Select text, from the held menu. */

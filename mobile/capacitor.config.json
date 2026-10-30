@@ -3,8 +3,8 @@
   "appName": "Lodestone",
   "webDir": "www",
   "server": {
-    "url": "https://harmonism.io/lodestone-app/",
-    "allowNavigation": ["harmonism.io"],
+    "url": "https://lodestone.harmonism.io/app/",
+    "allowNavigation": ["lodestone.harmonism.io", "harmonism.io"],
     "errorPath": "offline.html"
   },
   "android": {

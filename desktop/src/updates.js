@@ -17,10 +17,10 @@ const path = require("path");
 const crypto = require("crypto");
 const { download } = require("./download");
 
-const ORIGIN = process.env.MUNAI_UPDATE_ORIGIN || "https://harmonism.io";
+const ORIGIN = process.env.MUNAI_UPDATE_ORIGIN || "https://lodestone.harmonism.io";   // Lodestone's home
 // /munai-offline/ until October 17, 2026; the site redirects it, so
 // versions built before still update.
-const BASE = ORIGIN + "/lodestone-app/";
+const BASE = ORIGIN + "/app/";   // served from the same folder as harmonism.io/lodestone-app/
 const CORPUS_FILES = ["runtime.json", "corpus.json", "embeddings.json", "embeddings.bin"];
 
 class NeedsLogin extends Error { constructor() { super("harmonism.io asked for its password."); this.needsLogin = true; } }

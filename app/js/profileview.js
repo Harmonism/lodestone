@@ -13,7 +13,8 @@
 
 const PILLARS = ["presence", "health", "matter", "service", "relationships", "learning", "nature", "recreation"];
 const NAMES = { presence: "Presence", health: "Health", matter: "Matter", service: "Service", relationships: "Relationships", learning: "Learning", nature: "Nature", recreation: "Recreation" };
-const LEVELS = ["unknown", "absent", "nascent", "functional", "developing", "sophisticated", "sovereign"];
+// Shown as the app shows them (October 30, 2026); the stored scale is unchanged (#533).
+const LEVELS = ["not placed yet", "absent", "beginning", "basic", "growing", "strong", "sovereign"];
 const RING = ["recreation", "nature", "relationships", "matter", "health", "service", "learning"];   // the canonical figure, clockwise from the top
 const COLORS = { presence: "#9B3DBE", health: "#4A9D5A", matter: "#DAA520", service: "#4A7BA7", relationships: "#E97A8F", learning: "#6B5BB5", nature: "#3A8A4A", recreation: "#E07B39" };
 

@@ -39,6 +39,7 @@ function card(m, { selectable = false } = {}) {
   const tight = S.memGB < m.minMem - 1;
   const tag = m.id === S.defaultId ? `Recommended for this computer${m.weaker ? " · smaller and weaker" : ""}${m.untested ? " · not yet tested against the doctrine" : ""}`
     : tight ? `Needs ${m.minMem} GB of memory — this computer has ${Math.round(S.memGB)}`
+    : m.lastResort ? "Last resort · only if no other way is open"
     : m.untested ? `Untested${m.weaker ? " · smaller and weaker" : ""} · for ${m.minMem} GB of memory or more`
     : m.custom ? `Your choice · about ${m.minMem} GB of memory` : `For ${m.minMem} GB of memory or more`;
   // Where the weights come from. A link inside a card that is itself a button:
@@ -205,6 +206,8 @@ function renderRemote() {
 
 function presetChanged(fill = true) {
   const p = S.presets[$("#rPreset").value];
+  if (listed.preset !== $("#rPreset").value) { listed = { preset: null, ids: [] }; $("#rList").textContent = "List the models this key can use"; }
+  closePicker();
   $("#rNote").textContent = p.note;
   $("#rUrlRow").hidden = $("#rPreset").value !== "custom";
   if (fill) { $("#rUrl").value = p.baseUrl; $("#rModel").value = p.model; }
@@ -212,9 +215,9 @@ function presetChanged(fill = true) {
   const rec = p.recommended || [];
   $("#rRecBox").hidden = !rec.length;
   $("#rRec").replaceChildren(...rec.map(m => el("button", {
-    class: "link", title: `${m.maker} · ${m.licence}${m.note ? " · " + m.note : ""}`,
+    class: "link", title: `${m.maker} · ${m.licence}${m.note ? " · " + m.note : ""}${m.info ? "\n" + m.info : ""}`,
     onclick: ev => { ev.preventDefault(); $("#rModel").value = m.id; showAssess(); },
-  }, m.label)), ...(p.offered || []).map(m => el("button", {
+  }, m.id === p.model ? `${m.label} (the default)` : m.label)), ...(p.offered || []).map(m => el("button", {
     class: "link", title: `${m.maker} · ${m.licence} · ${m.note}`,
     onclick: ev => { ev.preventDefault(); $("#rModel").value = m.id; showAssess(); },
   }, `${m.label} (not recommended)`)));
@@ -233,6 +236,9 @@ function showAssess() {
   box.hidden = !id || rec;
   box.textContent = off ? "Not recommended · doctrinal fidelity. Strong otherwise; closed weights." : closed ? "Closed weights · not tested against the doctrine." : "Not tested against the doctrine.";
   box.classList.toggle("warn", closed || off);
+  // v107: more about a recommended model (its cost against the closed flagships), from remote.js MODEL_INFO.
+  const info = (S.presets[preset]?.recommended || []).find(m => m.id === id)?.info, ib = $("#rInfo");
+  if (ib) { ib.hidden = !info; if (info) ib.querySelector("p").textContent = info; }
 }
 
 const remoteConf = () => ({ preset: $("#rPreset").value, baseUrl: $("#rUrl").value.trim(), model: $("#rModel").value.trim() });
@@ -242,10 +248,59 @@ async function listRemoteModels() {
   const btn = $("#rList"); btn.disabled = true; btn.textContent = "Asking the provider…";
   try {
     const ids = await D.remoteModels(remoteConf(), $("#rKey").value);
-    $("#rModels").replaceChildren(...ids.map(id => el("option", { value: id })));
-    btn.textContent = `${ids.length} models — pick one in the box`;
+    listed = { preset: $("#rPreset").value, ids: [...ids].sort() };
+    btn.textContent = `${ids.length} models listed · ask again`;
+    $("#rModel").focus(); openPicker();
   } catch (e) { box.hidden = false; box.textContent = clean(e); btn.textContent = "List the models this key can use"; }
   finally { btn.disabled = false; }
+}
+
+// The Model box's picker. A native <datalist> shows only the entries matching what
+// the box already holds, so with a model filled in it offered that one alone
+// (October 29, 2026). Here the box opens on everything, the recommended first and
+// the default named; typing narrows it.
+let listed = { preset: null, ids: [] }, pickAt = -1, typed = false;
+
+function openPicker() { $("#rPick").hidden = false; $("#rModel").setAttribute("aria-expanded", "true"); renderPicker(); }
+function closePicker() { $("#rPick").hidden = true; $("#rModel").setAttribute("aria-expanded", "false"); pickAt = -1; }
+
+function renderPicker() {
+  const p = S.presets[$("#rPreset").value] || {}, box = $("#rPick");
+  const cur = $("#rModel").value.trim(), q = typed ? cur.toLowerCase() : "";
+  const hit = (...s) => !q || s.some(x => String(x || "").toLowerCase().includes(q));
+  const item = (id, sub) => el("button", {
+    class: "pick-item", type: "button", role: "option", "aria-selected": id === cur ? "true" : "false", "data-id": id,
+    onmousedown: ev => ev.preventDefault(),   // keeps the box focused, so the click lands
+    onclick: () => pickModel(id),
+  }, el("span", {}, id), sub ? el("span", { class: "s" }, sub) : null);
+  const rec = (p.recommended || []).filter(m => hit(m.id, m.label, m.maker));
+  const off = (p.offered || []).filter(m => hit(m.id, m.label, m.maker));
+  const known = new Set([...(p.recommended || []), ...(p.offered || [])].map(m => m.id));
+  const rest = listed.preset === $("#rPreset").value ? listed.ids.filter(id => !known.has(id) && hit(id)) : [];
+  const kids = [];
+  if (rec.length) kids.push(el("div", { class: "group" }, "Recommended · tested against the doctrine"),
+    ...rec.map(m => item(m.id, `${m.label}${m.id === p.model ? " · the default" : ""}`)));
+  if (off.length) kids.push(el("div", { class: "group" }, "Offered · not recommended"), ...off.map(m => item(m.id, m.label)));
+  if (rest.length) kids.push(el("div", { class: "group" }, `Listed by the provider · not assessed (${rest.length})`), ...rest.map(id => item(id, "")));
+  if (!listed.ids.length || listed.preset !== $("#rPreset").value) kids.push(el("p", { class: "fine" }, "“List the models this key can use” adds every model the provider offers."));
+  else if (!rec.length && !off.length && !rest.length) kids.push(el("p", { class: "fine" }, "No listed model matches. Any model id can still be typed."));
+  box.replaceChildren(...kids);
+  pickAt = -1;
+}
+
+function pickModel(id) { $("#rModel").value = id; typed = false; closePicker(); showAssess(); }
+
+function pickerKey(e) {
+  const items = [...$("#rPick").querySelectorAll(".pick-item")];
+  if (e.key === "Escape") { if (!$("#rPick").hidden) { e.preventDefault(); closePicker(); } return; }
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    if ($("#rPick").hidden) return openPicker();
+    if (!items.length) return;
+    pickAt = e.key === "ArrowDown" ? Math.min(items.length - 1, pickAt + 1) : Math.max(0, pickAt - 1);
+    items.forEach((b, i) => b.classList.toggle("on", i === pickAt));
+    items[pickAt].scrollIntoView({ block: "nearest" });
+  } else if (e.key === "Enter" && !$("#rPick").hidden && items[pickAt]) { e.preventDefault(); pickModel(items[pickAt].dataset.id); }
 }
 
 // ─── harmonism.io account: hosted models, ten messages a day, then five ─────────
@@ -548,7 +603,11 @@ $("#hfInput").onkeydown = e => { if (e.key === "Enter") addCustom(); };
 $("#saveUpstream").onclick = async () => { await D.setUpstream($("#upstream").value.trim()); await refresh(); if (S.upstream) D.openApp(); else manageScreen(); };
 $("#showLog").onclick = () => D.revealLog();
 $("#rPreset").onchange = () => presetChanged(true);
-$("#rModel").addEventListener("input", showAssess);
+$("#rModel").addEventListener("input", () => { typed = true; showAssess(); openPicker(); });
+$("#rModel").addEventListener("focus", () => { typed = false; $("#rModel").select(); openPicker(); });
+$("#rModel").addEventListener("mousedown", () => { if ($("#rPick").hidden && document.activeElement === $("#rModel")) { typed = false; openPicker(); } });
+$("#rModel").addEventListener("blur", closePicker);
+$("#rModel").addEventListener("keydown", pickerKey);
 $("#rList").onclick = listRemoteModels;
 $("#rSave").onclick = saveRemote;
 $("#rClear").onclick = async () => { await D.clearRemote(); await refresh(); manageScreen(); };

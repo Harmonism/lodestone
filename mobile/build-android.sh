@@ -6,7 +6,7 @@
 # Produces release/Lodestone-android-<version>.apk, signed with the key in keys/,
 # which post-build.sh publishes as /lodestone-app/download/Lodestone-android.apk.
 #
-# The app is a shell: it opens https://harmonism.io/lodestone-app/, so a change to
+# The app is a shell: it opens https://lodestone.harmonism.io/app/, so a change to
 # Lodestone itself needs a deploy of the site, not a new APK. A new APK is needed
 # only when the shell changes (capacitor.config.json, android/, the plugins).
 # Raise versionCode and versionName in android/app/build.gradle each time, or

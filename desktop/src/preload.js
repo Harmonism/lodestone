@@ -29,6 +29,7 @@ if (location.protocol === "file:" && /\/(launcher|phone)\.html$/.test(location.p
     // The account's page on harmonism.io, in the app: consent, plan, the bundle.
     accountCall: (method, path, body) => call("account-call", method, path, body),
     shareCall: body => call("share-call", body),
+    guideShareCall: body => call("guide-share-call", body),
     accountOpenBundle: () => call("account-open-bundle"),
     revealLog: () => call("reveal-log"),
     library: () => call("library"),
@@ -75,6 +76,7 @@ if (location.protocol === "file:" && /\/(launcher|phone)\.html$/.test(location.p
     openUpdates: () => call("open-updates"),
     openLibrary: lang => call("open-library", lang),
     openPhone: () => call("open-phone"),
+    setTheme: mode => call("set-theme", mode),
     // Sync: encrypted in the window, carried under the account by the app
     syncAccount: () => call("sync-account"),
     syncSignIn: (email, password) => call("sync-sign-in", email, password),

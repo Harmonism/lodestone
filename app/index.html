@@ -39,7 +39,7 @@
         <h2>Your harmonism.io account</h2>
         <p class="hint" id="acctStatus"></p>
         <div class="row-btns" id="acctBtns"></div>
-        <p class="fine">Optional. It holds your Harmonic Profile, and gives ten free messages a day on the models hosted Lodestone runs on. Lodestone works without it.</p>
+        <p class="fine">Optional. It holds your Harmonic Profile, and gives ten free messages a day for the first month, then five a day, on the models hosted Lodestone runs on. Lodestone works without it.</p>
       </section>
 
       <h2>Where should Lodestone think?</h2>
@@ -80,6 +80,7 @@
         <label>Model
           <select id="orModel"></select>
         </label>
+        <details id="orModelInfo" class="model-info fine" hidden><summary>More info</summary><p></p></details>
         <label id="orOtherRow" hidden>Model id on OpenRouter
           <input id="orOther" type="text" placeholder="maker/model" autocomplete="off" spellcheck="false">
         </label>
@@ -178,8 +179,8 @@
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.6 2.6 3.8 5.4 3.8 8.5s-1.2 5.9-3.8 8.5c-2.6-2.6-3.8-5.4-3.8-8.5S9.4 6.1 12 3.5z"/></svg>
           </button>
           <div id="modelRow" class="model-row" hidden>
-          <button id="modelChip" class="model-chip" type="button" aria-haspopup="menu" aria-expanded="false" title="The model Lodestone thinks with. Change it here; the conversation continues.">
-          <span id="modelChipLabel">Model</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+          <button id="modelChip" class="model-chip" type="button" title="The model Lodestone thinks with. Change it in Settings; click to open them.">
+          <span id="modelChipLabel">Model</span>
           </button>
           <div id="modelMenu" class="model-menu" role="menu" hidden></div>
           </div>
@@ -299,7 +300,7 @@
     <div class="me-body">
       <h5 class="me-group-title">Where you stand</h5>
       <section data-group="Where you stand" data-nav="Wheel">
-        <h4><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.2"/><path d="M12 3.5v6.3M12 14.2v6.3M3.5 12h6.3M14.2 12h6.3"/></svg>Wheel reading <span id="wheelScore" class="wheel-score" title="The sum of your eight pillars, each from 0 (unknown) to 6 (sovereign)"></span></h4>
+        <h4><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.2"/><path d="M12 3.5v6.3M12 14.2v6.3M3.5 12h6.3M14.2 12h6.3"/></svg>Wheel reading <span id="wheelScore" class="wheel-score" title="The sum of your eight pillars, each from 0 (not placed yet) to 6 (sovereign)"></span></h4>
         <p class="hint">Your reading of where you stand. When what you tell Lodestone moves a pillar, it asks you to confirm the change; nothing moves without you. The Wheel is the only thing scored here, and it moves only with your life.</p>
         <div class="wheel-wrap">
           <svg id="wheelSvg" viewBox="-168 -104 336 208" aria-label="Wheel of Harmony self-reading"></svg>
@@ -371,7 +372,7 @@
       <h5 class="me-group-title">With others</h5>
       <section data-group="With others" data-nav="Share with your guide" id="shareBox">
         <h4><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3.5M7.5 8L12 3.5 16.5 8M5 12.5v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg>Share with your guide</h4>
-        <p class="hint">A document of what you choose, made on this computer, for a human guide you work with. It is sent to no one: you give it to them yourself.</p>
+        <p class="hint">For a human guide or coach you work with, of Harmonia or not. You choose what goes in and read it whole; then give it as a private link you can revoke, or as a file. Typing /share in a conversation brings you here.</p>
         <div id="shareBody" class="sync-form"></div>
       </section>
     </div>
@@ -401,11 +402,13 @@
           <h4><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2.5v2.5M15 2.5v2.5M9 19v2.5M15 19v2.5M2.5 9h2.5M2.5 15h2.5M19 9h2.5M19 15h2.5"/></svg>Model</h4>
           <div id="setEngine" class="kv"></div>
           <label>Model <select id="setModel"></select></label>
+          <details id="setModelInfo" class="model-info fine" hidden><summary>More info</summary><p></p></details>
           <div id="setModelOther" class="set-model-other" hidden>
             <input id="setModelOtherId" type="text" placeholder="maker/model, as OpenRouter names it" autocomplete="off" spellcheck="false" aria-label="Another model id on OpenRouter">
             <button class="btn ghost" id="setModelOtherUse" type="button">Use</button>
           </div>
           <p class="hint" id="setModelOtherNote" hidden></p>
+          <label class="check" id="setHybridRow" hidden><input type="checkbox" id="setHybrid"> <span id="setHybridText">Hybrid: greetings and short exchanges answered by a lighter model</span></label>
           <div id="setAccount" class="row-btns" hidden></div>
           <button class="btn ghost block" id="setChangeTier" type="button">Change where Lodestone thinks</button>
         </section>
@@ -490,7 +493,7 @@
           <p class="hint">Sync, below, keeps your devices together. A memory file moves it by hand: it holds your conversations, practices and notes.</p>
           <label class="check"><input type="checkbox" id="setRecall"> <span>Remember earlier conversations: when a message touches something you said in another conversation, Lodestone brings it back, and names it under the answer, where you can tell it to forget. Kept on this device only; needs deep retrieval.</span></label>
           <p class="hint" id="setRecallWhere"></p>
-          <label class="check"><input type="checkbox" id="setLearn"> <span>Let harmonism.io keep what Lodestone has learned of you up to date from conversations on this device. Your memory and recent messages go there now and then and are not stored; conversations answered on this computer, or by no model, never go. Off, only the website's own conversations are used.</span></label>
+          <label class="check"><input type="checkbox" id="setLearn"> <span>Let harmonism.io keep what Lodestone has learned of you up to date from the conversations it answered (the free account, the website, the browser extension). Your memory and those messages go there now and then and are not stored. Conversations answered by a model you chose, on this computer or under your own key (OpenRouter or another provider), never go: Lodestone learns from them here. Off, only the website's own conversations are used.</span></label>
           <button class="btn ghost block" id="setExport" type="button">Export memory</button>
           <label class="btn ghost block file-btn">Import memory<input type="file" id="setImport" accept="application/json" hidden></label>
           <button class="btn danger block" id="setWipe" type="button">Erase everything on this device</button>
@@ -537,6 +540,7 @@
             </select>
           </label>
           <label class="check"><input type="checkbox" id="setShowCost"> Show the model and its cost under each answer</label>
+          <label class="check"><input type="checkbox" id="setShowThinking"> Show the model's thinking as it answers (on OpenRouter)</label>
         </section>
       </div>
       <div class="set-group" data-nav="About">
@@ -598,7 +602,7 @@
 
       <div class="web-only">
       <h4>Lodestone Desktop: Lodestone as an app on your computer</h4>
-      <p>This is the fuller version of Lodestone, and the one a phone uses when it thinks on your own computer. Install <a href="https://harmonism.io/lodestone-desktop">Lodestone Desktop</a> like any other application: for <a href="https://harmonism.io/lodestone-app/download/Lodestone-mac-apple-silicon.dmg">Mac with Apple silicon</a>, <a href="https://harmonism.io/lodestone-app/download/Lodestone-mac-intel.dmg">Mac with Intel</a>, <a href="https://harmonism.io/lodestone-app/download/Lodestone-windows-setup.exe">Windows</a> or <a href="https://harmonism.io/lodestone-app/download/Lodestone-linux.AppImage">Linux</a> (about 400 MB, with the whole English library, the retrieval model and the engine included). On first opening it downloads its model once — from 7 GB, chosen for your computer's memory; Lodestone needs at least 16 GB of memory — with a progress bar, and checks it. There is nothing else to install. From then on Lodestone sits in your Applications folder or Start menu, opens in a few seconds, needs no connection, and carries the whole harmonism.io library in English, with other languages a click away.</p>
+      <p>This is the fuller version of Lodestone, and the one a phone uses when it thinks on your own computer. Install <a href="https://harmonism.io/lodestone-desktop">Lodestone Desktop</a> like any other application: for <a href="https://harmonism.io/lodestone-app/download/Lodestone-mac-apple-silicon.dmg">Mac with Apple silicon</a>, <a href="https://harmonism.io/lodestone-app/download/Lodestone-mac-intel.dmg">Mac with Intel</a>, <a href="https://harmonism.io/lodestone-app/download/Lodestone-windows-setup.exe">Windows</a> or <a href="https://harmonism.io/lodestone-app/download/Lodestone-linux.AppImage">Linux</a> (about 400 MB, with the whole English library, the retrieval model and the engine included). On first opening it downloads its model once — from 7 GB, chosen for your computer's memory; Lodestone needs at least 32 GB of memory — with a progress bar, and checks it. There is nothing else to install. From then on Lodestone sits in your Applications folder or Start menu, opens in a few seconds, needs no connection, and carries the whole harmonism.io library in English, with other languages a click away.</p>
       <p>The app is not yet signed by Apple or Microsoft, so the first opening asks for confirmation. On a Mac: drag Lodestone from the disk image into Applications, open it once, then System Settings → Privacy &amp; Security → <em>Open Anyway</em>. Later versions arrive through Settings → <em>Check for updates</em>. On Windows: <em>More info</em> → <em>Run anyway</em>.</p>
       </div>
       <h4 class="desktop-only">Using Lodestone from your phone</h4>

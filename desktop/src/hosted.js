@@ -115,7 +115,8 @@ class Hosted {
     this.cached = null;
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
-      throw new Error(j.error?.message || `harmonism.io answered ${res.status}.`);
+      // The code survives the hop to the window only inside the message.
+      throw new Error((j.error?.code === "consent_required" ? "consent_required: " : "") + (j.error?.message || `harmonism.io answered ${res.status}.`));
     }
     return res;
   }

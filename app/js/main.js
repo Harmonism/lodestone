@@ -3,15 +3,16 @@ import * as store from "./store.js";
 import * as corpusPack from "./corpus.js";
 import { Retriever, wantsWhole, isFollowUp } from "./retrieval.js";
 import { Embedder } from "./embedder.js";
-import { TIERS, MODELS, probeWebGPU, DeviceEngine, ServerEngine, ReaderEngine, isHandheld, isIOS, localInferenceAvailable, defaultModelFor, smallerModelThan, RENTED_CTX, OWNED_CTX } from "./engine.js";
-import { HostedEngine, OpenRouterEngine, hosted, secrets, phoneRoutesAvailable, RECOMMENDED, OFFERED, DEFAULT_REMOTE, refreshRecommended, assess, testOpenRouter, accountLinks, signInWithPassword } from "./phone.js";
+import { TIERS, MODELS, probeWebGPU, DeviceEngine, ServerEngine, ReaderEngine, isHandheld, isIOS, localInferenceAvailable, defaultModelFor, smallerModelThan, RENTED_CTX, OWNED_CTX, MODEL_CTX, OPEN_CTX, OPEN_MAX_TOKENS, OPEN_MAX_CAP } from "./engine.js";
+import { HostedEngine, OpenRouterEngine, hosted, secrets, phoneRoutesAvailable, RECOMMENDED, OFFERED, DEFAULT_REMOTE, refreshRecommended, assess, testOpenRouter, accountLinks, signInWithPassword, orContext, orPrice, orMaxOut, lightFor, orName, modelInfo } from "./phone.js";
+import { routeTurn } from "./route.js";
 import * as unlock from "./unlock.js";
 import { heldBlock, personContext, buildSystem, fitMessages, withReply, estTokens, estSystemTokens, PILLARS, LEVELS, webBlock, foldersBlock, earlierBlock, fullArticleBlock, stripRetrievalNote, summaryBlock, summaryRequest, renderSummary, summaryPlan } from "./prompt.js";
 import { detectLang, detectCrisis, buildCrisisResponse, detectWitness, witnessBlock, governorBlock, crisisLine } from "./safety.js";
 import { careCheck, indirectCare } from "./care.js";
 import * as presence from "./presence.js";
 import { render } from "./md.js";
-import { readAttachment, filesBlock, kindOf, speechLanguage, transcribeClip, setSpeechMode, setNativeSpeech, sizeLabel } from "./attach.js";
+import { readAttachment, filesBlock, MAX_FILE_CHARS, kindOf, speechLanguage, transcribeClip, setSpeechMode, setNativeSpeech, sizeLabel } from "./attach.js";
 import { scanMessage, leaveOutMessage, redact, leaveOut, scanText } from "./privacygate.js";
 import * as speechWeb from "./speechweb.js";
 import { CloudSpeaker, providerOf, PROVIDER_LABEL, transcribe as cloudTranscribe, FAMILIES, ROUTE_LABEL, chooseRoute, keyKind, testVoiceKey, orFamilyFor, onVoiceSubstitute, clearPolicyBlocks } from "./voicecloud.js";
@@ -32,6 +33,7 @@ import * as held from "./held.js";
 import { tidyTranscript, CLEANUP_PROMPT, cleanupRequest, acceptCleanup, SPOKEN_SECRET } from "./tidy.js";
 import { isNative, lanFetch, pairWith, pairing, computerServer, parsePairLink, onAppLink } from "./native.js";
 import * as shareout from "./shareout.js";
+import * as seal from "./seal.js";
 import { t, setLanguage, resolve as resolveUiLang } from "./i18n.js";
 import { Idiomorph } from "../vendor/idiomorph/idiomorph.esm.js";
 import remend from "../vendor/remend/remend.js";
@@ -121,21 +123,31 @@ const desktopConfigured = () => S.settings.tier === "server" && S.settings.serve
   && S.settings.server?.baseUrl === desktopServer().baseUrl;
 
 /**
- * The window a turn gets. A rented model tested against the doctrine (the
- * account's, a recommended one on OpenRouter, or one Lodestone Desktop rents)
- * gets RENTED_CTX; a rented model not tested, OWNED_CTX, since its own window
- * is unknown; a model the practitioner runs keeps what its tier or their
- * setting says. On the account, the backbone harmonism.io puts in place of the
+ * The window a turn gets. On the harmonism.io account, RENTED_CTX. Under the
+ * practitioner's own key (OpenRouter, or a provider Lodestone Desktop rents),
+ * tested or not, the model's whole window: as OpenRouter reports it, else
+ * OPEN_CTX, with OPEN_MAX_TOKENS for an untested model's answer (October 29,
+ * 2026). A model the practitioner runs keeps what its tier or their setting says. On the account, the backbone harmonism.io puts in place of the
  * placeholder is counted too (serverBackboneChars).
  */
 function windowFor(tier) {
-  let ctx = tier.ctx;
-  if (S.where) {
-    const id = S.engine?.model || S.whereModel || "";
-    const tested = S.where === "harmonism.io" || (!!id && assess(id).tested);
-    ctx = tested ? Math.max(ctx, RENTED_CTX) : Math.min(ctx, OWNED_CTX);
+  let ctx = tier.ctx, maxTokens = tier.maxTokens;
+  if (S.where === "harmonism.io") ctx = Math.max(ctx, RENTED_CTX);
+  else if (S.where) {
+    const id = S.whereModel || S.engine?.model || "";   // in Lodestone Desktop the page's engine is "lodestone"; the rented model is whereModel
+    ctx = (S.where === "openrouter.ai" && orContext(id)) || OPEN_CTX;
+    if (!(id && assess(id).tested)) {
+      // The model's own output limit where OpenRouter lists it (1.17.1), within OPEN_MAX_CAP and half the window.
+      const out = S.where === "openrouter.ai" ? orMaxOut(id) : null;
+      maxTokens = Math.max(maxTokens || 0, out ? Math.min(out, Math.max(OPEN_MAX_TOKENS, Math.min(OPEN_MAX_CAP, Math.floor(ctx / 2)))) : OPEN_MAX_TOKENS);
+    }
   }
-  return { ...tier, ctx, serverBackboneChars: tier.backbone === "server" ? (S.pack?.runtime?.backbone?.full || "").length : 0 };
+  // A model whose padded fidelity run fell below its plain one keeps a smaller window (MODEL_CTX).
+  // An empty model on a rented route is that route's default, DeepSeek V4.1 Flash.
+  const rented = S.where || tier.engine === "hosted" || tier.engine === "openrouter";
+  const mid = S.engine?.model || S.whereModel || (rented ? DEFAULT_REMOTE : "");
+  if (MODEL_CTX[mid]) ctx = Math.min(ctx, MODEL_CTX[mid]);
+  return { ...tier, ctx, maxTokens, serverBackboneChars: tier.backbone === "server" ? (S.pack?.runtime?.backbone?.full || "").length : 0 };
 }
 
 function setWebNext(on) {
@@ -324,6 +336,8 @@ async function handleAppLink(link) {
 function applyTheme(t) {
   const mode = t === "auto" ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark") : (t || "dark");
   document.documentElement.dataset.theme = mode;
+  // Lodestone Desktop's setup pages (Change model…, updates, phone) follow it.
+  try { DESKTOP?.setTheme?.(mode); } catch {}
 }
 
 // ─── Setup ───────────────────────────────────────────────────────────────────
@@ -491,11 +505,12 @@ async function showSetup() {
   const fillOr = () => {
     const sel = $("#orModel"), keep = sel.value || orSaved || RECOMMENDED[0]?.id;
     sel.innerHTML = "";
-    for (const m of RECOMMENDED) sel.append(el("option", { value: m.id }, `${m.label} · ${m.maker} · tested with Lodestone`));
+    for (const m of RECOMMENDED) sel.append(el("option", { value: m.id, title: modelInfo(m.id) }, `${m.label} · ${m.maker} · tested with Lodestone`));
     for (const m of OFFERED) sel.append(el("option", { value: m.id }, `${m.label} · ${m.maker} · not recommended · doctrinal fidelity`));
     sel.append(el("option", { value: "__other" }, "Another model on OpenRouter…"));
     if ([...RECOMMENDED, ...OFFERED].some(m => m.id === keep)) sel.value = keep;
     else if (keep) { sel.value = "__other"; $("#orOther").value = keep; }
+    showModelInfo("#orModel", "#orModelInfo");
   };
   fillOr();
   refreshRecommended().then(ok => { if (ok) { fillOr(); sync(); } });
@@ -524,7 +539,7 @@ async function showSetup() {
     clearTimeout(orAuto);
     if (/^sk-or-[A-Za-z0-9_-]{20,}$/.test($("#orKey").value.trim())) orAuto = setTimeout(() => $("#orTest").click(), 600);
   };
-  $("#orModel").onchange = orChanged;
+  $("#orModel").onchange = () => { orChanged(); showModelInfo("#orModel", "#orModelInfo"); };
   $("#orOther").oninput = orChanged;
   $("#orTest").onclick = async () => {
     const st = $("#orStatus"), model = orModel();
@@ -700,7 +715,7 @@ function makeEngine() {
     const srv = S.settings.server || {};
     // A computer paired with the Android app: its token, over the home network.
     if (srv.paired) return new ServerEngine(tier, { ...srv, fetchImpl: lanFetch, headers: async () => { const p = await pairing.get(); return p ? { Authorization: `Bearer ${p.token}` } : {}; } });
-    return new ServerEngine(tier, srv);
+    { const e = new ServerEngine(tier, srv); if (DESKTOP) e.rented = () => S.where === "openrouter.ai"; return e; }   // v107: Desktop's rented OpenRouter model takes Lodestone's turn settings (remote.js)
   }
   if (tier.engine === "hosted") return new HostedEngine(tier, { model: S.settings.remote?.tier === "hosted" ? S.settings.remote.model : "" });
   if (tier.engine === "openrouter") return new OpenRouterEngine(tier, { model: S.settings.remote?.tier === "openrouter" ? S.settings.remote.model : "" });
@@ -774,6 +789,11 @@ async function startMain() {
       if (S.autoState === "join" || S.autoState === "passphrase") openSyncSetup();
       else { renderSettings(); openDrawer("#drawerSettings"); setTimeout(() => $("#setSync")?.scrollIntoView({ block: "start" }), 200); }
     });
+  } else if (location.hash === "#account") {
+    // From the retired harmonism.io dashboard: Settings, at the account.
+    try { history.replaceState(null, "", location.pathname + location.search); } catch {}
+    renderSettings(); openDrawer("#drawerSettings");
+    setTimeout(() => $("#setAccountBox")?.scrollIntoView({ block: "start" }), 200);
   } else if (location.hash === "#path") {
     // From the account page: Your path, the one place for the profile, the Wheel and the Wisdom Canon.
     try { history.replaceState(null, "", location.pathname + location.search); } catch {}
@@ -938,6 +958,7 @@ async function refreshWhere() {
     S.where = S.engine.where = w !== undefined ? w : (S.engine.where ?? null);   // unreachable: keep what it last said
   }
   else S.where = S.engine?.where || null;
+  if (S.where === "openrouter.ai") orContext("");   // the models' windows, asked before the first turn needs them
   updateBadge();
 }
 
@@ -1824,6 +1845,7 @@ function msgNode(m) {
   if (m.meta?.notice) { body.className = "body"; body.textContent = m.content; wrap.append(el("div", { class: "col", style: "flex:1;min-width:0" }, body)); return wrap; }
   if (!isUser) wrap.append(sprite("avatar"));
   const col = el("div", { class: "col", style: isUser ? "display:flex;flex-direction:column;align-items:flex-end;max-width:85%;min-width:0" : "flex:1;min-width:0" }, body);
+  if (!isUser && m.meta?.thinking) body.before(el("details", { class: "reason" }, el("summary", {}, t("Thinking")), el("div", { class: "reason-body" }, m.meta.thinking)));   // v107
   if (voiceOnly.has(m)) {
     const me = speaker.active && speaker.key === m;
     const row = el("div", { class: "voice-row" },
@@ -2016,7 +2038,7 @@ async function prepareTurn(text, history, { getWeb = null, files = [], folders =
   } else if (S.where) {
     const named = S.retriever.asked(text), depth = new Map();
     for (const h of hits) depth.set(h.article, (depth.get(h.article) || 0) + 1);
-    const cap = 100000;   // characters of article text per turn (the hosted limit is 400,000, history included)
+    const cap = 200000;   // characters of article text per turn, about 45,000 tokens (the hosted limit is 600,000, history included)
     let total = 0;
     for (const a of [...new Set([...named, ...hits.map(h => h.article)])]) {
       if (full.length >= 2) break;
@@ -2044,15 +2066,17 @@ async function prepareTurn(text, history, { getWeb = null, files = [], folders =
   const away = S.where ? leaveOut : (x => x);
 
   // 2c — attachments: this message's, then up to three read earlier in the
-  // conversation, so a follow-up question can still reach them. With a rented
-  // model the window widens to hold them; the bundled engine's stays at 32k.
+  // conversation, so a follow-up question can still reach them. On the account
+  // the window widens to hold them; under one's own key it is already the model's
+  // whole window, and the files may fill it; the bundled engine's stays at 32k.
   const earlier = [];
   for (let i = history.length - 1; i >= 0 && earlier.length < 3; i--) {
+    if (summary?.through && (history[i].ts || 0) <= summary.through) break;   // compacted: the file went with its turn
     for (const f of history[i].meta?.files || []) if (f.text && earlier.length < 3) earlier.push({ ...f, earlier: true, text: history[i].meta?.asWritten ? f.text : away(f.text) });
   }
   const all = [...files, ...earlier];
-  if ((all.length || full.length) && S.where) tier = { ...tier, ctx: 160000 };
-  let filesBudget = 60000;
+  if ((all.length || full.length) && S.where === "harmonism.io") tier = { ...tier, ctx: 160000 };
+  let filesBudget = S.where ? Math.max(60000, Math.floor(tier.ctx * 3)) : 60000;   // characters; shed below while the turn is over the window
 
   // 3 — per-turn blocks
   const w = detectWitness(text, lang, runtime.witness);
@@ -2142,7 +2166,7 @@ function withImages(messages, images) {
 }
 
 /** What a stored message keeps of its attachments: the text (for later turns), never the images. */
-const storedFiles = files => files.map(f => ({ name: f.name, kind: f.kind, note: f.note || null, text: f.text ? redact(f.text.slice(0, 60000)) : "", cut: f.cut || 0, images: (f.images || []).length }));
+const storedFiles = files => files.map(f => ({ name: f.name, kind: f.kind, note: f.note || null, text: f.text ? redact(f.text.slice(0, MAX_FILE_CHARS)) : "", cut: f.cut || 0, images: (f.images || []).length }));
 
 /**
  * A pasted Harmonic Profile code: read here, never sent to the model as text.
@@ -2202,6 +2226,24 @@ function askPrivacy(found, where) {
 // One send at a time: a second Enter while the first still checks (the spending
 // limit reads the store, the privacy gate waits for an answer) is not a second message.
 let sendingNow = false;
+// ─── The trust harmonism.io asks  ─────────────
+// Only the free account's route reaches Harmonia's server; a model on this
+// device or under the practitioner's own key is asked nothing. The same words
+// as the server's (harmonia-astro/held-memory.php lodestone_consent_words): change both.
+const CONSENT_WORDS = "Here Lodestone thinks on harmonism.io. What you write passes through Harmonia's server to the model that answers, and it may carry your health, your inner life and your practice. It remains yours: Harmonia receives it in trust, for one use only, your conversation with Lodestone. The server keeps nothing of what you say, only your email, this trust and the day's count, and the model's provider is asked to keep none of it.\n\nThe trust is yours to take back at any time, in Settings → Account. To keep everything on your own ground, run Lodestone on your computer or under your own key: then nothing reaches Harmonia, and nothing is asked.";
+let trustAsked = false;
+async function offerTrust() {
+  if (!trustAsked) return; trustAsked = false;
+  if (!await ask(CONSENT_WORDS, { ok: "I entrust it" })) return;
+  try {
+    const r = await accountCall("POST", "member/companion-consent.php", { action: "grant", consentVersion: "website-inline-2026-10-30" });
+    if (r.success === false) throw new Error(r.error || "refused");
+  } catch (e) { toast("Could not be received: " + (e.message || e), 6000); return; }
+  await store.kv.set("held:learnBlocked", 0).catch(() => {});   // learning on the account waited on the same trust
+  toast("Received. Sending your message.", 3000);
+  setTimeout(() => { const f = unfinished(); if (f) retryUnanswered(f); else send(); }, 50);   // the message kept unanswered goes now
+}
+
 async function send(prefill) {
   if (sendingNow) { giveBackTo(prefill); return; }
   sendingNow = true;
@@ -2229,6 +2271,12 @@ async function sendOne(prefill) {
   let files = prefill == null ? S.pending.filter(x => x.status === "ready").map(x => x.data) : [];
   if (!text && files.length) text = files.length > 1 ? "Read what I attached." : `Read ${files[0].name}.`;
   if (!text) return;
+  // /share and /revoke: the guide's document, not a message to the model.
+  if (prefill == null && /^\/(share|revoke)$/i.test(text)) {
+    input.value = ""; autosize(); saveDraft();
+    if (/^\/share$/i.test(text)) openGuideShare(); else revokeAllGuideLinks();
+    return;
+  }
   const giveBack = () => { if (prefill != null) giveBackTo(text); };
   if (!S.engineReady && !isHPCode(text)) {
     giveBack();
@@ -2333,7 +2381,10 @@ async function sendOne(prefill) {
       return;
     }
 
-    const am = { threadId: S.thread.id, role: "assistant", content: "", meta: { ...hereMeta(), sources, web: web.map(r => ({ title: r.title, url: r.url })), yours: turn.yours, model: S.engine.describe(), witness: w?.strength || null, ...(turn.recalled?.length ? { recalled: turn.recalled } : {}), ...(turn.care ? { care: turn.care.level } : {}) } };
+    // v107: how much depth this turn needs, and on the hybrid which model answers it.
+    await offerHybrid();
+    const plan = await planTurn(text, turn, { heavy: !!(files.length || images?.length || web.length || webViaProvider), fitted, tier });
+    const am = { threadId: S.thread.id, role: "assistant", content: "", meta: { ...hereMeta(), sources, web: web.map(r => ({ title: r.title, url: r.url })), yours: turn.yours, model: S.engine.describe(plan.model || null), witness: w?.strength || null, ...(turn.recalled?.length ? { recalled: turn.recalled } : {}), ...(turn.care ? { care: turn.care.level } : {}) } };
     // Spoken as it is written, when the mode asks for it (never in witness mode, never a crisis reply: those never reach here).
     // Not spoken: witness mode, and a care moment (1.13.1), read rather than heard in passing.
     const speak = wantsSpeech(spoke) && !w && !turn.care && (await startSpeaking(am, detectLang(text, S.settings.lang || "auto")));
@@ -2364,7 +2415,14 @@ async function sendOne(prefill) {
     // Stop keeps what was written so far, marked as stopped, rather than losing it to an error.
     try {
       // Stop pressed while the turn was being prepared: nothing is asked of the model (1.13.1).
-      if (!S.stopRequested) for await (const partial of S.engine.stream(withImages(fitted.messages, images), { maxTokens: tier.maxTokens, web: webViaProvider })) {
+      // v107: the model's thinking as it arrives, folded above the answer, when Settings → Display asks for it.
+      let reasonBox = null;
+      const onThinking = S.settings.showThinking && orModelNow() ? txt => {
+        if (!reasonBox) { reasonBox = el("details", { class: "reason" }, el("summary", {}, t("Thinking")), el("div", { class: "reason-body" })); body.parentNode.insertBefore(reasonBox, body); }
+        reasonBox.lastChild.textContent = txt;
+        am.meta.thinking = String(txt).slice(0, 8000);   // kept with the answer, so it is there when the conversation is opened again
+      } : null;
+      if (!S.stopRequested) for await (const partial of S.engine.stream(withImages(fitted.messages, images), { maxTokens: tier.maxTokens, web: webViaProvider, ...plan, onThinking })) {
         out = partial;
         if (thinking.isConnected && stripRetrievalNote(out).trim()) { clearInterval(thinkT); thinking.remove(); }
         paint(stripRetrievalNote(out));
@@ -2418,11 +2476,16 @@ async function sendOne(prefill) {
     capWarn();
     afterTurn(turn);
     scheduleSummary(S.thread, S.history, turn.fitted);
+    longWarn(S.thread, usage, turn.fitted);
   } catch (e) {
     console.error(e);
+    // The trust asked before harmonism.io carries a turn : asked once, then the message goes.
+    if (e?.code === "consent_required" || /consent_required: /.test(String(e?.message || e))) { trustAsked = true; setTimeout(() => offerTrust(), 0); }
+    else {
     // The free messages used for today: said as it is, with the way past it, not as a failure (October 24, 2026).
     const capped = e?.code === "daily_cap" || /free messages are used/.test(String(e?.message || e));
     if (capped || !$("#chat .msg.unanswered")) toast(capped ? String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, "") : `Something failed: ${e.message || e}`, capped ? 15000 : undefined);
+    }
     // The answer failed, the care line does not: it was never the model's to give.
     if (turnForNotice?.care?.level === "refer" && !noticesDone && S.thread) {
       noticesDone = true;
@@ -2754,6 +2817,19 @@ async function touchThread() {
 // turn cut shorter, then with fewer turns (the oldest first); what is left
 // waits for the next fold.
 const SUMMARY_MAX_TOKENS = 900;   // thresholds: prompt.js summaryPlan()
+// Under one's own key the window may hold a million tokens, and every message re-sends what the
+// window holds: the fold is measured by what the history costs to send, not by the window. The room
+// is COMPACT_USD at the model's input price as OpenRouter lists it, so the conversation is compacted
+// once its turns cost about $0.80 a message (COMPACT_AT of the room): about 200,000 tokens on Claude
+// Opus 5.5 ($4 a million), past any window on DeepSeek V4.1 Flash ($0.15), which is then compacted
+// only by the count (SUMMARY_AFTER turns) or as its window fills. A price not known: COMPACT_ROOM. The newest turns are kept word for word
+// up to KEEP_SHARE of the room; the summary runs to SUMMARY_OWN_TOKENS from turns read up to 8,000
+// characters each (Tahir, October 29, 2026). Once one message costs LONG_USD (or, its cost unknown,
+// sends LONG_INPUT tokens), or the window drops turns, a new conversation is offered, once per conversation.
+const COMPACT_USD = 1, COMPACT_ROOM = 250000, LONG_USD = 1.5, LONG_INPUT = 300000, SUMMARY_OWN_TOKENS = 4000;
+const ownKey = () => !!S.where && S.where !== "harmonism.io";
+const compactRoom = () => { const p = S.where === "openrouter.ai" ? orPrice(S.whereModel || S.engine?.model || "") : null; return p ? Math.round(COMPACT_USD / p) : COMPACT_ROOM; };
+const summaryMax = () => (ownKey() ? SUMMARY_OWN_TOKENS : SUMMARY_MAX_TOKENS);
 
 // The summary's cut-off is the time of the last turn it holds (summaryThroughTs, 1.13.1): message ids
 // are each device's own, so the id it used to be left the other devices sending no recent turns at all.
@@ -2761,20 +2837,32 @@ const SUMMARY_MAX_TOKENS = 900;   // thresholds: prompt.js summaryPlan()
 const throughOf = (th, history = S.history) => th?.summaryThroughTs || (th?.summaryThrough ? (history.find(m => m.id === th.summaryThrough && m.threadId === th.id)?.ts || 0) : 0);
 const threadSummary = (th, history) => (th?.summary ? { text: th.summary, through: throughOf(th, history) } : null);
 
+/** Once per conversation, under one's own key: this message cost LONG_USD (or sent LONG_INPUT tokens), or the window dropped turns. */
+async function longWarn(thread, usage, fit) {
+  const heavy = usage?.cost != null ? usage.cost >= LONG_USD : (usage?.in || 0) >= LONG_INPUT;
+  if (!thread || thread.longWarned || !ownKey() || !(heavy || fit?.dropped > 0)) return;
+  thread.longWarned = true; await store.threads.put(thread);
+  const what = usage?.in ? `Each message now sends about ${kTok(usage.in)} tokens${usage.cost != null ? ` (${fmtCost(usage.cost)} for the last one)` : ""}.` : "The model's window is full: the oldest turns no longer reach it.";
+  if (await ask(`This conversation has grown long.\n\n${what} Lodestone compacts earlier turns as it goes, but attached files and the newest turns are sent with every message. A new conversation starts light; this one stays in your list.`, { ok: "New conversation", cancel: "Keep going", danger: false })) newThread();
+}
+
 function scheduleSummary(thread, history, fit = null) {
   if (!thread || S.summaryJob || !S.engineReady || S.engine?.kind === "reader" || S.engine?.kind === "hosted" || S.where === "harmonism.io") return;
   const through = throughOf(thread, history);
   const pending = history.filter(m => (m.ts || 0) > through && !m.meta?.crisis && !m.meta?.notice);
+  if (fit && ownKey()) { const r = compactRoom(); if (fit.room > r) fit = { ...fit, room: r }; }
   const fold = summaryPlan(pending, fit);
   if (!fold) return;
   const titles = new Map(S.pack.corpus.articles.map(a => [a.p, a.t]));
   const tier = S.engine?.tier ? windowFor(S.engine.tier) : (TIERS[S.settings.tier] || { ctx: 8192 });
-  const room = tier.ctx - SUMMARY_MAX_TOKENS - 64;
+  const room = tier.ctx - summaryMax() - 64;
   const job = (async () => {
+    const shown = thread === S.thread;
+    if (shown) toast("Compacting your conversation: earlier turns are summarized, so each message stays light.", 5000);
     try {
       // Cut each turn shorter, then fold fewer turns, until the request fits the window.
       let turns = fold, messages = null;
-      for (const maxChars of [1800, 900, 400]) {
+      for (const maxChars of ownKey() ? [8000, 1800, 900, 400] : [1800, 900, 400]) {
         messages = summaryRequest({ previous: thread.summary || "", turns, titleOf: p => titles.get(p), maxChars });
         if (estTokens(messages.map(m => m.content).join("\n")) <= room) break;
         messages = null;
@@ -2786,13 +2874,14 @@ function scheduleSummary(thread, history, fit = null) {
       }
       if (!messages) return;
       let out = "";
-      for await (const partial of S.engine.stream(messages, { maxTokens: SUMMARY_MAX_TOKENS, temperature: 0.2, background: true })) out = partial;
+      for await (const partial of S.engine.stream(messages, { maxTokens: summaryMax(), temperature: 0.2, background: true })) out = partial;
       addSideUsage(thread, usageNow(true));
       out = renderSummary(stripRetrievalNote(out));
       if (out.length < 40) { if (thread.side) await store.threads.put(thread); return; }
       thread.summary = out; thread.summaryThrough = turns[turns.length - 1].id; thread.summaryThroughTs = turns[turns.length - 1].ts || Date.now(); thread.summaryAt = Date.now();
       await store.threads.put(thread);
       if (thread === S.thread) renderChat();
+      if (shown) toast("Conversation compacted. Files attached before the summary are no longer sent: attach them again to work on them.", 6000);
     } catch (e) { console.warn("[summary]", e); }
   })();
   S.summaryJob = job;
@@ -4461,10 +4550,16 @@ function answeredHere() {
   const k = S.engine?.kind;
   return k === "device" || k === "reader" || (k === "server" && !S.where);
 }
-const hereMeta = () => (answeredHere() ? { here: true } : {});
+// Where a message was answered: here (a model on this device or computer), or by harmonism.io's own model.
+// Only the second ever goes back to harmonism.io's learning (held.recent): a conversation answered by a model
+// the practitioner chose, here or under their own key, is learned from here and never sent there.
+const answeredByHarmonism = () => S.engine?.kind === "hosted" || S.where === "harmonism.io";
+const hereMeta = () => (answeredHere() ? { here: true } : answeredByHarmonism() ? { seen: "harmonism.io" } : {});
 
 async function maybeLearn({ leaving = false } = {}) {
   if (!syncAvailable()) return;
+  // Only after a turn harmonism.io answered: nothing else of this device has anything to give it.
+  if (!answeredByHarmonism()) return;
   if (!(await held.learnFromApps())) return;
   let n = (await store.kv.get("held:learnSince")) || 0;
   if (!leaving) await store.kv.set("held:learnSince", ++n);
@@ -4577,7 +4672,16 @@ async function saveLearned() { S.learned.updatedAt = Date.now(); await store.kv.
 async function freshLearned() { const v = await store.kv.get("learned"); if (v && (v.updatedAt || 0) >= (S.learned?.updatedAt || 0)) S.learned = { ...emptyLearned(), ...v }; }
 const learningOn = () => S.settings.learn !== false;
 const outreachOn = () => S.settings.outreach !== false;
-const levelName = i => cap(LEVELS[i] || "unknown");
+// What the practitioner reads (October 30, 2026). The stored scale stays LEVELS
+// (unknown … sovereign, #533), which the model reads and writes; on screen each step
+// is a plain word with its place on the scale, because "Developing" read as lower
+// than "Functional" and a newcomer met "Service: a first reading, Developing" with
+// no idea what a pillar, a reading or the scale was.
+const LEVEL_LABEL = ["Not placed yet", "Absent", "Beginning", "Basic", "Growing", "Strong", "Sovereign"];
+const LEVEL_MEANS = ["", "not part of your life at the moment", "it matters to you, with no real practice yet", "it meets your needs, without much attention", "you are working on it and it is growing", "a deep, steady practice", "a source of strength for the rest of your life"];
+const PILLAR_GLOSS = { presence: "being fully here: breath, heart, a clear mind", health: "the care of your body", matter: "home, money, things and resources", service: "your work and what you give to others", relationships: "love, family, friendship, community", learning: "understanding and skill, of every kind", nature: "your bond with the natural world", recreation: "play, creativity and joy" };
+const levelName = i => LEVEL_LABEL[i] || LEVEL_LABEL[0];
+const levelStep = i => i ? `${i} of 6` : "";
 const pillarName = k => (PILLARS.find(([x]) => x === k) || [k, cap(k)])[1];
 
 /** The calibration blocks of a turn, read before this message advances them (Telegram's order). */
@@ -4708,11 +4812,12 @@ function notify(title, body, onClick) {
 
 function notifyProposals(list) {
   const up = list.filter(p => p.to > p.from);
-  const text = list.map(p => `${pillarName(p.pillar)}: ${levelName(p.from)} → ${levelName(p.to)}`).join(" · ");
-  notify(up.length ? "Your Wheel is moving" : "Your Wheel has shifted", `${text}. Lodestone asks you to confirm it.`, () => { closeDrawers(); renderCheckins(); });
+  const firsts = list.filter(p => !p.from), moves = list.filter(p => p.from);
+  const text = [firsts.length ? `a first sketch of ${firsts.length === 1 ? "one area" : `${firsts.length} areas`} of your life` : "", ...moves.map(p => `${pillarName(p.pillar)}: ${levelName(p.from)} → ${levelName(p.to)}`)].filter(Boolean).join(" · ");
+  notify(firsts.length && !moves.length ? "Your Wheel of Harmony" : up.length ? "Your Wheel is moving" : "Your Wheel has shifted", `${cap(text)}. Nothing changes until you say yes.`, () => { closeDrawers(); renderCheckins(); });
 }
 
-async function answerProposal(pr, accept) {
+async function answerProposal(pr, accept, { quiet = false } = {}) {
   await freshLearned();
   S.learned.pending = (S.learned.pending || []).filter(x => x.id !== pr.id);
   const before = learning.wheelScore(S.wheel);
@@ -4722,32 +4827,83 @@ async function answerProposal(pr, accept) {
     await store.kv.set("wheel", S.wheel);
   }
   await saveLearned();
+  if (quiet) return;
   renderCheckins();
   if (!$("#drawerMe").hidden) renderMe();
   if (accept && pr.to > pr.from) celebrate(pr, before, learning.wheelScore(S.wheel));
-  else if (accept) toast(`${pillarName(pr.pillar)} now reads ${levelName(pr.to)}. The Wheel moves both ways; it is a reading, not a verdict.`, 6000);
+  else if (accept) toast(`${pillarName(pr.pillar)} is now ${levelName(pr.to)}, ${levelStep(pr.to)}. The Wheel moves both ways: it shows where things stand, it is not a verdict.`, 6000);
+}
+
+/** Several first placements answered at once: one save, one redraw, one mark. */
+async function answerFirsts(list, accept) {
+  const before = learning.wheelScore(S.wheel);
+  for (const pr of list) await answerProposal(pr, accept, { quiet: true });
+  renderCheckins();
+  if (!$("#drawerMe").hidden) renderMe();
+  if (!accept) return toast("Nothing placed. Your Wheel stays empty until you place it, here or in Your path.", 6000);
+  const after = learning.wheelScore(S.wheel);
+  const box = $("#levelUp");
+  box.replaceChildren(
+    el("div", { class: "lu-ring", style: `--pc:var(--accent-secondary)` }, el("span", {}, `+${after - before}`)),
+    el("div", { class: "lu-text" }, el("strong", {}, list.length === 1 ? `${pillarName(list[0].pillar)} is on your Wheel` : `${list.length} areas are on your Wheel`), el("span", {}, `Your Wheel: ${after} of ${learning.MAX_SCORE}`)),
+    el("button", { type: "button", class: "lu-x", "aria-label": "Close", onclick: () => { box.hidden = true; } }, ico("x")));
+  box.hidden = false; box.classList.remove("show"); void box.offsetWidth; box.classList.add("show");
+  clearTimeout(celebrate.t); celebrate.t = setTimeout(() => { box.hidden = true; }, 9000);
 }
 
 function celebrate(pr, before, after) {
   const box = $("#levelUp");
   box.replaceChildren(
     el("div", { class: "lu-ring", style: `--pc:${PILLAR_COLOR(pr.pillar)}` }, el("span", {}, `+${after - before}`)),
-    el("div", { class: "lu-text" }, el("strong", {}, pr.from ? `${pillarName(pr.pillar)} rises to ${levelName(pr.to)}` : `${pillarName(pr.pillar)} enters your Wheel at ${levelName(pr.to)}`), el("span", {}, `Your Wheel: ${after} of ${learning.MAX_SCORE}`)),
+    el("div", { class: "lu-text" }, el("strong", {}, pr.from ? `${pillarName(pr.pillar)} rises to ${levelName(pr.to)}` : `${pillarName(pr.pillar)} is on your Wheel: ${levelName(pr.to)}`), el("span", {}, `Your Wheel: ${after} of ${learning.MAX_SCORE}`)),
     el("button", { type: "button", class: "lu-x", "aria-label": "Close", onclick: () => { box.hidden = true; } }, ico("x")));
   box.hidden = false; box.classList.remove("show"); void box.offsetWidth; box.classList.add("show");
   clearTimeout(celebrate.t); celebrate.t = setTimeout(() => { box.hidden = true; }, 9000);
-  notify(pr.from ? `${pillarName(pr.pillar)} rises to ${levelName(pr.to)}` : `${pillarName(pr.pillar)} enters your Wheel at ${levelName(pr.to)}`, `Your Wheel: ${after} of ${learning.MAX_SCORE}.`);
+  notify(pr.from ? `${pillarName(pr.pillar)} rises to ${levelName(pr.to)}` : `${pillarName(pr.pillar)} is on your Wheel: ${levelName(pr.to)}`, `Your Wheel: ${after} of ${learning.MAX_SCORE}.`);
 }
 
+// Lodestone's sense of where a pillar stands waits for the practitioner as a
+// proposal. October 30, 2026: the first placements, which used to arrive as one
+// card per pillar ("Service: a first reading, Developing"), come as one card that
+// says what the Wheel is and how its scale runs, each area with its plain meaning,
+// its step out of six and what Lodestone heard; a later move keeps its own card.
+const levelBadge = i => el("span", { class: "pr-level" }, el("b", {}, levelName(i)), " ", el("span", {}, levelStep(i)));
+const heard = pr => pr.evidence ? el("p", { class: "pr-ev" }, el("span", {}, "What Lodestone heard:"), " ", el("span", { class: "no-i18n" }, pr.evidence)) : null;
+const openPath = () => { closeDrawers(); renderMe(); openDrawer("#drawerMe"); };
+
 function proposalCards() {
-  return (S.learned?.pending || []).map(pr => el("div", { class: "checkin proposal", style: `--pc:${PILLAR_COLOR(pr.pillar)}` },
-    el("p", {}, el("b", {}, pr.from ? `${pillarName(pr.pillar)}: ${levelName(pr.from)} → ${levelName(pr.to)}. ` : `${pillarName(pr.pillar)}: a first reading, ${levelName(pr.to)}. `),
-      !pr.from ? "You have not placed this pillar yet; from what you have told Lodestone, this is where it stands." : pr.to > pr.from ? "From what you have told Lodestone, this pillar has grown." : "From what you have told Lodestone, this pillar has slipped back.",
-      pr.evidence ? el("span", { class: "pr-ev" }, ` “${pr.evidence}”`) : null),
-    el("div", { class: "row" },
-      el("button", { type: "button", onclick: () => answerProposal(pr, true) }, !pr.from ? "Yes, that fits" : pr.to > pr.from ? "Yes, it has" : "Yes, that is fair"),
-      el("button", { type: "button", onclick: () => answerProposal(pr, false) }, "Not yet"),
-      el("button", { type: "button", onclick: () => { answerProposal(pr, false); send(`About my ${pillarName(pr.pillar)} pillar: I want to look at where it really stands.`); } }, "Talk it through"))));
+  const pending = S.learned?.pending || [];
+  const firsts = pending.filter(pr => !pr.from), moves = pending.filter(pr => pr.from);
+  const cards = [];
+  if (firsts.length) cards.push(el("div", { class: "checkin proposal first-sketch" },
+    el("p", { class: "fs-title" }, el("b", {}, "A first sketch of your Wheel of Harmony")),
+    el("p", {}, "The Wheel looks at your life in eight areas. Each is placed on a scale of six steps, from Absent (1) to Sovereign (6). From your conversations so far, Lodestone would place these. Nothing goes on your Wheel until you say yes, and you can change any of it later."),
+    el("ul", { class: "fs-list" }, ...firsts.map(pr => el("li", { style: `--pc:${PILLAR_COLOR(pr.pillar)}` },
+      el("div", { class: "fs-head" }, el("span", { class: "fs-name" }, el("b", {}, pillarName(pr.pillar)), " · ", el("span", { class: "fs-gloss" }, PILLAR_GLOSS[pr.pillar] || "")), levelBadge(pr.to)),
+      el("p", { class: "fs-means" }, cap(LEVEL_MEANS[pr.to] || "")),
+      heard(pr),
+      el("div", { class: "row" },
+        el("button", { type: "button", onclick: () => answerProposal(pr, true) }, "Yes, place it"),
+        el("button", { type: "button", onclick: () => answerProposal(pr, false) }, "Not yet"),
+        el("button", { type: "button", onclick: () => { answerProposal(pr, false); send(`About my ${pillarName(pr.pillar)} pillar: I want to look at where it really stands.`); } }, "Talk it through"))))),
+    el("div", { class: "row fs-foot" },
+      firsts.length > 1 ? el("button", { type: "button", class: "primary", onclick: () => answerFirsts(firsts, true) }, "Place them all") : null,
+      firsts.length > 1 ? el("button", { type: "button", onclick: () => answerFirsts(firsts, false) }, "Not now") : null,
+      el("button", { type: "button", onclick: openPath }, "See my Wheel"))));
+  for (const pr of moves) {
+    const up = pr.to > pr.from;
+    cards.push(el("div", { class: "checkin proposal", style: `--pc:${PILLAR_COLOR(pr.pillar)}` },
+      el("p", {}, el("b", {}, pillarName(pr.pillar)), " · ", el("span", { class: "fs-gloss" }, PILLAR_GLOSS[pr.pillar] || "")),
+      el("p", { class: "pr-move" }, levelBadge(pr.from), " → ", levelBadge(pr.to)),
+      el("p", {}, up ? "From what you have told Lodestone, this area of your life has grown." : "From what you have told Lodestone, this area of your life has slipped back."),
+      el("p", { class: "fs-means" }, cap(LEVEL_MEANS[pr.to] || "")),
+      heard(pr),
+      el("div", { class: "row" },
+        el("button", { type: "button", onclick: () => answerProposal(pr, true) }, up ? "Yes, it has" : "Yes, that is fair"),
+        el("button", { type: "button", onclick: () => answerProposal(pr, false) }, "Not yet"),
+        el("button", { type: "button", onclick: () => { answerProposal(pr, false); send(`About my ${pillarName(pr.pillar)} pillar: I want to look at where it really stands.`); } }, "Talk it through"))));
+  }
+  return cards;
 }
 
 // ─── Writing first (outreach.js) ─────────────────────────────────────────────
@@ -4876,10 +5032,17 @@ async function maybeOutreach(opts = {}) {
 }
 
 // ─── Sharing with a human guide ──────────────────────────────────────────────
-// Telegram's /share gave a guide a code to read the profile on the server.
-// Here the practitioner chooses what to include and Lodestone makes a document
-// on this computer: a page to print or save as PDF, or Markdown. It is sent to
-// no one; they give it to their guide themselves.
+// Your path → Share with your guide, and /share in a conversation (on
+// Telegram /share gave a guide a code to read a profile on the server). The
+// practitioner chooses what goes in: the parts below, notes from the life book,
+// whole conversations, with the names in them replaced if they wish. Keys, card
+// numbers, emails, phone numbers and outside links are always taken out of the
+// conversations. The document is drawn here and shown whole before it leaves,
+// in one of two ways: a file they give their guide themselves, or a link sealed
+// on this device (seal.js). The link alone carries the key; harmonism.io keeps
+// the sealed bytes, unreadable to it, until the link is revoked, its days end or
+// its openings are used. Any guide, of Harmonia or not, opens it with no account
+// at lodestone.harmonism.io/guide. /revoke ends every link at once.
 
 const SHARE_PARTS = [
   ["wheel", "My Wheel and how it has moved"],
@@ -4890,8 +5053,15 @@ const SHARE_PARTS = [
   ["context", "What I am in the middle of now"],
   ["reading", "My reading of the canon and my margin notes"],
 ];
+const GS = { parts: null, notes: new Set(), threads: new Set(), hide: false, names: [], namesFor: "", days: 7, views: 3, pass: false, passphrase: "", read: false, busy: false, made: null, madePass: "", preview: false, draw: 0 };
+const GUIDE_LIMIT = 1700000;   // characters of Markdown a link takes (the server's cap, once sealed)
+const GUIDE_DAYS = [[1, "1 day"], [7, "7 days"], [30, "30 days"]];
+const GUIDE_VIEWS = [[1, "Once"], [3, "3 times"], [10, "10 times"]];
+// A heading inside a reply or a note would break the document's own sections: it is set in bold instead.
+const demote = s => String(s || "").replace(/^#{1,6}\s+(.+)$/gm, "**$1**").trim();
+const guideTitle = () => `${S.profile?.name || "A practitioner"} — for my guide`;
 
-function shareMarkdown(parts) {
+function shareMarkdown(parts, extra = {}) {
   const has = k => parts.includes(k);
   const name = S.profile?.name || "A practitioner";
   const out = [`# ${name} — for my guide`, "", `*Prepared in Lodestone on ${new Date().toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}. I chose what is in it.*`, ""];
@@ -4921,8 +5091,48 @@ function shareMarkdown(parts) {
     const arc = canon.activeArc(S.reading) || [...S.reading.arcs].reverse()[0];
     if (arc) { const p = canon.progress(S.reading, arc); out.push("## Reading", "", `${arc.title}${arc.author ? `, ${arc.author}` : ""}: ${p.completed} of ${p.units} ${arc.unit_label} read.`, ""); for (const n of canon.notes(S.reading, arc.id, 20)) out.push(`- (${n.seam}, ${arc.unit_label.replace(/s$/, "")} ${n.unit_index}) ${n.body}`); out.push(""); }
   }
+  if (extra.notes?.length) {
+    out.push("## From my life book", "");
+    for (const n of extra.notes) out.push(`### ${n.title}`, "", n.body || "*(empty)*", "");
+  }
+  if (extra.convs?.length) {
+    out.push("## Conversations with Lodestone", "", "*Whole, as they were written" + (extra.hidden ? ", with the names I chose replaced" : "") + ". Keys, card numbers, emails, phone numbers and outside links are taken out.*", "");
+    for (const c of extra.convs) {
+      out.push(`### ${c.title}`, "", `*${c.date}*`, "");
+      for (const m of c.msgs) out.push(`**${m.role === "user" ? "Me" : "Lodestone"}** · ${m.time}`, "", m.text, "");
+    }
+  }
   out.push("---", "*Lodestone reads Harmonism against a life; a guide reads the life. Lodestone's notes are a starting point, not a verdict.*");
   return out.join("\n");
+}
+
+const guideMsgs = async id => (await store.messages.forThread(id)).filter(m => (m.role === "user" || m.role === "assistant") && !m.notice && String(m.content || "").trim());
+
+/** The names in the chosen conversations, proposed once per choice of conversations (shareout.js). */
+async function guideNames() {
+  const key = [...GS.threads].sort().join("|");
+  if (!GS.hide || !key || GS.namesFor === key) return;
+  const msgs = []; for (const id of GS.threads) msgs.push(...await guideMsgs(id));
+  if (!shareVocab) shareVocab = shareout.vocabulary(S.pack?.corpus?.articles || []);
+  GS.names = shareout.standIns(shareout.findNames(msgs, shareVocab, [S.profile?.name].filter(Boolean)));
+  GS.namesFor = key;
+}
+
+/** The whole document, as the guide will read it. */
+async function guideDoc() {
+  const extra = { notes: [], convs: [], hidden: GS.hide };
+  if (GS.notes.size) for (const e of (await lifeBookEntries().catch(() => []))) if (GS.notes.has(e.rel)) extra.notes.push({ title: e.title, body: demote(String(e.body || "").replace(/^#\s+.+\n*/, "")) });   // its title line once, as the heading
+  if (GS.threads.size) {
+    await guideNames();
+    const chosen = GS.hide ? GS.names.filter(n => n.include) : [];
+    const ths = (await store.threads.list()).filter(t => GS.threads.has(t.id)).sort((a, b) => (a.created || 0) - (b.created || 0));
+    for (const t of ths) {
+      const msgs = await guideMsgs(t.id); if (!msgs.length) continue;
+      extra.convs.push({ title: shareout.anonymize(t.title || "Conversation", chosen), date: new Date(msgs[0].ts || t.created).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" }),
+        msgs: msgs.map(m => { let s = shareout.anonymize(m.content, chosen); if (s.length > shareout.MAX_CHARS) s = s.slice(0, shareout.MAX_CHARS) + " …(cut)"; return { role: m.role, time: new Date(m.ts).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }), text: demote(s) }; }) });
+    }
+  }
+  return shareMarkdown([...GS.parts], extra);
 }
 
 function download(name, type, text) {
@@ -4930,22 +5140,199 @@ function download(name, type, text) {
   document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
 
-function shareFiles(parts, kind) {
-  const md = shareMarkdown(parts), base = `${(S.profile?.name || "Lodestone").replace(/[\\/:*?"<>|]+/g, " ").trim()} — for my guide`;
+async function shareFiles(kind) {
+  const md = await guideDoc(), base = guideTitle().replace(/[\\/:*?"<>|]+/g, " ").trim();
+  if (kind === "copy") return copyAnswer(md);
   if (kind === "md") return download(`${base}.md`, "text/markdown", md);
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${base.replace(/</g, "&lt;")}</title><style>body{font:16px/1.6 Georgia,'Iowan Old Style',serif;color:#1a1a2e;max-width:720px;margin:40px auto;padding:0 20px}h1{font-size:1.9rem;margin-bottom:.2em}h2{font-size:1.25rem;margin-top:1.8em;border-bottom:1px solid #ddd;padding-bottom:.2em}em{color:#555}li{margin:.2em 0}hr{border:0;border-top:1px solid #ddd;margin:2em 0}@media print{body{margin:0}}</style></head><body>${render(md)}</body></html>`;
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${base.replace(/</g, "&lt;")}</title><style>body{font:16px/1.6 Georgia,'Iowan Old Style',serif;color:#1a1a2e;max-width:720px;margin:40px auto;padding:0 20px}h1{font-size:1.9rem;margin-bottom:.2em}h2{font-size:1.25rem;margin-top:1.8em;border-bottom:1px solid #ddd;padding-bottom:.2em}h3{font-size:1.08rem;margin-top:1.4em}em{color:#555}li{margin:.2em 0}hr{border:0;border-top:1px solid #ddd;margin:2em 0}@media print{body{margin:0}}</style></head><body>${render(md)}</body></html>`;
   download(`${base}.html`, "text/html", html);
 }
 
-function renderShare() {
+async function guideCall(body) {
+  if (DESKTOP) {
+    if (!DESKTOP.guideShareCall) throw new Error("Update Lodestone Desktop to make a link; a file works now.");
+    const r = await DESKTOP.guideShareCall(body);
+    if (!r?.ok) throw new Error(r?.message || "lodestone.harmonism.io could not be reached.");
+    return r.json;
+  }
+  const url = (onHarmonism() ? location.origin : "https://lodestone.harmonism.io") + "/lodestone-guide.php";
+  const init = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  // Signed in, the sign-in goes along with a new link only to count links a day; it is not kept with it.
+  const signedIn = body.action === "create" && onHarmonism() && !!(await hosted.account().catch(() => null));
+  const res = signedIn ? await hosted.call(url, init) : await fetch(url, init);
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) { const e = new Error(j.error?.message || `lodestone.harmonism.io answered ${res.status}.`); e.code = j.error?.code; throw e; }
+  return j;
+}
+const guideLinks = async () => (await store.kv.get("guide:links", [])) || [];
+
+async function renderShare() {
   const box = $("#shareBody"); if (!box) return;
-  const checks = SHARE_PARTS.map(([k, label]) => { const c = el("input", { type: "checkbox", value: k }); c.checked = !["context", "assessment"].includes(k); return el("label", { class: "check" }, c, el("span", {}, label)); });
-  const parts = () => checks.map(l => l.querySelector("input")).filter(c => c.checked).map(c => c.value);
-  box.replaceChildren(...checks,
+  if (!GS.parts) GS.parts = new Set(SHARE_PARTS.map(([k]) => k).filter(k => !["context", "assessment"].includes(k)));
+  const changed = () => { GS.read = false; GS.made = null; drawGuide(); };
+  const tick = (label, on, set) => { const c = el("input", { type: "checkbox" }); c.checked = on; c.onchange = () => set(c.checked); return el("label", { class: "check" }, c, el("span", {}, label)); };
+  const parts = SHARE_PARTS.map(([k, label]) => tick(label, GS.parts.has(k), v => { v ? GS.parts.add(k) : GS.parts.delete(k); changed(); }));
+
+  const entries = (await lifeBookEntries().catch(() => [])).filter(e => !e.off);
+  const ths = (await store.threads.list()).filter(t => t.id).sort((a, b) => (b.updated || b.created || 0) - (a.updated || a.created || 0));
+  const count = (n) => el("span", { class: "gs-count" }, n ? `(${n} chosen)` : "");
+  const noteCount = count(GS.notes.size), convCount = count(GS.threads.size);
+  const notePick = entries.length ? el("details", { class: "gs-pick" }, el("summary", {}, el("span", {}, "Notes from my life book"), " ", noteCount),
+    el("div", { class: "gs-list" }, ...entries.map(e => tick(e.title, GS.notes.has(e.rel), v => { v ? GS.notes.add(e.rel) : GS.notes.delete(e.rel); noteCount.textContent = GS.notes.size ? `(${GS.notes.size} chosen)` : ""; changed(); })))) : null;
+  const hideRow = tick("Replace the names in these conversations", GS.hide, v => { GS.hide = v; changed(); });
+  hideRow.hidden = !GS.threads.size;
+  const convPick = ths.length ? el("details", { class: "gs-pick" }, el("summary", {}, el("span", {}, "Conversations, whole"), " ", convCount),
+    el("p", { class: "hint" }, "Off unless you choose them. Your words and Lodestone's go as they were written; keys, card numbers, emails, phone numbers and outside links are always taken out."),
+    el("div", { class: "gs-list" }, ...ths.map(t => tick(`${t.title || "Conversation"} · ${new Date(t.updated || t.created).toLocaleDateString()}`, GS.threads.has(t.id), v => {
+      v ? GS.threads.add(t.id) : GS.threads.delete(t.id); convCount.textContent = GS.threads.size ? `(${GS.threads.size} chosen)` : ""; hideRow.hidden = !GS.threads.size; changed();
+    })))) : null;
+
+  // a passphrase the practitioner tells their guide another way; without it the link opens nothing.
+  const passBox = el("div", { class: "gs-pass", hidden: !GS.pass });
+  const drawPass = () => {
+    if (!GS.passphrase) GS.passphrase = seal.makePassphrase();
+    const f = el("input", { type: "text", value: GS.passphrase, autocomplete: "off", spellcheck: "false", "aria-label": "Passphrase" });
+    f.onchange = () => { GS.passphrase = f.value.trim(); GS.made = null; drawGuide(); };
+    passBox.replaceChildren(el("div", { class: "row-btns" }, f, el("button", { class: "btn ghost", type: "button", onclick: () => { GS.passphrase = seal.makePassphrase(); GS.made = null; drawPass(); drawGuide(); } }, "Another one")),
+      el("p", { class: "hint" }, "Tell it to your guide aloud, or in a message apart from the link. Whoever holds the link could try passphrases one after another: keep the one made here, or choose one of at least four words."));
+  };
+  const passRow = tick("Add a passphrase, which you give your guide another way", GS.pass, v => { GS.pass = v; passBox.hidden = !v; if (v) drawPass(); GS.made = null; drawGuide(); });
+  if (GS.pass) drawPass();
+  const sel = (opts, value, set, label) => { const s = el("select", { "aria-label": label }, ...opts.map(([v, l]) => el("option", { value: String(v) }, l))); s.value = String(value); s.onchange = () => { set(Number(s.value)); GS.made = null; drawGuide(); }; return s; };
+  const read = el("input", { type: "checkbox", id: "gsRead" });
+  read.onchange = () => { GS.read = read.checked; if (GS.read && !GS.preview) { GS.preview = true; } drawGuide(); };
+  box.replaceChildren(...[
+    el("h5", { class: "sub-h" }, "What it holds"), ...parts, notePick, convPick, hideRow,
+    el("div", { id: "gsNames" }),
+    el("div", { class: "row-btns" }, el("button", { class: "btn ghost", type: "button", id: "gsShow", onclick: () => { GS.preview = !GS.preview; drawGuide(); } }, "See what your guide will see")),
+    el("div", { class: "gs-preview prose", id: "gsPreview", hidden: true }),
+    el("h5", { class: "sub-h" }, "A private link"),
+    el("p", { class: "hint" }, "Sealed on this device before it leaves: the key is in the link itself, so Harmonia's server keeps the document without being able to read it. Your guide opens it in any browser, with no account. You send the link yourself, and can revoke it here or by typing /revoke."),
+    el("div", { class: "row-btns gs-opts" }, el("label", {}, el("span", {}, "Lasts"), sel(GUIDE_DAYS, GS.days, v => { GS.days = v; }, "How long the link lasts")), el("label", {}, el("span", {}, "Opens"), sel(GUIDE_VIEWS, GS.views, v => { GS.views = v; }, "How many times it opens"))),
+    passRow, passBox,
+    el("label", { class: "check" }, read, el("span", {}, "I have read what it holds, and it is what I want my guide to see.")),
+    el("div", { class: "row-btns" }, el("button", { class: "btn primary", type: "button", id: "gsMake", onclick: makeGuideLink }, "Make a link")),
+    el("div", { id: "gsMade" }),
+    el("div", { id: "gsLinks" }),
+    el("h5", { class: "sub-h" }, "Or a file"),
+    el("p", { class: "hint" }, "Made here and sent to no one: you give it to your guide yourself. A file cannot be revoked."),
     el("div", { class: "row-btns" },
-      el("button", { class: "btn primary", type: "button", onclick: () => shareFiles(parts(), "html") }, "A page to print or send"),
-      el("button", { class: "btn ghost", type: "button", onclick: () => shareFiles(parts(), "md") }, "Markdown"),
-      el("button", { class: "btn ghost", type: "button", onclick: () => { navigator.clipboard?.writeText(shareMarkdown(parts())); toast("Copied."); } }, "Copy")));
+      el("button", { class: "btn ghost", type: "button", onclick: () => shareFiles("html") }, "A page to print or send"),
+      el("button", { class: "btn ghost", type: "button", onclick: () => shareFiles("md") }, "Markdown"),
+      el("button", { class: "btn ghost", type: "button", onclick: () => shareFiles("copy") }, "Copy")),
+  ].filter(Boolean));
+  drawGuide(); drawLinks();
+}
+
+/** The parts of the section that follow the choice: the names, the preview, the buttons, the new link. */
+async function drawGuide() {
+  const n = ++GS.draw;
+  const r = $("#gsRead"); if (r) r.checked = GS.read;
+  const mk = $("#gsMake"); if (mk) mk.disabled = !GS.read || GS.busy;
+  const show = $("#gsShow"); if (show) show.textContent = GS.preview ? "Hide what your guide will see" : "See what your guide will see";
+  const namesBox = $("#gsNames");
+  if (namesBox) {
+    if (GS.hide && GS.threads.size) {
+      await guideNames(); if (n !== GS.draw) return;
+      const row = x => { const c = el("input", { type: "checkbox" }); c.checked = x.include; c.onchange = () => { x.include = c.checked; GS.read = false; GS.made = null; drawGuide(); };
+        const stand = el("input", { type: "text", value: x.stand, "aria-label": `Stand-in for ${x.phrase}` });
+        stand.onchange = () => { x.stand = `[${stand.value.replace(/[[\]]/g, "").trim() || "someone"}]`; stand.value = x.stand; GS.read = false; GS.made = null; drawGuide(); };
+        return el("div", { class: "share-name" }, c, el("span", {}, x.forms.join(" · "), el("small", {}, ` ×${x.count}`)), stand); };
+      const sure = GS.names.filter(x => x.sure), other = GS.names.filter(x => !x.sure);
+      namesBox.replaceChildren(...[el("p", { class: "hint" }, "Each ticked name is replaced by its stand-in in the conversations. Rename a stand-in if a role helps your guide (“[my mother]”)."),
+        el("div", { class: "share-names" }, ...(sure.length ? sure.map(row) : [el("p", { class: "hint" }, "It found no names.")])),
+        other.length ? el("details", {}, el("summary", {}, `Other capitalised words (${other.length}), probably ordinary`), el("div", { class: "share-names" }, ...other.map(row))) : null].filter(Boolean));
+    } else namesBox.replaceChildren();
+  }
+  const pv = $("#gsPreview");
+  if (pv) {
+    pv.hidden = !GS.preview;
+    if (GS.preview) { const md = await guideDoc(); if (n !== GS.draw) return; pv.innerHTML = render(md); pv.querySelectorAll("a[href]").forEach(a => { a.target = "_blank"; a.rel = "noopener"; }); }
+  }
+  drawMade();
+}
+
+function drawMade() {
+  const box = $("#gsMade"); if (!box) return;
+  if (!GS.made) { box.replaceChildren(); return; }
+  const f = el("input", { type: "text", readonly: true, value: GS.made, "aria-label": "The link for your guide" });
+  f.onclick = () => f.select();
+  box.replaceChildren(el("div", { class: "gs-made" },
+    el("b", {}, "The link for your guide"), f,
+    el("div", { class: "row-btns" },
+      el("button", { class: "btn primary", type: "button", onclick: () => copyAnswer(GS.made) }, "Copy the link"),
+      navigator.share ? el("button", { class: "btn ghost", type: "button", onclick: () => navigator.share({ title: guideTitle(), url: GS.made }).catch(() => {}) }, "Send…") : null),
+    GS.madePass ? el("div", { class: "gs-made-pass" }, el("span", {}, "Passphrase: "), el("code", {}, GS.madePass), " ", el("button", { class: "link-btn", type: "button", onclick: () => copyAnswer(GS.madePass) }, "Copy")) : null,
+    el("p", { class: "hint" }, GS.madePass ? "The link opens nothing without the passphrase. Send the link, then give the passphrase another way: aloud, or in a separate message." : "Anyone holding this link can open it until it ends, so send it to your guide alone.")));
+}
+
+async function makeGuideLink() {
+  if (!GS.read || GS.busy) return;
+  GS.busy = true; drawGuide();
+  try {
+    const md = await guideDoc();
+    if (md.length > GUIDE_LIMIT) throw new Error("This document is too large for a link. Leave something out, or give it as a file.");
+    const title = guideTitle();
+    const passphrase = GS.pass ? GS.passphrase.trim() : "";
+    if (GS.pass && seal.normPass(passphrase).replace(/[^\p{L}\p{N}]/gu, "").length < 10) throw new Error("This passphrase is too short to hold: keep the one made for you, or choose one of at least four words.");
+    const s = await seal.seal({ v: 1, title, made: new Date().toISOString(), md }, { passphrase });
+    const r = await guideCall({ action: "create", v: 1, iv: s.iv, data: s.data, days: GS.days, views: GS.views });
+    const link = seal.linkFor(r.id, s.key, s.salt);
+    const links = await guideLinks();
+    links.push({ id: r.id, token: r.token, link, pass: passphrase || null, made: Date.now(), expires: r.expires, left: r.views });
+    await store.kv.set("guide:links", links);
+    GS.made = link; GS.madePass = passphrase; GS.read = false;
+    if (passphrase) { GS.passphrase = seal.makePassphrase(); const f = $(".gs-pass input"); if (f) f.value = GS.passphrase; }   // the next link gets its own, shown in the box
+    drawLinks(false);
+  } catch (e) { toast(`No link made: ${e.message || e}`, 7000); }
+  finally { GS.busy = false; drawGuide(); }
+}
+
+/** The links given, as the server holds them now (an ended one leaves the list). */
+async function drawLinks(refresh = true) {
+  const box = $("#gsLinks"); if (!box) return;
+  let links = await guideLinks();
+  if (refresh && links.length) {
+    try {
+      const r = await guideCall({ action: "status", links: links.map(({ id, token }) => ({ id, token })) });
+      const st = new Map((r.links || []).map(x => [x.id, x]));
+      links = links.filter(l => st.get(l.id)?.live !== false).map(l => st.get(l.id) ? { ...l, expires: st.get(l.id).expires, left: st.get(l.id).views_left } : l);
+      await store.kv.set("guide:links", links);
+    } catch (e) { console.warn("[guide links]", e?.message || e); }
+  }
+  if (!links.length) { box.replaceChildren(); return; }
+  box.replaceChildren(el("div", { class: "kv share-sent" }, el("b", {}, "Links you have given"),
+    ...links.slice().reverse().map(l => el("div", {},
+      `${new Date(l.made).toLocaleDateString()} — ends ${new Date(l.expires).toLocaleDateString()}, ${l.left} opening${l.left === 1 ? "" : "s"} left `,
+      l.link ? el("button", { class: "link-btn", type: "button", onclick: () => copyAnswer(l.link) }, "Copy link") : null, " ",
+      l.pass ? el("button", { class: "link-btn", type: "button", onclick: () => copyAnswer(l.pass) }, "Copy passphrase") : null, l.pass ? " " : null,
+      el("button", { class: "link-btn", type: "button", onclick: () => revokeGuideLink(l) }, "Revoke")))));
+}
+
+async function revokeGuideLink(l, { quiet = false } = {}) {
+  if (!quiet && !await ask("Revoke this link? It stops opening at once, for anyone.")) return false;
+  try { await guideCall({ action: "revoke", id: l.id, token: l.token }); }
+  catch (e) { if (e.code !== "not_found") { toast(`Not revoked: ${e.message || e}`, 7000); return false; } }
+  await store.kv.set("guide:links", (await guideLinks()).filter(x => x.id !== l.id));
+  if (GS.made === l.link) { GS.made = null; GS.madePass = ""; }
+  if (!quiet) { toast("Revoked: the link no longer opens."); drawMade(); drawLinks(false); }
+  return true;
+}
+
+/** /share: the section itself, in Your path. */
+function openGuideShare() {
+  renderMe(); openDrawer("#drawerMe");
+  setTimeout(() => $("#shareBox")?.scrollIntoView({ block: "start" }), 80);
+}
+
+/** /revoke: every link given, after one question. */
+async function revokeAllGuideLinks() {
+  const links = await guideLinks();
+  if (!links.length) { toast("You have no link to revoke. A file, once given, cannot be called back.", 5000); return; }
+  if (!await ask(links.length === 1 ? "Revoke the link you have given? It stops opening at once, for anyone." : "Revoke every link you have given? They stop opening at once, for anyone.")) return;
+  let done = 0; for (const l of links) if (await revokeGuideLink(l, { quiet: true })) done++;
+  toast(done === links.length ? "Revoked: no link you gave opens now." : "Some links could not be revoked: try again from Your path → Share with your guide.", 6000);
+  drawMade(); drawLinks(false);
 }
 
 // ─── Helping Lodestone improve ───────────────────────────────────────────────
@@ -5311,7 +5698,7 @@ async function renderAccountBox() {
   const site = DESKTOP ? "https://harmonism.io" : location.origin;
   const ext = (href, text) => el("a", { href, target: "_blank", rel: "noopener" }, text);
   if (!acct || acct.expired || acct.computer) {
-    box.append(el("p", { class: "hint" }, acct?.expired ? `Your sign-in as ${acct.email} has expired on this computer.` : "Not signed in. Your account holds sync, the Sovereignty Bundle and the consent Lodestone on harmonism.io works under; Lodestone works without it."));
+    box.append(el("p", { class: "hint" }, acct?.expired ? `Your sign-in as ${acct.email} has expired on this computer.` : "Not signed in. Your account holds sync, the Sovereignty Bundle and the trust Lodestone on harmonism.io works under; Lodestone works without it."));
     if (DESKTOP) box.append(desktopSignIn(() => renderAccountBox(), acct?.email));
     else { const L = accountLinks(); box.append(el("div", { class: "row-btns" }, el("a", { class: "btn ghost", href: L.signIn }, "Sign in"), el("a", { class: "btn ghost", href: L.register }, "Create an account"))); }
     box.append(el("h5", {}, "Community"), el("p", { class: "hint" }, "Practitioner directory and reading groups — opening soon."));
@@ -5327,28 +5714,48 @@ async function renderAccountBox() {
     plan.textContent = st === "paid" ? `Plan: Harmonia Member${m.expires_at ? `, access until ${until(m.expires_at)}` : m.renews_at ? `, renews ${until(m.renews_at)}` : ""}.`
       : st === "comp" ? `Plan: Complimentary Member${m.comp_expires_at ? `, until ${until(m.comp_expires_at)}` : ""}.`
       : "Plan: free. On harmonism.io's hosted models: ten messages a day the first month, then five. Lodestone on a computer you own, or a model under your own key, has no limit.";
-    if (st === "paid") plan.append(" ", ext(site + "/member/dashboard.php", "Manage the subscription on harmonism.io"));
   }).catch(e => { plan.textContent = "Plan: " + (e.code === "auth" ? "sign in again to see it." : "could not be read just now."); });
 
-  // Privacy: the consent harmonism.io processes under (GDPR Art. 7(3)).
+  // What you entrust: the trust harmonism.io carries a turn under .
   const consent = el("div", { class: "hint" }, "Loading…");
-  box.append(el("h5", {}, "Privacy"),
-    el("p", { class: "hint" }, "Lodestone on harmonism.io processes what you share — health, psychological state, spiritual practice — under the consent you gave with your first message there. You can withdraw it at any time; the next message there asks again. Lodestone on this device, with a model on this device, processes nothing elsewhere. ", ext(site + "/privacy.php", "The privacy policy")),
+  box.append(el("h5", {}, "What you entrust"),
+    el("p", { class: "hint" }, "When Lodestone thinks on harmonism.io, on the free account, what you share passes through Harmonia's server, held in trust for your conversation alone and kept nowhere. You gave that trust before your first message there, and it is yours to take back; the next message there asks again. Lodestone on this device with its own model, or under your own key, sends Harmonia nothing. ", ext(site + "/privacy.php", "How Harmonia keeps it")),
     consent);
   const showConsent = d => {
     consent.innerHTML = "";
     if (d?.has_consent) {
       const when = d.consented_at ? new Date(typeof d.consented_at === "number" ? d.consented_at * 1000 : d.consented_at).toLocaleDateString() : "";
       const w = el("button", { class: "btn ghost small", type: "button", onclick: async () => {
-        if (!await ask("Withdraw your consent for Lodestone to process health, psychological and spiritual information on harmonism.io?\n\nThe next message you send to Lodestone on harmonism.io will ask for fresh consent before continuing.")) return;
+        if (!await ask("Take back the trust you gave Harmonia?\n\nLodestone on harmonism.io will ask again before your next message there. Nothing changes for Lodestone on this device or under your own key.", { ok: "Take it back" })) return;
         w.disabled = true;
-        try { const r = await accountCall("POST", "member/companion-consent.php", { action: "revoke" }); if (r.success === false) throw new Error(r.error || "refused"); showConsent({ has_consent: false }); toast("Consent withdrawn. The next message on harmonism.io asks again.", 5000); }
-        catch (e) { w.disabled = false; toast("Could not withdraw consent: " + (e.message || e), 6000); }
-      } }, "Withdraw consent");
-      consent.append(el("p", {}, el("span", { class: "acct-dot on" }), "Consent active", when ? ` · granted ${when}` : ""), w);
-    } else consent.append(el("p", {}, el("span", { class: "acct-dot" }), "No active consent. Lodestone on harmonism.io asks for it before your first message there."));
+        try { const r = await accountCall("POST", "member/companion-consent.php", { action: "revoke" }); if (r.success === false) throw new Error(r.error || "refused"); showConsent({ has_consent: false }); toast("Taken back. Lodestone on harmonism.io asks again before your next message there.", 5000); }
+        catch (e) { w.disabled = false; toast("Could not take it back: " + (e.message || e), 6000); }
+      } }, "Take it back");
+      consent.append(el("p", {}, el("span", { class: "acct-dot on" }), "Trust given", when ? ` · ${when}` : ""), w);
+    } else consent.append(el("p", {}, el("span", { class: "acct-dot" }), "Not given. Lodestone on harmonism.io asks before your first message there."));
   };
   accountCall("POST", "member/companion-consent.php", { action: "status" }).then(showConsent).catch(e => { consent.textContent = e.code === "auth" ? "Sign in again to see it." : "Could not be read just now."; });
+
+  // Telegram's memory, carried here: the code /transfer gives on
+  // Telegram was entered on harmonism.io's dashboard, which is retired. Until the
+  // Telegram server copy is purged on December 17, 2026.
+  if (Date.now() < Date.UTC(2026, 11, 18)) {
+    const tgIn = el("input", { type: "text", inputmode: "numeric", maxlength: "6", placeholder: "6-digit code", autocomplete: "one-time-code", style: "max-width:9em" });
+    const tgSay = el("p", { class: "fine" });
+    const tgGo = el("button", { class: "btn ghost", type: "button", onclick: async () => {
+      const code = tgIn.value.trim();
+      if (!/^\d{6}$/.test(code)) { tgSay.textContent = "The code is six digits."; return; }
+      tgGo.disabled = true; tgSay.textContent = "Checking…";
+      try {
+        const r = await accountCall("POST", "member/link-telegram.php", { action: "verify", code });
+        if (r.success) { tgIn.disabled = true; tgSay.textContent = r.transfer === "queued" ? "Your memory is on its way. Lodestone on Telegram will tell you when it is done; it arrives here with this account." : "Linked."; }
+        else { tgGo.disabled = false; tgSay.textContent = r.error || "The code was not accepted."; }
+      } catch (e) { tgGo.disabled = false; tgSay.textContent = e.code === "auth" ? "Sign in again, then enter the code." : "Could not be checked: " + (e.message || e); }
+    } }, "Carry it here");
+    box.append(el("h5", {}, "Telegram"),
+      el("p", { class: "hint" }, "Lodestone on Telegram is closed. To bring what it knew of you here, send /transfer with this account's email to the bot, then enter the code it gives you."),
+      el("div", { class: "row-btns" }, tgIn, tgGo), tgSay);
+  }
 
   // The Sovereignty Bundle.
   const bundle = el("div", {}, el("p", { class: "hint" }, "Loading…"));
@@ -5530,10 +5937,10 @@ async function refreshWebChip() {
   // routes not yet set up (a key to paste, an account to sign in to).
   const pc = isNative() ? await pairing.get().catch(() => null) : null;
   const show = !!S.engine && (phoneRoutesAvailable() || !!pc || localInferenceAvailable());
-  // The model is chosen in Settings, not on the chat page (October 26, 2026): it is a
-  // one-time choice, and the chip was clutter. The row stays in the page, hidden — the
-  // voice chip checks for it — and its label keeps up so nothing else changes.
-  $("#modelRow").hidden = true;
+  // The model is chosen in Settings, not on the chat page (October 26, 2026).
+  // Its name stays in view, read-only (October 29, 2026): a model switched and
+  // forgotten is otherwise invisible. Clicking the name opens Settings.
+  $("#modelRow").hidden = !show;
   if (!show) return;
   if (S.engine.kind === "hosted") await hosted.status().catch(() => null);   // the model's name, not its id
   $("#modelChipLabel").textContent = chipLabel(S.engine.describe());
@@ -5655,7 +6062,7 @@ function renderMe() {
 function renderWheel() {
   const rows = $("#wheelRows"); rows.innerHTML = "";
   for (const [k, n] of PILLARS) {
-    const s = el("select", { "aria-label": n }, LEVELS.map((l, i) => el("option", { value: i }, l)));
+    const s = el("select", { "aria-label": n, title: PILLAR_GLOSS[k] || n }, LEVELS.map((l, i) => el("option", { value: i }, i ? `${i} · ${levelName(i)}` : levelName(i))));
     s.value = S.wheel[k] || 0;
     s.onchange = async () => {
       const from = Number(S.wheel[k]) || 0, to = Number(s.value);
@@ -5687,7 +6094,7 @@ function drawWheel() {
     const v = Math.max(0, Math.min(6, Number(S.wheel[k]) || 0)) / 6;
     pts.push([+(R * v * c).toFixed(2), +(R * v * s).toFixed(2)]);
     const dot = mk("circle", { cx: R * v * c, cy: R * v * s, r: 3.2, fill: PILLAR_COLOR(k), stroke: "none" });
-    const lv = LEVELS[Number(S.wheel[k]) || 0];
+    const lv = levelName(Number(S.wheel[k]) || 0);
     dot.append(Object.assign(document.createElementNS(NS, "title"), { textContent: `${name[k]}: ${lv}` }));
     const t = mk("text", { x: (R + 9) * c, y: (R + 9) * s + 3, "text-anchor": Math.abs(c) < 0.2 ? "middle" : c > 0 ? "start" : "end", fill: PILLAR_COLOR(k) });
     t.textContent = name[k];
@@ -5696,7 +6103,7 @@ function drawWheel() {
   const pv = Math.max(0, Math.min(6, Number(S.wheel.presence) || 0)) / 6;
   refreshProfileView();
   const pc = mk("circle", { r: 6 + 14 * pv, fill: PILLAR_COLOR("presence"), "fill-opacity": 0.35, stroke: PILLAR_COLOR("presence") });
-  pc.append(Object.assign(document.createElementNS(NS, "title"), { textContent: `Presence: ${LEVELS[Number(S.wheel.presence) || 0]}` }));
+  pc.append(Object.assign(document.createElementNS(NS, "title"), { textContent: `Presence: ${levelName(Number(S.wheel.presence) || 0)}` }));
 }
 
 // ─── Library & reader ────────────────────────────────────────────────────────
@@ -5898,7 +6305,7 @@ function renderRecallSetting() {
 function renderLearnSetting() {
   const box = $("#setLearn"); if (!box) return;
   held.learnFromApps().then(on => { box.checked = on; });
-  box.onchange = async () => { await held.setLearnFromApps(box.checked); toast(box.checked ? "harmonism.io keeps what Lodestone has learned of you up to date from conversations on this device." : "Conversations on this device no longer go to harmonism.io to update what Lodestone has learned of you.", 6000); };
+  box.onchange = async () => { await held.setLearnFromApps(box.checked); toast(box.checked ? "harmonism.io keeps what Lodestone has learned of you up to date from the conversations it answered." : "Conversations harmonism.io answered on this device no longer go back to it to update what Lodestone has learned of you.", 6000); };
 }
 
 async function renderSettings() {
@@ -5945,7 +6352,7 @@ async function renderSettings() {
         if (await signOutOfAccount()) location.reload();
       } }, "Sign out"));
     } else {
-      for (const m of RECOMMENDED) sel.append(el("option", { value: m.id }, `${m.label} · ${m.maker} · tested with Lodestone`));
+      for (const m of RECOMMENDED) sel.append(el("option", { value: m.id, title: modelInfo(m.id) }, `${m.label} · ${m.maker} · tested with Lodestone`));
       for (const m of OFFERED) sel.append(el("option", { value: m.id }, `${m.label} · ${m.maker} · not recommended · doctrinal fidelity`));
       const cur = S.settings.remote?.model;
       if (cur && ![...RECOMMENDED, ...OFFERED].some(m => m.id === cur)) sel.append(el("option", { value: cur }, `${cur} · ${assess(cur).note}`));
@@ -5955,7 +6362,9 @@ async function renderSettings() {
       // the conversation moves to it.
       const other = $("#setModelOther"), oid = $("#setModelOtherId"), note = $("#setModelOtherNote");
       const prev = sel.value;
+      showModelInfo("#setModel", "#setModelInfo");
       sel.onchange = () => {
+        showModelInfo("#setModel", "#setModelInfo");
         if (sel.value === "__other") { other.hidden = false; note.hidden = true; oid.value = ""; oid.focus(); return; }
         other.hidden = note.hidden = true; reengine(sel.value);
       };
@@ -5996,7 +6405,7 @@ async function renderSettings() {
       engineStatus("Loading the model…", 0.05);
       try { await S.engine.load((p, tx) => engineStatus(shorten(tx || "Loading…"), p)); S.engineReady = true; engineStatus(null); }
       catch (e) { engineStatus(`Model unavailable: ${e.message}`, 0); }
-      updateBadge();
+      updateBadge(); refreshWebChip();
     };
   } else sel.parentElement.hidden = true;
 
@@ -6004,6 +6413,8 @@ async function renderSettings() {
   $("#setLang").value = S.settings.lang || "auto";
   if ($("#setUiLang")) $("#setUiLang").value = S.settings.uiLang || "auto";
   $("#setShowCost").checked = !!S.settings.showCost;
+  if ($("#setShowThinking")) $("#setShowThinking").checked = !!S.settings.showThinking;
+  renderHybridSetting();
   const p = S.pack.runtime.pack;
   $("#setCorpus").innerHTML = "";
   const ver = DESKTOP ? (S.desktopVersion ? `Lodestone Desktop ${S.desktopVersion}` : "") : (vname(S.appVersion) ? `Lodestone ${vname(S.appVersion)}` : "");
@@ -6253,7 +6664,13 @@ function iosWebApp() { return isIOS() && (navigator.standalone === true || match
 const NAV = { depth: 0, skip: 0, hold: false };
 function navSync() {
   if (NAV.hold) return;   // v96: not while a swipe is still moving things
-  const want = navDepth();
+  // v101: in the Home Screen app on an iPhone no layer takes an entry in the page's
+  // history. iOS turns any entry into an edge swipe drawn from an old picture of the
+  // page: from the list, a swipe from the right edge brought a second conversation
+  // sliding in over the real one. With no history, the edges are Lodestone's own
+  // swipes (left to right: back or the list; right to left: the list closes), and
+  // the back buttons step down as before.
+  const want = iosWebApp() ? 0 : navDepth();
   if (want === NAV.depth) return;
   try {
     if (want > NAV.depth) for (let i = NAV.depth; i < want; i++) history.pushState({ lodestone: i + 1 }, "");
@@ -6617,8 +7034,11 @@ async function refreshModelChip() {
   const label = modelLabelOf(q, true) || "Choose a model";
   $("#modelChipLabel").textContent = chipLabel(label);
   $("#modelChip").classList.toggle("rented", q.current.kind === "remote" || q.current.kind === "hosted");
-  $("#modelRow").hidden = true;   // chosen in Settings, as on the web (October 26, 2026)
+  $("#modelRow").hidden = false;   // named here, chosen in Settings (the name back October 29, 2026)
 }
+
+/** The model's name under the message box is read-only: a click opens Settings at the model. */
+function openModelSettings(e) { e?.stopPropagation(); renderSettings(); openDrawer("#drawerSettings"); setTimeout(() => $("#setEngine")?.scrollIntoView({ block: "start" }), 200); }
 
 function closeModelMenu() { $("#modelMenu").hidden = true; $("#modelChip").setAttribute("aria-expanded", "false"); }
 
@@ -7437,16 +7857,13 @@ function bindChrome() {
   });
   if (DESKTOP) {
     if (DESKTOP.quickModels) {
-      $("#modelChip").onclick = e => { e.stopPropagation(); toggleModelMenu(); };
-      document.addEventListener("click", e => { if (!$("#modelRow").contains(e.target)) closeModelMenu(); });
-      document.addEventListener("keydown", e => { if (e.key === "Escape") closeModelMenu(); });
+      $("#modelChip").onclick = openModelSettings;
+      window.addEventListener("focus", () => refreshModelChip());   // a model changed in setup shows on return
       refreshModelChip();
     }
   }
   if (!DESKTOP) {
-    $("#modelChip").onclick = e => { e.stopPropagation(); toggleWebMenu(); };
-    document.addEventListener("click", e => { if (!$("#modelRow").contains(e.target)) closeModelMenu(); });
-    document.addEventListener("keydown", e => { if (e.key === "Escape") closeModelMenu(); });
+    $("#modelChip").onclick = openModelSettings;
   }
   $("#input").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing && !isHandheld()) { e.preventDefault(); if (!S.busy) sendOrDictated(); } });
   $("#scrim").onclick = closeDrawers;
@@ -7503,6 +7920,8 @@ function bindChrome() {
     if (resolveUiLang(S.settings.uiLang, S.settings.lang) !== was) location.reload();
   };
   $("#setShowCost").onchange = async e => { S.settings.showCost = e.target.checked; await store.kv.set("settings", S.settings); renderChat(); };
+  if ($("#setShowThinking")) $("#setShowThinking").onchange = async e => { S.settings.showThinking = e.target.checked; await store.kv.set("settings", S.settings); syncSoon(); };
+  if ($("#setHybrid")) $("#setHybrid").onchange = async e => { S.settings.hybrid = e.target.checked; await store.kv.set("settings", S.settings); syncSoon(); };
   if (FOLDERS?.foldersAdd) {
     $("#setFolderAdd").onclick = async () => { try { if (!DESKTOP) $("#setFoldersStats").textContent = "Reading…"; renderFolders(await FOLDERS.foldersAdd()); } catch (e) { toast(String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ""), 6000); } };
     $("#setFolderReread").onclick = async () => { $("#setFoldersStats").textContent = "Reading…"; renderFolders(await FOLDERS.foldersReread()); };
@@ -7716,6 +8135,57 @@ function leave(node, ms = 200) {
   node.classList.add("leaving");
   clearTimeout(node._leaveT);
   node._leaveT = setTimeout(() => { if (node.classList.contains("leaving")) { node.classList.remove("leaving", "swiped"); node.hidden = true; } }, ms);
+}
+
+// ─── The hybrid and the depth of a turn (v107) ───────────────────────────────
+// As MunAI on Telegram ran Haiku for greetings and short exchanges and Opus for
+// everything else: on a costly model under one's own key, a light model of the same
+// maker (phone.js lightFor) answers the turns route.js finds light; any turn it cannot
+// place is classified by that light model, a failure counting as deep. Without the
+// hybrid the same reading sets how much a thinking model deliberates.
+// v107: "More info" under a model choice, for a model that has some (phone.js MODEL_INFO).
+function showModelInfo(selQ, boxQ) {
+  const box = $(boxQ), sel = $(selQ); if (!box || !sel) return;
+  const info = modelInfo(sel.value);
+  box.hidden = !info;
+  if (info) box.querySelector("p").textContent = t(info);
+}
+
+// The OpenRouter model in use: under one's own key in the browser, or rented by
+// Lodestone Desktop on OpenRouter (S.where, S.whereModel); null on any other route.
+const orModelNow = () => S.engine?.kind === "openrouter" ? S.engine.model : (S.engine?.rented?.() && S.whereModel) || null;
+const hybridLight = () => { const m = orModelNow(); return m ? lightFor(m) : null; };
+async function planTurn(text, turn, { heavy = false, fitted = null, tier = null } = {}) {
+  if (!orModelNow()) return {};
+  const r = routeTurn(text, { first: !S.history.some(m => m.role === "assistant"), retrying: !!S.retrying, heavy, witness: !!turn.w, care: !!turn.care });
+  const light = S.settings.hybrid === true ? hybridLight() : null;
+  let depth = r.depth;
+  if (depth === "ask") depth = light ? await S.engine.classify(text, light.id) : "deep";
+  if (depth !== "light" || !light) return { depth: depth === "light" ? "light" : "deep" };
+  // The light model must hold the conversation as it was fitted for the chosen one.
+  const room = orContext(light.id);
+  const need = (fitted?.messages || []).reduce((n, m) => n + estTokens(typeof m.content === "string" ? m.content : JSON.stringify(m.content)), 0) + (tier?.maxTokens || 0);
+  if (room && need > room * 0.9) return { depth: "deep" };
+  return { depth: "light", model: light.id };
+}
+// Asked once, the first time a costly model with a light line answers.
+async function offerHybrid() {
+  if (S.settings.hybrid != null) return;
+  const light = hybridLight();
+  if (!light) return;
+  const main = orName(orModelNow()), pm = orPrice(orModelNow()), pl = orPrice(light.id);
+  const times = pm && pl ? Math.round(pm / pl) : 0;
+  const yes = await ask(`Answer the light turns with ${light.label}?\n\nLodestone can answer greetings, thanks and short exchanges with ${light.label}${times > 1 ? `, about ${times} times cheaper,` : ""} and keep ${main} for every question that needs depth, every first message and every hard moment. Settings → Model changes it at any time.\n\nOK — Light turns on ${light.label}, depth on ${main}\nCancel: ${main} for everything`, { ok: "Use the hybrid", danger: false });
+  S.settings.hybrid = !!yes;
+  await store.kv.set("settings", S.settings); syncSoon();
+}
+function renderHybridSetting() {
+  const row = $("#setHybridRow"); if (!row) return;
+  const light = hybridLight();
+  row.hidden = !light;
+  if (!light) return;
+  $("#setHybrid").checked = S.settings.hybrid === true;
+  $("#setHybridText").textContent = `${t("Hybrid: greetings and short exchanges answered by")} ${light.label}, ${t("depth by")} ${orName(orModelNow())}`;
 }
 
 // ─── A question asked in Lodestone's own sheet (v89) ─────────────────────────

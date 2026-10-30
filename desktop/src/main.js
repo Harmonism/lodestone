@@ -83,6 +83,7 @@ let cfg = {
   braveKey: null,       // optional, for "Look this up online"
   folders: [],          // folders Lodestone may read, chosen in Settings → Advanced
   lifeBook: null,       // the vault whose Lodestone/ folder is the life book, chosen in Settings → Life book
+  theme: "dark",        // the app's light or dark, told by the app (set-theme), so the setup pages follow it
 };
 // The settings hold the encrypted keys, the Telegram token, the pairings: a
 // file that cannot be read is moved aside, not overwritten by the defaults at
@@ -504,7 +505,7 @@ function lockDown(w) {
 function createWindow(first = null) {
   win = new BrowserWindow({
     width: 1180, height: 820, minWidth: 380, minHeight: 520,
-    title: APP_NAME, backgroundColor: "#0a0a14", show: false,
+    title: APP_NAME, backgroundColor: themeBg(), show: false,
     icon: fs.existsSync(icon) ? icon : undefined,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -528,8 +529,12 @@ function showLauncher(screen = null, extra = {}) {
   if (!win) return;
   const cur = win.webContents.getURL();
   if (screen && cur.startsWith(origin())) returnTo = cur;
-  win.loadFile(path.join(__dirname, "launcher.html"), screen ? { query: { screen, ...extra } } : {});
+  win.loadFile(path.join(__dirname, "launcher.html"), { query: screen ? { screen, ...extra, theme: uiTheme() } : { theme: uiTheme() } });
 }
+// The setup pages wear the app's light or dark (1.17.2): they were always dark,
+// so Settings › Change model… turned a light window dark.
+const uiTheme = () => cfg.theme === "light" ? "light" : "dark";
+const themeBg = () => uiTheme() === "light" ? "#f8f6f2" : "#0a0a14";
 function openApp() { win?.loadURL(appURL()); }
 function openLibraryHome() { win?.loadURL(origin() + "/"); }
 /** Your path or the life book, in the app (October 26, 2026): at once when the app is open, else after it loads (?open=). */
@@ -544,12 +549,12 @@ function openPhoneWindow() {
   if (phoneWin) return phoneWin.focus();
   phoneWin = new BrowserWindow({
     width: 480, height: 820, resizable: true, title: "Use Lodestone from your phone",
-    parent: win || undefined, backgroundColor: "#0a0a14",
+    parent: win || undefined, backgroundColor: themeBg(),
     webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, sandbox: true },
   });
   lockDown(phoneWin);
   phoneWin.setMenuBarVisibility(false);
-  phoneWin.loadFile(path.join(__dirname, "phone.html"));
+  phoneWin.loadFile(path.join(__dirname, "phone.html"), { query: { theme: uiTheme() } });
   phoneWin.on("closed", () => { phoneWin = null; });
 }
 
@@ -577,7 +582,7 @@ let dlCtrl = null;
 let engineError = null;
 const describe = m => ({
   id: m.id, label: m.label, why: m.why, ugi: m.ugi || null, hand: m.hand, minMem: m.minMem, custom: !!m.custom,
-  repo: m.repo, page: models.page(m), untested: !!m.untested, weaker: !!m.weaker, size: models.size(m), parts: m.files.length,
+  repo: m.repo, page: models.page(m), untested: !!m.untested, weaker: !!m.weaker, lastResort: !!m.lastResort, size: models.size(m), parts: m.files.length,
   downloaded: isDownloaded(m), partial: modelBytes(m.files, dirOf(m)),
 });
 
@@ -800,11 +805,13 @@ const ACCOUNT_CALLS = [
   ["POST", "member/companion-consent.php"],          // { action: status | revoke }
   ["GET", "member/sovereignty-bundle.php?status=1"],
   ["GET", "member/dashboard-api.php?action=membership"],
+  ["POST", "member/link-telegram.php"],              // { action: verify } — Telegram's memory carried in
 ];
+const ACCOUNT_ACTIONS = { "member/companion-consent.php": ["status", "revoke", "grant"], "member/link-telegram.php": ["verify"] };
 handle("account-call", async (e, method, path, body) => {
   method = String(method || "GET").toUpperCase(); path = String(path || "");
   if (!ACCOUNT_CALLS.some(([m, p]) => m === method && p === path)) return { ok: false, code: "bad_request", message: "Not an account call." };
-  if (method === "POST" && !["status", "revoke"].includes(body?.action)) return { ok: false, code: "bad_request", message: "Not an account call." };
+  if (method === "POST" && !(ACCOUNT_ACTIONS[path] || []).includes(body?.action)) return { ok: false, code: "bad_request", message: "Not an account call." };
   if (!hosted.signedIn()) return { ok: false, code: "auth", status: 401, message: cfg.hostedExpired ? "Your harmonism.io sign-in on this computer has expired. Sign in again." : "Sign in to your harmonism.io account first." };
   try {
     const res = await hosted.call({ url: HARMONISM + "/" + path, method, headers: body != null ? { "Content-Type": "application/json" } : {}, body: body != null ? JSON.stringify(body) : undefined });
@@ -825,6 +832,20 @@ handle("share-call", async (e, body) => {
   const init = { url: HARMONISM + "/lodestone-share.php", method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
   try {
     const res = hosted.signedIn() ? await hosted.call(init) : await fetch(init.url, init);
+    const json = await res.json().catch(() => ({}));
+    return { ok: res.ok, status: res.status, json, message: res.ok ? "" : (json.error?.message || `harmonism.io answered ${res.status}.`) };
+  } catch (err) {
+    return { ok: false, code: "network", message: `harmonism.io could not be reached (${String(err.message || err)}).` };
+  }
+}, { app: true });
+
+// Share with your guide: a document sealed in the window (the key never
+// leaves it), its receipts, and revoking, to lodestone-guide.php and nowhere else.
+handle("guide-share-call", async (e, body) => {
+  if (!["create", "status", "revoke"].includes(body?.action)) return { ok: false, code: "bad_request", message: "Not a guide share call." };
+  const init = { url: HARMONISM + "/lodestone-guide.php", method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  try {
+    const res = body.action === "create" && hosted.signedIn() ? await hosted.call(init) : await fetch(init.url, init);
     const json = await res.json().catch(() => ({}));
     return { ok: res.ok, status: res.status, json, message: res.ok ? "" : (json.error?.message || `harmonism.io answered ${res.status}.`) };
   } catch (err) {
@@ -1198,6 +1219,11 @@ handle("open-models", async () => { showLauncher("models"); }, { app: true });
 handle("open-updates", async () => { showLauncher("library"); }, { app: true });
 handle("open-library", async (e, lang) => { showLauncher("library", lang && LANGS[lang] ? { lang } : {}); }, { app: true });
 handle("open-phone", async () => { openPhoneWindow(); }, { app: true });
+handle("set-theme", async (e, mode) => {
+  if (mode !== "light" && mode !== "dark") return;
+  if (cfg.theme !== mode) { cfg.theme = mode; saveCfg(); }
+  win?.setBackgroundColor(themeBg());
+}, { app: true });
 handle("web-lookup", async (e, question) => {
   if (typeof question !== "string" || !question.trim()) return [];
   return lookUp((u, init) => net.fetch(u, init), question, { braveKey: cfg.braveKey || null });

@@ -85,13 +85,12 @@ rem --- 4. The model ----------------------------------------------------------
 rem Chosen by this computer's memory, the same choice Lodestone Desktop makes:
 rem only models that hold the whole doctrinal backbone with the conversation
 rem beside it, in Lodestone's own mode (thinking off, a 32,000-token window).
-rem Under 16 GB of memory no such model fits, and this folder does not offer a
+rem Under 32 GB of memory no model tested holds it consistently, and this folder does not offer a
 rem smaller one: a confident wrong answer in Lodestone's voice is worse than none.
 rem
 rem model.txt overrides the choice: put any name Ollama can pull in it.
 set "Q35B=hf.co/unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M"
 set "G4=hf.co/mradermacher/gemma-4-26B-A4B-it-uncensored-heretic-GGUF:Q4_K_M"
-set "M14=hf.co/mistralai/Ministral-3-14B-Instruct-2512-GGUF:Q4_K_M"
 
 set "MEMGB="
 for /f %%m in ('powershell -NoProfile -Command "[int]((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory/1GB)" 2^>nul') do set "MEMGB=%%m"
@@ -101,8 +100,6 @@ if !MEMGB! GEQ 46 (
   set "AUTO=!Q35B!" & set "ABOUT=Qwen 3.5 35B - 22 GB"
 ) else if !MEMGB! GEQ 30 (
   set "AUTO=!G4!" & set "ABOUT=Gemma 4 26B, uncensored - 17 GB"
-) else if !MEMGB! GEQ 15 (
-  set "AUTO=!M14!" & set "ABOUT=Ministral 3 14B - 8 GB"
 )
 
 set "MODEL="
@@ -118,6 +115,7 @@ if /i "!MODEL!"=="qwen3:8b"  set "REPLACE=1"
 if /i "!MODEL!"=="hf.co/mradermacher/gemma-3-12b-it-norm-preserved-biprojected-abliterated-GGUF:Q4_K_M" set "REPLACE=1"
 if /i "!MODEL!"=="hf.co/mradermacher/Qwen3.5-9B-heretic-v2-GGUF:Q4_K_M" set "REPLACE=1"
 if /i "!MODEL!"=="hf.co/mradermacher/gemma-4-26B-A4B-it-uncensored-heretic-GGUF:Q8_0" set "REPLACE=1"
+if /i "!MODEL!"=="hf.co/mistralai/Ministral-3-14B-Instruct-2512-GGUF:Q4_K_M" set "REPLACE=1"
 if defined REPLACE (
   if defined MODEL echo   Replacing the earlier default ^(!MODEL!^) with a model that holds Lodestone's doctrine.
   set "MODEL=!AUTO!"
@@ -127,13 +125,13 @@ if defined REPLACE (
 )
 if not defined MODEL (
   echo.
-  echo This computer has !MEMGB! GB of memory, and Lodestone needs 16 GB to think on it.
+  echo This computer has !MEMGB! GB of memory, and Lodestone needs 32 GB to think on it.
   echo No model small enough to fit here holds Lodestone's doctrine. Open
-  echo https://harmonism.io/lodestone-app/ instead: it keeps your memory on this
+  echo https://lodestone.harmonism.io/app/ instead: it keeps your memory on this
   echo computer and thinks through a free harmonism.io account or your own
   echo OpenRouter key. To try a model of your own choosing anyway, put its name
   echo in model.txt and double-click Lodestone again.
-  start "" "https://harmonism.io/lodestone-app/"
+  start "" "https://lodestone.harmonism.io/app/"
   goto :halt
 )
 

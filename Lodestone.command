@@ -103,19 +103,17 @@ fi
 # ── 4. The model ─────────────────────────────────────────────────────────────
 # Chosen by this computer's memory, the same choice Lodestone Desktop makes: only
 # models that hold the whole doctrinal backbone with the conversation beside it,
-# in Lodestone's own mode (thinking off, a 32,000-token window). Under 16 GB of
-# memory no such model fits, and this folder does not offer a smaller one: a
+# in Lodestone's own mode (thinking off, a 32,000-token window). Under 32 GB of
+# memory no model tested holds it consistently (30 Oct 2026), and this folder does not offer a smaller one: a
 # confident wrong answer in Lodestone's voice is worse than no answer at all.
 #
 # model.txt overrides the choice: put any name Ollama can pull in it.
 Q35B="hf.co/unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M"
 G4="hf.co/mradermacher/gemma-4-26B-A4B-it-uncensored-heretic-GGUF:Q4_K_M"
-M14="hf.co/mistralai/Ministral-3-14B-Instruct-2512-GGUF:Q4_K_M"
 
 MEM_GB=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 8589934592) / 1073741824 ))
 if   [ "$MEM_GB" -ge 46 ]; then AUTO="$Q35B"; ABOUT="Qwen 3.5 35B · 22 GB"
 elif [ "$MEM_GB" -ge 30 ]; then AUTO="$G4";   ABOUT="Gemma 4 26B, uncensored · 17 GB"
-elif [ "$MEM_GB" -ge 15 ]; then AUTO="$M14";  ABOUT="Ministral 3 14B · 8 GB"
 else                            AUTO=""
 fi
 
@@ -124,7 +122,7 @@ MODEL=""
 case "$MODEL" in
   # The previous launcher wrote its own pick here. Those were vendor weights
   # that refuse on contested ground; they are replaced unless chosen again.
-  ""|qwen3:32b|qwen3:14b|qwen3:8b|*gemma-3-12b*|*Qwen3.5-9B*|*gemma-4-26B*:Q8_0)
+  ""|qwen3:32b|qwen3:14b|qwen3:8b|*gemma-3-12b*|*Qwen3.5-9B*|*gemma-4-26B*:Q8_0|*Ministral-3-14B*)
     [ -n "$MODEL" ] && dim "  Replacing the earlier default ($MODEL) with a model that holds Lodestone's doctrine."
     MODEL="$AUTO"
     [ -n "$MODEL" ] && printf '%s\n' "$MODEL" > model.txt ;;
@@ -133,13 +131,13 @@ esac
 
 if [ -z "$MODEL" ]; then
   blank
-  bold "This computer has ${MEM_GB} GB of memory, and Lodestone needs 16 GB to think on it."
+  bold "This computer has ${MEM_GB} GB of memory, and Lodestone needs 32 GB to think on it."
   plain "No model small enough to fit here holds Lodestone's doctrine. Open"
-  plain "https://harmonism.io/lodestone-app/ instead: it keeps your memory on this"
+  plain "https://lodestone.harmonism.io/app/ instead: it keeps your memory on this"
   plain "computer and thinks through a free harmonism.io account or your own"
   plain "OpenRouter key. To try a model of your own choosing anyway, put its name"
   plain "in model.txt and double-click Lodestone again."
-  open "https://harmonism.io/lodestone-app/" 2>/dev/null
+  open "https://lodestone.harmonism.io/app/" 2>/dev/null
   stop 1
 fi
 

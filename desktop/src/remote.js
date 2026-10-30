@@ -25,7 +25,7 @@
 //   ""  leaves reasoning on, for models whose providers make it mandatory,
 //       with minTokens as the floor so the reasoning does not eat the answer.
 const RECOMMENDED = [
-  { id: "deepseek/deepseek-v4.1-flash-1017", label: "DeepSeek V4.1 Flash", maker: "DeepSeek", licence: "MIT", reasoning: "medium", minTokens: 4000, note: "The default on harmonism.io" },
+  { id: "deepseek/deepseek-v4.1-flash-1017", label: "DeepSeek V4.1 Flash", maker: "DeepSeek", licence: "MIT", reasoning: "medium", minTokens: 16000, note: "The default on harmonism.io" },
   { id: "nvidia/nemotron-3-ultra-550b-a55b", label: "Nemotron 3 Ultra", maker: "NVIDIA", licence: "OpenMDW 1.1", reasoning: "none", minTokens: 0, note: "" },
 ];
 // Ids that left the tested list for a successor. A saved choice of one is
@@ -43,9 +43,18 @@ const OFFERED = [];
 const offeredFor = id => OFFERED.find(m => m.id === String(id || "").trim()) || null;
 // How a turn is run: a recommended model's settings, else an offered one's.
 const profileFor = id => recommendedFor(id) || offeredFor(id);
+// A model typed under one's own key has no profile, and may deliberate by default
+// (Claude Opus with adaptive thinking): the page's 1,200-token cap then holds the
+// reasoning and the answer together, and the reasoning eats it. A cap is a ceiling,
+// not a charge: only the tokens written are billed.
+const UNTESTED_FLOOR = 16000;
+// v107: "More info" in the model window; the same text as app/js/phone.js MODEL_INFO
+// (fidelity suite of October 24, 2026: $0.0009 an answer against $0.2092 for Claude Opus 5.5).
+const MODEL_INFO = { "deepseek/deepseek-v4.1-flash-1017": "About a tenth of a cent an answer, some forty times less than Claude Opus 5.5 on the same questions (about 4 cents an answer, and 21 to 25 cents for a conversation\u2019s first message), from Lodestone\u2019s own questions on October 24, 2026, at OpenRouter\u2019s prices. Open weights under MIT, and it held the doctrinal backbone in every test. Through OpenRouter, Lodestone sends it only to providers that keep nothing and train on nothing." };
+for (const m of RECOMMENDED) if (MODEL_INFO[m.id]) m.info = MODEL_INFO[m.id];
 const BUNDLED_RECOMMENDED = RECOMMENDED.map(m => ({ ...m }));
 /** A newer list from harmonism.io's model catalog, changed in place. */
-function setRecommended(list) { if (Array.isArray(list) && list.length) RECOMMENDED.splice(0, RECOMMENDED.length, ...list); }
+function setRecommended(list) { if (Array.isArray(list) && list.length) RECOMMENDED.splice(0, RECOMMENDED.length, ...list.map(m => (MODEL_INFO[m.id] && !m.info ? { ...m, info: MODEL_INFO[m.id] } : m))); }
 
 const PRESETS = {
   // harmonism.io's hosted models under the practitioner's account (hosted.js).
@@ -69,7 +78,7 @@ const PRESETS = {
   openrouter: {
     label: "OpenRouter", kind: "openai", baseUrl: "https://openrouter.ai/api/v1",
     model: "deepseek/deepseek-v4.1-flash-1017", keyHint: "sk-or-…", keyUrl: "https://openrouter.ai/settings/keys",
-    note: "One key for many providers, open-weight and frontier. Each provider keeps its own terms. Any model it lists can be used; the recommended ones are those hosted Lodestone runs on, tested against the doctrine. Claude Opus 5.5 and GPT-6 Astra are offered too, not recommended for doctrinal fidelity.",
+    note: "One key for many providers, open-weight and frontier. Each provider keeps its own terms. Any model it lists can be used; the recommended ones are those hosted Lodestone runs on, tested against the doctrine.",
     recommended: RECOMMENDED,
     offered: OFFERED,
   },
@@ -207,6 +216,30 @@ function translateStream(body) {
  * One turn. `o` is the OpenAI-shaped request the page sent. Resolves to a
  * fetch Response whose body is OpenAI-shaped server-sent events.
  */
+// v107: OpenRouter's public list of models, read once in the main process: whether a
+// model takes a reasoning setting (supported_parameters) and the most it may write, as
+// app/js/phone.js reads it in the page. Never awaited longer than three seconds.
+let orMetaP = null;
+function orMeta(fetchFn) {
+  if (!orMetaP) orMetaP = fetchFn("https://openrouter.ai/api/v1/models").then(r => r.ok ? r.json() : null).then(j => {
+    const m = new Map();
+    for (const x of j?.data || []) if (x.id) m.set(x.id, { thinks: Array.isArray(x.supported_parameters) ? x.supported_parameters.includes("reasoning") : null, maxOut: Number(x.top_provider?.max_completion_tokens) || null });
+    return m;
+  }).catch(() => { orMetaP = null; return new Map(); });
+  return Promise.race([orMetaP, new Promise(r => setTimeout(() => r(new Map()), 3000))]);
+}
+// Prompt caching for Claude through OpenRouter, cut where anthropicBody cuts it: before <temporal>.
+function cacheBreak(model, messages) {
+  if (!/^anthropic\//.test(model) || !Array.isArray(messages)) return messages;
+  const i = messages.findIndex(m => m.role === "system" && typeof m.content === "string" && m.content.includes("</doctrinal_backbone>"));
+  if (i < 0) return messages;
+  const s = messages[i].content, t = s.indexOf("\n\n<temporal>");
+  const cut = t > 0 ? t : s.indexOf("</doctrinal_backbone>") + "</doctrinal_backbone>".length;
+  const content = [{ type: "text", text: s.slice(0, cut), cache_control: { type: "ephemeral" } }];
+  if (s.slice(cut).trim()) content.push({ type: "text", text: s.slice(cut) });
+  return messages.map((m, k) => (k === i ? { ...m, content } : m));
+}
+
 async function chat(fetchFn, conf, key, o, signal) {
   const c = normalize(conf);
   if (c.kind === "hosted") {
@@ -220,22 +253,48 @@ async function chat(fetchFn, conf, key, o, signal) {
     if (!res.ok) throw await failure(res);
     return new Response(translateStream(res.body), { status: 200, headers: { "Content-Type": "text/event-stream" } });
   }
-  const { chat_template_kwargs, ...rest } = o;   // the bundled engine's switch, unknown elsewhere
-  const body = { ...rest, model: c.preset === "openrouter" ? current(c.model) : c.model, stream: true };
+  const { chat_template_kwargs, lodestone: lo = {}, ...rest } = o;   // the bundled engine's switch, unknown elsewhere; Lodestone's turn settings (v107, app/js/engine.js)
+  const isOR = c.preset === "openrouter";
+  // The hybrid's light turns name their own model; only on OpenRouter, where both live.
+  const model = isOR ? current(lo.model || c.model) : c.model;
+  const body = { ...rest, model, stream: true };
+  const meta = isOR ? (await orMeta(fetchFn)).get(model) || {} : {};
+  const exclude = !lo.thinking;
+  if (isOR) body.messages = cacheBreak(model, body.messages);
+  if (isOR && lo.classify) {   // the hybrid's one-word classifier
+    body.max_tokens = 16; body.temperature = 0;
+    if (meta.thinks) body.reasoning = { effort: "none", exclude: true };
+    body.provider = { data_collection: "deny" };
+    const res = await fetchFn(c.baseUrl + "/chat/completions", { method: "POST", headers: headersFor(c, key), body: JSON.stringify(body), signal });
+    if (!res.ok) throw await failure(res);
+    return res;
+  }
   // The page asks for the turn's usage (stream_options); OpenRouter adds its cost
   // in dollars when asked this way, for the conversation's running total.
   if (c.preset === "openrouter") body.usage = { include: true };
   // A recommended model on OpenRouter runs as hosted Lodestone runs it: reasoning off
   // where the provider allows it, a token floor where reasoning is mandatory, and
   // only providers that do not keep the conversation for training.
-  const r = c.preset === "openrouter" ? profileFor(c.model) : null;
+  const r = isOR ? profileFor(model) : null;
   if (r) {
     if (r.reasoning === "none") body.reasoning = { effort: "none", exclude: true };
-    else if (/^(low|medium|high)$/.test(r.reasoning)) body.reasoning = { effort: r.reasoning, exclude: true };
-    else body.reasoning = { exclude: true };
+    else if (/^(low|medium|high)$/.test(r.reasoning)) body.reasoning = { effort: r.reasoning, exclude };
+    else body.reasoning = { exclude };
     if (r.minTokens && (body.max_tokens || 0) < r.minTokens) body.max_tokens = r.minTokens;
-    body.provider = { data_collection: "deny" };
+  } else if (isOR) {
+    if ((body.max_tokens || 0) < UNTESTED_FLOOR) body.max_tokens = UNTESTED_FLOOR;
+    // v107: whether the model thinks is read from OpenRouter's list, Anthropic's name the
+    // fallback; medium for a turn that needs depth, low for a light turn and background work.
+    if (meta.thinks ?? /^anthropic\//.test(model)) body.reasoning = { effort: lo.background || lo.depth === "light" ? "low" : "medium", exclude };
   }
+  if (isOR && lo.lighter) {   // the second try of a turn whose thinking spent the cap
+    body.reasoning = { effort: "low", exclude };
+    const twice = 2 * (body.max_tokens || UNTESTED_FLOOR);
+    body.max_tokens = Math.max(body.max_tokens || 0, meta.maxOut ? Math.min(meta.maxOut, twice) : twice);
+  }
+  // v107: every OpenRouter model, tested or not, only through providers that do not keep
+  // the conversation or train on it (before, tested models alone).
+  if (isOR) body.provider = { data_collection: "deny" };
   const res = await fetchFn(c.baseUrl + "/chat/completions", { method: "POST", headers: headersFor(c, key), body: JSON.stringify(body), signal });
   if (!res.ok) throw await failure(res);
   return res;
@@ -273,4 +332,4 @@ function assess(preset, id) {
   return { tested, closed, offered, note };
 }
 
-module.exports = { RETIRED, assess, setHosted, PRESETS, RECOMMENDED, OFFERED, BUNDLED_RECOMMENDED, setRecommended, normalize, hostOf, listModels, chat, test, anthropicBody };
+module.exports = { cacheBreak, RETIRED, assess, setHosted, PRESETS, RECOMMENDED, OFFERED, BUNDLED_RECOMMENDED, setRecommended, normalize, hostOf, listModels, chat, test, anthropicBody };

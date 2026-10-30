@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Shared from Lodestone</title>
+<link rel="icon" href="/favicon.ico">
+<!-- Share with your guide: the document a practitioner sealed on their
+     device. The key is in this page's address after #, which never reaches a
+     server; the page fetches the sealed bytes, opens them here, and shows them.
+     Served at lodestone.harmonism.io/guide (post-build.sh) from lodestone-app/. -->
+<style>
+  @font-face { font-family: 'Cormorant Garamond'; font-weight: 600; font-display: swap; src: url('/app/fonts/cormorant-garamond-latin-600-normal.woff2') format('woff2'); }
+  @font-face { font-family: 'Source Sans 3'; font-weight: 200 900; font-display: swap; src: url('/app/fonts/source-sans-3-latin-wght-normal.woff2') format('woff2'); }
+  @font-face { font-family: 'Source Sans 3'; font-style: italic; font-weight: 200 900; font-display: swap; src: url('/app/fonts/source-sans-3-latin-wght-italic.woff2') format('woff2'); }
+  :root { --bg: #f8f6f2; --paper: #ffffff; --text: #2a2a3a; --muted: #6a6a80; --heading: #1a1a2e; --rule: #e3dfd8; --accent: #6E2A82; --quote: #f3f0ea; color-scheme: light dark; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0a0a14; --paper: #12122a; --text: #d8d8e8; --muted: #8888a8; --heading: #f0f0ff; --rule: #2a2a55; --accent: #CDB0E6; --quote: #1a1a3a; } }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body { margin: 0; color: var(--text); font: 17px/1.65 'Source Sans 3', system-ui, sans-serif; }
+  .bar { display: flex; align-items: center; gap: 0.55rem; max-width: 760px; margin: 0 auto; padding: 1rem 16px; color: var(--muted); font-size: 0.95rem; }
+  .bar svg { width: 22px; height: auto; flex: none; }
+  .bar a { color: inherit; text-decoration: none; }
+  main { max-width: 760px; margin: 0 auto 2rem; padding: 2rem clamp(16px, 5vw, 3rem) 2.5rem; background: var(--paper); border: 1px solid var(--rule); border-radius: 14px; }
+  /* md.js sets # as h2, ## as h3, ### as h4: the document's title, its sections, their parts. */
+  h1, h2, h3, h4 { font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 600; color: var(--heading); line-height: 1.2; }
+  h1, main h2:first-child { font-size: 2.1rem; margin: 0 0 0.3rem; }
+  h3 { font-size: 1.5rem; margin: 2.2rem 0 0.6rem; padding-top: 1.2rem; border-top: 1px solid var(--rule); }
+  h4 { font-size: 1.22rem; margin: 1.6rem 0 0.4rem; }
+  p, li { margin: 0.45rem 0; } ul, ol { padding-left: 1.3rem; }
+  blockquote { margin: 0.6rem 0; padding: 0.55rem 0.9rem; background: var(--quote); border-left: 3px solid var(--rule); border-radius: 6px; }
+  em { color: var(--muted); } strong { color: var(--heading); }
+  a { color: var(--accent); }
+  hr { border: 0; border-top: 1px solid var(--rule); margin: 2rem 0; }
+  code { font-size: 0.92em; }
+  .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1rem; max-width: 760px; margin: 0 auto 1rem; padding: 0 16px; color: var(--muted); font-size: 0.95rem; }
+  .meta span { flex: 1 1 18rem; }
+  button { font: inherit; font-size: 0.92rem; padding: 0.45rem 0.9rem; border-radius: 9px; border: 1px solid var(--rule); background: var(--paper); color: var(--text); cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  .state { text-align: center; color: var(--muted); padding: 2rem 0; }
+  .ask { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.6rem; margin-top: 1.2rem; }
+  .ask input { font: inherit; padding: 0.5rem 0.8rem; border-radius: 9px; border: 1px solid var(--rule); background: var(--bg); color: var(--text); min-width: 14rem; letter-spacing: 0.04em; }
+  .ask-err { color: #b3261e; min-height: 1.4em; }
+  @media (prefers-color-scheme: dark) { .ask-err { color: #ff8a80; } }
+  .state h1 { color: var(--heading); }
+  .foot { max-width: 760px; margin: 0 auto 3rem; padding: 0 16px; color: var(--muted); font-size: 0.88rem; }
+  .foot a { color: inherit; }
+  [hidden] { display: none !important; }
+  @media print { html, body { background: #fff; color: #000; } .bar, .meta, .foot { display: none !important; } main { border: 0; padding: 0; max-width: none; } em { color: #444; } }
+</style>
+</head>
+<body>
+<header class="bar"><svg viewBox="6 3 36 42" aria-hidden="true"><polygon fill="#B4A7D7" points="23,25 24,4 38,14"/><polygon fill="#7365A3" points="23,25 38,14 40,30"/><polygon fill="#4C3D83" points="23,25 40,30 34,44"/><polygon fill="#56488C" points="23,25 34,44 14,44"/><polygon fill="#897BB4" points="23,25 14,44 8,30"/><polygon fill="#CABEE9" points="23,25 8,30 10,14"/><polygon fill="#D9CDF5" points="23,25 10,14 24,4"/></svg><span>Shared from <a href="https://lodestone.harmonism.io/">Lodestone</a></span></header>
+<div class="meta" id="meta" hidden><span id="metaText"></span><button type="button" id="print">Print or save as PDF</button><button type="button" id="md">Download as Markdown</button></div>
+<main id="doc"><div class="state"><p>Opening the document…</p></div></main>
+<p class="foot" id="foot" hidden>The person who sent this link chose what is in it, and read it before sending. It was sealed on their device: the key is in the link itself, so Harmonia's server holds it without being able to read it. Lodestone is a free, open-source companion for the Way of Harmony; its notes are a starting point, not a verdict.</p>
+<script type="module">
+import { render } from "/app/js/md.js";
+import { unseal, parseFragment } from "/app/js/seal.js";
+
+const $ = id => document.getElementById(id);
+const doc = $("doc");
+const say = (title, text) => { doc.innerHTML = `<div class="state"><h1></h1><p></p></div>`; doc.querySelector("h1").textContent = title; doc.querySelector("p").textContent = text; };
+const fmt = iso => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
+
+async function main() {
+  const f = parseFragment(location.hash);
+  if (!f) return say("This link is incomplete", "The part after # is missing or cut. Copy the whole link again from the message it came in.");
+  // With a passphrase, it is asked before anything is fetched, and asked again,
+  // with no opening used, until it opens the document.
+  let pass = "";
+  if (f.salt) pass = await askPass();
+  // A reload in this tab does not use another opening: what was fetched is kept for the tab.
+  const keep = "lodestone-guide:" + f.id;
+  let sealed = null;
+  try { sealed = JSON.parse(sessionStorage.getItem(keep) || "null"); } catch {}
+  if (!sealed) {
+    let r, j = {};
+    try {
+      r = await fetch("/lodestone-guide.php", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "open", id: f.id }) });
+      j = await r.json().catch(() => ({}));
+    } catch { return say("The document could not be fetched", "Check the connection and reload this page."); }
+    if (!r.ok) return say(r.status === 404 ? "This link has ended" : "The document could not be fetched", j.error?.message || `The server answered ${r.status}.`);
+    sealed = j;
+    try { sessionStorage.setItem(keep, JSON.stringify(sealed)); } catch {}
+  }
+  let d;
+  for (;;) {
+    try { d = await unseal(sealed, f.key, { passphrase: pass, salt: f.salt }); break; }
+    catch {
+      if (!f.salt) return say("This link does not open", "The key in the link does not match the document. Copy the whole link again; if it still fails, ask for a new one.");
+      pass = await askPass("That passphrase does not open it. Check it with the person who sent the link; trying again uses no opening.");
+    }
+  }
+  document.title = d.title || "Shared from Lodestone";
+  doc.innerHTML = render(String(d.md || ""));
+  doc.querySelectorAll("a[href]").forEach(a => { a.target = "_blank"; a.rel = "noopener noreferrer"; });
+  const left = Number(sealed.views_left);
+  $("metaText").textContent = `This link ends on ${fmt(sealed.expires)}` + (Number.isFinite(left) ? (left > 0 ? `, and can be opened ${left} more time${left === 1 ? "" : "s"}.` : ", and this was its last opening: save it now if you need it.") : ".");
+  $("meta").hidden = false; $("foot").hidden = false;
+  $("print").onclick = () => print();
+  $("md").onclick = () => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([d.md || ""], { type: "text/markdown" }));
+    a.download = `${(d.title || "Shared from Lodestone").replace(/[\\/:*?"<>|]+/g, " ").trim()}.md`;
+    document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  };
+}
+function askPass(err = "") {
+  return new Promise(resolve => {
+    doc.innerHTML = `<div class="state"><h1>A passphrase opens this document</h1><p>The person who sent you this link will have given you a passphrase another way: aloud, or in a separate message.</p><form class="ask"><input type="text" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="Passphrase" placeholder="Passphrase"><button type="submit">Open</button></form><p class="ask-err"></p></div>`;
+    doc.querySelector(".ask-err").textContent = err;
+    const form = doc.querySelector("form"), input = form.querySelector("input");
+    input.focus();
+    form.onsubmit = e => { e.preventDefault(); if (!input.value.trim()) return; form.querySelector("button").disabled = true; doc.querySelector(".ask-err").textContent = "Opening…"; resolve(input.value); };
+  });
+}
+main();
+</script>
+</body>
+</html>

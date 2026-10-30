@@ -200,8 +200,10 @@ export async function recent(limit = RECENT) {
     if (m.meta?.crisis) continue;
     // Answered on this computer, or by no model: it stays here (October 23, 2026).
     if (m.meta?.here) continue;
-    // Switched off on this device: only the website's and the extension's own conversations go.
-    if (!fromApps && !m.meta?.source) continue;
+    // In the app, only what harmonism.io itself answered goes back to it (October 30, 2026): a turn
+    // answered under the practitioner's own key, or before this mark existed, stays here. Switched
+    // off, only the website's and the extension's own conversations go.
+    if (!m.meta?.source && (!fromApps || m.meta?.seen !== "harmonism.io")) continue;
     const id = Math.max(Number(m.ts) || Date.now(), last + 1); last = id;
     // The page a turn was about (the website, the extension): the reading trail.
     out.push({ id, role: m.role, content: String(m.content || "").slice(0, 12000), page_title: m.meta?.page || "" });
