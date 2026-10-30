@@ -200,6 +200,9 @@ export async function recent(limit = RECENT) {
     if (m.meta?.crisis) continue;
     // Answered on this computer, or by no model: it stays here (October 23, 2026).
     if (m.meta?.here) continue;
+    // Answered under the practitioner's own key, on the website or in the extension: it stays here too
+    // (October 30, 2026); the app learns from it on the device once sync brings it there.
+    if (m.meta?.own) continue;
     // In the app, only what harmonism.io itself answered goes back to it (October 30, 2026): a turn
     // answered under the practitioner's own key, or before this mark existed, stays here. Switched
     // off, only the website's and the extension's own conversations go.
@@ -284,14 +287,15 @@ const LEARN_APPS = "held:learnFromApps";
 export async function learnFromApps() { await bind(); return (await store.kv.get(LEARN_APPS)) !== false; }
 export async function setLearnFromApps(on) { await bind(); await store.kv.set(LEARN_APPS, !!on); }
 
-export async function record({ threadId = WEB_THREAD, title = "On harmonism.io", user, assistant, page = {}, source = "website", crisis = null }) {
+export async function record({ threadId = WEB_THREAD, title = "On harmonism.io", user, assistant, page = {}, source = "website", crisis = null, own = false }) {
   await bind();
   const now = Date.now();
   let t = await store.threads.get(threadId);
   if (!t) t = { id: threadId, title, created: now, updated: now, source };
-  const meta = { source, ...(crisis ? { crisis: String(crisis) } : {}), ...(page.title ? { page: String(page.title).slice(0, 200) } : {}), ...(page.url ? { url: String(page.url).slice(0, 500) } : {}) };
+  // own: answered by OpenRouter under the practitioner's key; it never goes back to harmonism.io (recent()).
+  const meta = { source, ...(own ? { own: true } : {}), ...(crisis ? { crisis: String(crisis) } : {}), ...(page.title ? { page: String(page.title).slice(0, 200) } : {}), ...(page.url ? { url: String(page.url).slice(0, 500) } : {}) };
   if (user) await store.messages.add({ threadId, role: "user", content: user, ts: now, meta });
-  if (assistant) await store.messages.add({ threadId, role: "assistant", content: assistant, ts: now + 1, meta: { ...meta, model: "harmonism.io" } });
+  if (assistant) await store.messages.add({ threadId, role: "assistant", content: assistant, ts: now + 1, meta: { ...meta, model: own ? "openrouter" : "harmonism.io" } });
   t.updated = now + 1;
   await store.threads.put(t);
 }
@@ -440,16 +444,8 @@ function byokResponse(res, key) {
   return new Response(body, { status: res.status, statusText: res.statusText, headers: res.headers });
 }
 
-/** The learning jobs the server runs after its own turns, asked for after about ten answered under the key. */
-async function learnSoon() {
-  try {
-    const n = ((await store.kv.get("held:byokLearn")) || 0) + 1;
-    await store.kv.set("held:byokLearn", n);
-    if (n < 10) return;
-    await heldCall("lodestone-learn.php", { withRecent: true });
-    await store.kv.set("held:byokLearn", 0);
-  } catch {}
-}
+// No learning job is asked of harmonism.io after a turn answered under the key (October 30, 2026):
+// what it answered never goes back there, and the app learns from it on the device.
 
 /**
  * fetch() for companion-api.php. ctx: { source: "website" | "dashboard" | "extension",
@@ -513,9 +509,8 @@ async function watch(stream, { lastUser, ctx, byok = false }) {
   if (stateEvt) await apply(stateEvt);
   if (stateEvt?.flags?.reset) { await clearThread(ctx.threadId || WEB_THREAD); await syncSoon(); return; }
   if (text) {
-    await record({ threadId: ctx.threadId || WEB_THREAD, title: ctx.title || "On harmonism.io", user: lastUser, assistant: text.replace(/\n\n_— response continues; say "go on" to continue —_$/, ""), page: ctx.page || {}, source: ctx.source || "website", crisis: stateEvt?.flags?.crisis || null });
+    await record({ threadId: ctx.threadId || WEB_THREAD, title: ctx.title || "On harmonism.io", user: lastUser, assistant: text.replace(/\n\n_— response continues; say "go on" to continue —_$/, ""), page: ctx.page || {}, source: ctx.source || "website", crisis: stateEvt?.flags?.crisis || null, own: byok });
     if (stateEvt) await store.kv.del("hp_fresh");
-    if (byok && !stateEvt?.flags?.crisis) await learnSoon();
   }
   await syncSoon();
 }
