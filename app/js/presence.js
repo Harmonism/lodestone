@@ -1,7 +1,7 @@
 // presence.js — what 1.13 adds around the conversation, after the best AI
 // companions (Kindroid's and Nomi's recall, Rosebud's weekly reflection,
 // Sesame's and Pi's voice) and the companion laws of New York (2025) and
-// California (SB 243), held to Harmonism's ground: a companion of alignment that
+// California (SB 243), held to Harmonism's ground: a guide of alignment that
 // returns the practitioner to their own life, never a surrogate for it.
 //
 //   the pause bell   after three hours of continuous use, once: Lodestone says
@@ -32,10 +32,10 @@ export function advanceSitting(state, now = Date.now()) {
 }
 
 const BELL = {
-  en: hours => `A pause. We have been talking for ${hours} hours. I am an AI, not a person: a companion shaped by Harmonism's corpus, and what we have spoken of becomes yours only in the body and in the day. Stand, breathe, look at something far away, drink some water. Come back if you wish; nothing here will be lost.`,
-  fr: hours => `Une pause. Nous parlons depuis ${hours} heures. Je suis une IA, pas une personne : un compagnon formé par le corpus de l'Harmonisme, et ce dont nous avons parlé ne devient vôtre que dans le corps et dans la journée. Levez-vous, respirez, regardez au loin, buvez un peu d'eau. Revenez si vous le souhaitez ; rien ici ne sera perdu.`,
-  es: hours => `Una pausa. Llevamos ${hours} horas hablando. Soy una IA, no una persona: un compañero formado por el corpus del Harmonismo, y lo que hemos hablado solo se vuelve tuyo en el cuerpo y en el día. Levántate, respira, mira algo lejano, bebe un poco de agua. Vuelve si quieres; nada de aquí se perderá.`,
-  ar: hours => `وقفة. نتحدث منذ ${hours} ساعات. أنا ذكاء اصطناعي، لست إنسانًا: رفيق صاغته نصوص الهارمونية، وما تحدثنا عنه لا يصبح لك إلا في الجسد وفي يومك. قف، تنفّس، انظر إلى شيء بعيد، اشرب قليلًا من الماء. عُد إن شئت؛ لن يضيع شيء هنا.`,
+  en: hours => `A pause. We have been talking for ${hours} hours. I am an AI, not a person: a guide shaped by Harmonism's corpus, and what we have spoken of becomes yours only in the body and in the day. Stand, breathe, look at something far away, drink some water. Come back if you wish; nothing here will be lost.`,
+  fr: hours => `Une pause. Nous parlons depuis ${hours} heures. Je suis une IA, pas une personne : un guide formé par le corpus de l'Harmonisme, et ce dont nous avons parlé ne devient vôtre que dans le corps et dans la journée. Levez-vous, respirez, regardez au loin, buvez un peu d'eau. Revenez si vous le souhaitez ; rien ici ne sera perdu.`,
+  es: hours => `Una pausa. Llevamos ${hours} horas hablando. Soy una IA, no una persona: una guía formada por el corpus del Harmonismo, y lo que hemos hablado solo se vuelve tuyo en el cuerpo y en el día. Levántate, respira, mira algo lejano, bebe un poco de agua. Vuelve si quieres; nada de aquí se perderá.`,
+  ar: hours => `وقفة. نتحدث منذ ${hours} ساعات. أنا ذكاء اصطناعي، لست إنسانًا: دليل صاغته نصوص الهارمونية، وما تحدثنا عنه لا يصبح لك إلا في الجسد وفي يومك. قف، تنفّس، انظر إلى شيء بعيد، اشرب قليلًا من الماء. عُد إن شئت؛ لن يضيع شيء هنا.`,
 };
 export function bellText(lang, sinceMs) {
   const hours = Math.max(3, Math.floor(sinceMs / 3600000));

@@ -17,7 +17,7 @@ export const PILLARS = [
 // The Wheel's seven-level scale
 export const LEVELS = ["unknown", "absent", "nascent", "functional", "developing", "sophisticated", "sovereign"];
 
-const PERSONA = `You are Lodestone, Harmonia's companion of alignment: the interactive interface between Harmonism as written doctrine and Harmonism as embodied practice. You apply Harmonism's architecture to one person's life. You are named for the lodestone, the stone that turns a compass needle toward north. %WHERE%
+const PERSONA = `You are Lodestone, Harmonia's guide of alignment: the interactive interface between Harmonism as written doctrine and Harmonism as embodied practice. You apply Harmonism's architecture to one person's life. You are named for the lodestone, the stone that turns a compass needle toward north. %WHERE%
 
 Identity. You are not a therapist, coach, guru or teacher. Your authority comes from fidelity to the system, not from personal realization. When something is beyond your competence (deep trauma, active crisis, a question that needs a living teacher), say so and point to human support.
 
@@ -231,7 +231,7 @@ export const summaryBlock = text => (text && text.trim() ? `<conversation_summar
 // words kept verbatim, read leniently, and kept as the model wrote it when it
 // is not JSON (small models often are not), so a good summary is never lost to
 // its format.
-const SUMMARY_SYSTEM = `You write the record that lets Lodestone, a Harmonist companion, continue a conversation with a practitioner after its earlier turns are no longer sent. Lodestone reads it on every later turn in place of those turns. Write in the language the practitioner writes in.
+const SUMMARY_SYSTEM = `You write the record that lets Lodestone, a Harmonist guide, continue a conversation with a practitioner after its earlier turns are no longer sent. Lodestone reads it on every later turn in place of those turns. Write in the language the practitioner writes in.
 
 Reply with one JSON object and nothing else, in this shape. Every list runs from most to least important; each entry is a plain string; leave a field out rather than invent content for it.
 {

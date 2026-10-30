@@ -27,7 +27,7 @@ const ASKS = new RegExp([
 /** Whether a message asks about Lodestone itself, so the manual is worth its tokens. */
 export const asksAboutLodestone = text => ASKS.test(String(text || ""));
 
-export const MANUAL = `What Lodestone is. Harmonia's companion of alignment: it reads Harmonism's corpus (the articles of harmonism.io) against one person's life. It is an app, not a person. It runs as a web app (harmonism.io/lodestone-app, which can be added to a phone's home screen), as Lodestone Desktop (Mac, Windows, Linux; harmonism.io/lodestone-desktop), as an Android app, and as a browser extension that reads the page open in the browser. Lodestone on Telegram, hosted by Harmonia, closes on 17 December 2026; Lodestone Desktop can run the practitioner's own Telegram bot instead.
+export const MANUAL = `What Lodestone is. Harmonia's guide of alignment: it reads Harmonism's corpus (the articles of harmonism.io) against one person's life. It is an app, not a person. It runs as a web app (harmonism.io/lodestone-app, which can be added to a phone's home screen), as Lodestone Desktop (Mac, Windows, Linux; harmonism.io/lodestone-desktop), as an Android app, and as a browser extension that reads the page open in the browser. Lodestone on Telegram, hosted by Harmonia, closes on 17 December 2026; Lodestone Desktop can run the practitioner's own Telegram bot instead.
 
 Where it thinks. Lodestone's corpus, memory and safeguards stay on the device; only the model that writes the answer may be elsewhere, depending on the route chosen:
 - harmonism.io account: free, ten messages a day the first month and five after, across harmonism.io, Telegram and the app; each message passes through harmonism.io and its model provider.
