@@ -1,6 +1,6 @@
 // test-whisperlocal.cjs — speech on this computer (desktop/src/whisperlocal.js),
 // without the engine or the model: a stand-in whisper-cli answers. Checks that
-// the file is the same as Quarry's copy, the WAV written, the language and the
+// the file is the same as Ark's copy, the WAV written, the language and the
 // vocabulary prompt passed, the second hearing, and nothing left on disk.
 //   node tools/test-whisperlocal.cjs
 const assert = require("assert"), fs = require("fs"), os = require("os"), path = require("path");
@@ -8,10 +8,10 @@ const W = require("../desktop/src/whisperlocal");
 let n = 0;
 const ok = async (name, fn) => { await fn(); n++; console.log("PASS " + name); };
 (async () => {
-  await ok("the same file as Quarry's (quarry-desktop/src/whisperlocal.js), when Quarry is beside", () => {
-    const quarry = path.join(__dirname, "..", "..", "quarry-desktop", "src", "whisperlocal.js");
-    if (!fs.existsSync(quarry)) return console.log("     (Quarry is not beside Lodestone: not compared)");
-    assert.strictEqual(fs.readFileSync(quarry, "utf8"), fs.readFileSync(path.join(__dirname, "..", "desktop", "src", "whisperlocal.js"), "utf8"));
+  await ok("the same file as Ark's (ark-desktop/src/whisperlocal.js), when Ark is beside", () => {
+    const ark = path.join(__dirname, "..", "..", "ark-desktop", "src", "whisperlocal.js");
+    if (!fs.existsSync(ark)) return console.log("     (Ark is not beside Lodestone: not compared)");
+    assert.strictEqual(fs.readFileSync(ark, "utf8"), fs.readFileSync(path.join(__dirname, "..", "desktop", "src", "whisperlocal.js"), "utf8"));
   });
   await ok("samples become a 16 kHz WAV; names and tags become codes", () => {
     const w = W.wav(new Float32Array([0, 1, -1]));
