@@ -139,31 +139,36 @@ echo "  ✔ preflight passed"
   read -r -p "Proceed with the release? [y/N] " a; [ "$a" = y ] || die "stopped."
 }
 
-# ── 2. publish the public tree, and tag it before it is built ────────────────
+# ── 2. extension, before the publish ─────────────────────────────────────────
+# build.sh refreshes lib/ from app/js and writes FROM-APP.txt naming the current
+# shell version — both are source-level inputs that the publish copies and tags.
+# Built after the publish (as the desktop correctly is), the tag kept a lib/
+# naming the previous shell version and the zips could never verify against it
+# (October 31, 2026: extension-v2.2.11 tagged at v111, zipped at v112).
+if [ "$DO_EXT" -eq 1 ]; then
+  step "2. Build the extension $EXT_V (its lib/ must be current before it is tagged)"
+  ( cd "$EXT" && run bash ./build.sh ) || die "build.sh failed"
+  [ "$DRY" -eq 1 ] || { echo "  ✔ dist/lodestone-{chromium,firefox}-$EXT_V.zip"; echo "  → upload both by hand: Chrome Web Store, addons.mozilla.org"; }
+fi
+
+# ── 3. publish the public tree, and tag it before the desktop is built ───────
 if [ "$DRY" -eq 0 ]; then
-  step "2. Publish the public tree (tag before build)"
+  step "3. Publish the public tree (tag before build)"
   if [ "$DO_DESKTOP" -eq 1 ]; then run bash tools/publish-public.sh --push --desktop
   else run bash tools/publish-public.sh --push; fi
   [ $? -eq 0 ] || die "publish-public.sh refused (see its message above). Nothing was built."
 else
-  step "2. Publish the public tree"
+  step "3. Publish the public tree"
   [ "$DO_DESKTOP" -eq 1 ] && run bash tools/publish-public.sh --push --desktop || run bash tools/publish-public.sh --push
 fi
 
-# ── 3. desktop ───────────────────────────────────────────────────────────────
+# ── 4. desktop ───────────────────────────────────────────────────────────────
 if [ "$DO_DESKTOP" -eq 1 ]; then
-  step "3. Build Lodestone Desktop $DESK_V for Mac (Apple silicon and Intel)"
+  step "4. Build Lodestone Desktop $DESK_V for Mac (Apple silicon and Intel)"
   run python3 tools/build-corpus.py || die "build-corpus.py failed"
   run node tools/embed-corpus.mjs   || die "embed-corpus.mjs failed"
-  ( cd desktop && run ./build-mac.sh ) || die "build-mac.sh failed"
+  ( cd desktop && run bash ./build-mac.sh ) || die "build-mac.sh failed"
   [ "$DRY" -eq 1 ] || { [ -f "desktop/release/Lodestone-$DESK_V-mac-arm64.dmg" ] || die "no Lodestone-$DESK_V-mac-arm64.dmg in desktop/release/ after the build."; echo "  ✔ desktop $DESK_V built"; }
-fi
-
-# ── 4. extension ─────────────────────────────────────────────────────────────
-if [ "$DO_EXT" -eq 1 ]; then
-  step "4. Build the extension $EXT_V (the stores are uploaded by hand)"
-  ( cd "$EXT" && run ./build.sh ) || die "build.sh failed"
-  [ "$DRY" -eq 1 ] || { echo "  ✔ dist/lodestone-{chromium,firefox}-$EXT_V.zip"; echo "  → upload both by hand: Chrome Web Store, addons.mozilla.org"; }
 fi
 
 # ── 5. deploy ────────────────────────────────────────────────────────────────
@@ -173,7 +178,7 @@ elif [ "$DO_WEB" -eq 0 ] && [ "$DO_DESKTOP" -eq 0 ]; then
   step "5. Deploy — not needed (nothing the website serves changed)"
 else
   step "5. Deploy to harmonism.io (one password prompt)"
-  ( cd "$ASTRO" && run ./deploy-companion.sh --quick ) || die "deploy-companion.sh failed"
+  ( cd "$ASTRO" && run bash ./deploy-companion.sh --quick ) || die "deploy-companion.sh failed"
 fi
 
 # ── 6. verify ────────────────────────────────────────────────────────────────
