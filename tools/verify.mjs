@@ -3,6 +3,7 @@
 //
 //   node tools/verify.mjs web     [--url https://lodestone.harmonism.io/app/] [--tag web-vN] [--repo DIR]
 //   node tools/verify.mjs desktop [PATH]                                       [--tag desktop-vX.Y.Z] [--repo DIR]
+//   node tools/verify.mjs extension [ZIP…]                                     [--tag extension-vX.Y.Z] [--repo DIR]
 //
 // web      fetches every file of the web app as lodestone.harmonism.io serves it now
 //          and compares it, byte for byte (SHA-256), with the release it claims to be
@@ -12,6 +13,10 @@
 //          its interface (web/), its own code (inside app.asar), its third-party
 //          packages (by version, against the lock file) and its model engine (engine/)
 //          with the release its version names (desktop-vX.Y.Z).
+// extension reads the store zips in ../lodestone-extension/dist/ (or the ones given,
+//          including a zip a browser store returned) and compares every file in them
+//          with the tagged extension/ tree, so what was uploaded can be checked
+//          against what was published.
 //
 // What it is compared with: the release's SHA256SUMS, fetched from Codeberg and from
 // GitHub, two hosts Harmonia does not run, which must agree. With --repo DIR, a clone
@@ -27,6 +32,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import os from "node:os";
+import { spawnSync } from "node:child_process";
 
 const HOSTS = {
   Codeberg: tag => `https://codeberg.org/harmonism/lodestone/raw/tag/${tag}/`,
@@ -36,8 +42,8 @@ const args = process.argv.slice(2);
 const mode = args[0];
 const opt = k => { const i = args.indexOf(k); return i > 0 ? args[i + 1] : null; };
 const positional = args.slice(1).filter((a, i, all) => !a.startsWith("--") && !(all[i - 1] || "").startsWith("--"))[0] || null;
-if (!["web", "desktop"].includes(mode)) {
-  console.log("Usage:\n  node tools/verify.mjs web [--url URL] [--tag web-vN] [--repo DIR]\n  node tools/verify.mjs desktop [PATH] [--tag desktop-vX.Y.Z] [--repo DIR]");
+if (!["web", "desktop", "extension"].includes(mode)) {
+  console.log("Usage:\n  node tools/verify.mjs web [--url URL] [--tag web-vN] [--repo DIR]\n  node tools/verify.mjs desktop [PATH] [--tag desktop-vX.Y.Z] [--repo DIR]\n  node tools/verify.mjs extension [ZIP…] [--tag extension-vX.Y.Z] [--repo DIR]");
   process.exit(2);
 }
 
@@ -72,11 +78,24 @@ async function released(tag) {
       if (e.isDirectory()) walk(p); else if (e.isFile()) sums.set(rel, sha(fs.readFileSync(p)));
     } };
     walk(path.join(root, "app")); walk(path.join(root, "desktop"));
+    if (fs.existsSync(path.join(root, "extension"))) walk(path.join(root, "extension"));
+    // The working folder keeps the extension beside it, not inside it; a clone
+    // has it at extension/. Both give the same list.
+    else if (fs.existsSync(path.join(root, "..", "lodestone-extension"))) {
+      const ext = path.join(root, "..", "lodestone-extension"), sums2 = new Map();
+      const walk2 = d => { for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+        if (e.name === "dist" || e.name === ".build") continue;
+        const p = path.join(d, e.name), rel = path.relative(ext, p).split(path.sep).join("/");
+        if (/\.bak-|^icons\.bak-|^store-icon.*\.bak-|\.DS_Store$|\.local$/.test(rel)) continue;
+        if (e.isDirectory()) walk2(p); else if (e.isFile()) sums.set("extension/" + rel, sha(fs.readFileSync(p)));
+      } };
+      walk2(ext);
+    }
     say(`Release: ${tag}, from the files of ${root} (hashed here).`);
     const own = path.join(root, "SHA256SUMS");
     if (fs.existsSync(own)) {
       const listed = parseSums(fs.readFileSync(own, "utf8")); let off = 0;
-      for (const [p, h] of listed) if ((p.startsWith("app/") || p.startsWith("desktop/")) && sums.has(p) && sums.get(p) !== h) off++;
+      for (const [p, h] of listed) if ((p.startsWith("app/") || p.startsWith("desktop/") || p.startsWith("extension/")) && sums.has(p) && sums.get(p) !== h) off++;
       say(off ? `  ✘ its SHA256SUMS disagrees with its own files in ${off} place(s)` : "  ✔ its SHA256SUMS agrees with its files");
     }
     return { sums, raw: p => fs.existsSync(path.join(root, p)) ? fs.readFileSync(path.join(root, p), "utf8") : null };
@@ -238,4 +257,64 @@ async function desktop() {
   report(rows.sort((a, b) => a.path.localeCompare(b.path)), notes);
 }
 
-(mode === "web" ? web() : desktop()).catch(e => fail(e.stack || e.message));
+// ─── the browser extension ───────────────────────────────────────────────────
+// A store zip (or the one a store returned) against the tagged extension/ tree.
+// The zip is read with the platform's own unzip, so nothing is installed.
+function unzipList(zip) {
+  const out = new Map();
+  const r = spawnSync("unzip", ["-Z1", zip], { encoding: "utf8" });
+  if (r.status !== 0) fail(`Could not list ${zip}: ${(r.stderr || "").trim()}`);
+  for (const name of r.stdout.split("\n").map(s => s.trim()).filter(Boolean)) {
+    if (name.endsWith("/")) continue;
+    const b = spawnSync("unzip", ["-p", zip, name], { maxBuffer: 64 * 1024 * 1024 });
+    if (b.status === 0) out.set(name, b.stdout);
+  }
+  return out;
+}
+
+async function extension() {
+  const dist = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../lodestone-extension/dist");
+  let zips = args.slice(1).filter((a, i, all) => !a.startsWith("--") && !(all[i - 1] || "").startsWith("--"));
+  if (!zips.length) {
+    if (!fs.existsSync(dist)) fail(`No zips given and no ${dist}.`);
+    zips = fs.readdirSync(dist).filter(f => f.endsWith(".zip")).sort().map(f => path.join(dist, f));
+    if (!zips.length) fail(`No .zip in ${dist}: build it first (cd ../lodestone-extension && ./build.sh).`);
+  }
+  for (const zip of zips) {
+    const m = path.basename(zip).match(/-(\d+\.\d+\.\d+)\.zip$/);
+    const tag = opt("--tag") || (m ? `extension-v${m[1]}` : null);
+    if (!tag) fail(`Cannot tell the version of ${path.basename(zip)}; give --tag extension-vX.Y.Z.`);
+    say(`\nChecking ${path.basename(zip)} against ${tag}.`);
+    const { sums } = await released(tag);
+    const files = unzipList(zip);
+    const rows = [];
+    // What a store zip legitimately leaves out: the build script, the dev docs,
+    // the Firefox manifest (swapped for manifest.json), the store assets.
+    const NOT_IN_ZIP = /(^|\/)(build\.sh|SAFARI\.md|README\.md|manifest\.firefox\.json|\.DS_Store)$|^icons\/store-/;
+    let skipped = 0;
+    // The tag's tree is the extension's own files; lib/ is copied in at build
+    // time and is part of what the zip ships, so it is compared too.
+    for (const p of [...sums.keys()].filter(p => p.startsWith("extension/")).sort()) {
+      const rel = p.slice("extension/".length);
+      const want = sums.get(p);
+      if (NOT_IN_ZIP.test(rel)) {
+        if (!files.has(rel)) { skipped++; continue; }   // rightly absent from the zip
+        // icons/store-* is absent; the dev docs are absent; but if present, compare
+      }
+      if (!files.has(rel)) { rows.push({ path: rel, state: "missing" }); continue; }
+      rows.push({ path: rel, state: sha(files.get(rel)) === want ? "same" : "different" });
+    }
+    for (const rel of files.keys()) {
+      if (!sums.has(`extension/${rel}`)) rows.push({ path: rel, state: "extra", note: "in the zip, not in the release" });
+    }
+    // The manifest the zip carries: Firefox swaps it in at build time.
+    const man = files.get("manifest.json");
+    if (man) { try { const v = JSON.parse(man.toString("utf8")).version; if (m && v !== m[1]) rows.push({ path: "manifest.json", state: "different", note: `the zip says ${v}, its name says ${m[1]}` }); } catch {} }
+    report(rows.sort((a, b) => a.path.localeCompare(b.path)), [
+      `Every file the zip holds was compared with extension/ at ${tag}. A copied module (lib/) must match the release, or the release was not what was zipped.`,
+      "Not covered: that the store serves this zip to everyone (download it from the listing and run this again on that copy).",
+    ]);
+  }
+}
+
+(mode === "web" ? web() : mode === "desktop" ? desktop() : extension()).catch(e => fail(e.stack || e.message));

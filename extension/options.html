@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Lodestone — Settings</title>
+  <style>
+    :root {
+      --bg: #0a0a14; --bg-surface: #12122a; --bg-elevated: #1a1a3a;
+      --text: #d8d8e8; --text-muted: #8888a8; --text-heading: #f0f0ff;
+      --accent: #9B3DBE; --gold: #FFBA2E; --border: #1e1e40; --border-light: #2a2a55;
+    }
+    body {
+      margin: 0; padding: 40px 20px; background: var(--bg); color: var(--text);
+      font-family: 'Source Sans 3', system-ui, sans-serif; font-size: 15px; line-height: 1.6;
+    }
+    .card {
+      max-width: 560px; margin: 0 auto; background: var(--bg-surface);
+      border: 1px solid var(--border-light); border-radius: 14px; padding: 28px 32px;
+    }
+    h1 { font-family: Georgia, 'Cormorant Garamond', serif; font-weight: 600; font-size: 26px; color: var(--text-heading); margin: 0 0 4px; }
+    .tagline { color: var(--text-muted); font-size: 13px; margin-bottom: 24px; }
+    h2 { font-size: 15px; color: var(--text-heading); margin: 26px 0 8px; border-top: 1px solid var(--border); padding-top: 20px; }
+    label.row { display: flex; align-items: center; gap: 10px; cursor: pointer; margin: 10px 0; }
+    input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--accent); }
+    .hint { color: var(--text-muted); font-size: 13px; margin: 4px 0 0 27px; }
+    button {
+      background: var(--accent); border: none; color: #fff; border-radius: 8px;
+      padding: 8px 16px; font-size: 14px; cursor: pointer; font-family: inherit; margin-top: 8px;
+    }
+    button:hover { filter: brightness(1.15); }
+    button.ghost { background: transparent; border: 1px solid var(--border-light); color: var(--text); }
+    .status { font-size: 13px; margin-top: 8px; color: var(--gold); min-height: 18px; }
+    ul.sites { list-style: none; padding: 0; margin: 8px 0 0; }
+    ul.sites li {
+      display: flex; justify-content: space-between; align-items: center;
+      background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 8px;
+      padding: 6px 12px; margin-bottom: 6px; font-size: 13px;
+    }
+    ul.sites li button { margin: 0; padding: 3px 10px; font-size: 12px; }
+    input[type=email], input[type=password] { display: block; width: 100%; box-sizing: border-box; margin: 8px 0 0; padding: 9px 11px; background: var(--bg-elevated); border: 1px solid var(--border-light); border-radius: 8px; color: var(--text); font: inherit; }
+    .empty { color: var(--text-muted); font-size: 13px; font-style: italic; }
+    code { background: var(--bg-elevated); padding: 1px 6px; border-radius: 4px; font-size: 12.5px; }
+    a { color: var(--gold); }
+      .code { font: 600 20px/1.3 ui-monospace, 'SF Mono', Menlo, Consolas, monospace; letter-spacing: .1em; padding: 12px; margin: 8px 0; border: 1px dashed #B892D4; border-radius: 10px; text-align: center; user-select: all; word-break: break-all; }
+    .linkreq { border: 1px solid #B892D4; border-radius: 10px; padding: 10px; margin: 8px 0; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Lodestone</h1>
+    <div class="tagline">The Harmonist companion, beyond harmonism.io.</div>
+    <div class="hint" style="margin-left:0"><a href="readings.html">All readings</a>: every page Lodestone has read with you, with its address.</div>
+
+    <h2>Presence</h2>
+    <div class="hint" style="margin-left:0">Lodestone comes only when called. Click the Lodestone icon in the toolbar to bring it to the page you are reading, or select a passage and right-click <em>Ask Lodestone about…</em>. Click the icon again, or the &times; on the sprite, to dismiss it. Until you call it, the extension does not run on the page.</div>
+
+    <h2>Memory</h2>
+    <div class="hint" style="margin-left:0">
+      Signed in to your harmonism.io account, Lodestone remembers what you read and discuss with it here, in the same
+      memory as Lodestone on harmonism.io, on your phone and on your computer. That memory is yours: kept in this
+      browser, carried between your devices by Lodestone sync, encrypted under a key your devices keep and hand to one
+      another, never readable on harmonism.io. Signed out, Lodestone is anonymous here and remembers nothing.
+    </div>
+    <div id="acct-out">
+      <input id="email" type="email" placeholder="Email" autocomplete="username" />
+      <input id="password" type="password" placeholder="Password" autocomplete="current-password" />
+      <button id="signin">Sign in</button>
+      <div class="hint" style="margin-left:0">No account? <a href="https://lodestone.harmonism.io/member/register.php" target="_blank" rel="noopener">Create one at harmonism.io</a>, confirm it by email, then sign in here.</div>
+    </div>
+    <div id="acct-in" hidden>
+      <div id="acct-email"></div>
+      <div id="device-offer" hidden>
+        <div class="hint" style="margin-left:0">This browser holds a Lodestone memory from before you signed in here: conversations, and what Lodestone has learned. Is it yours? If it is, it joins your memory. If not, it stays apart, and Lodestone will not ask again.</div>
+        <button id="adopt">Yes, it is mine</button>
+        <button class="ghost" id="decline">No</button>
+      </div>
+      <button class="ghost" id="signout">Sign out</button>
+      <h2>Sync</h2>
+      <div class="hint" id="sync-hint" style="margin-left:0"></div>
+      <div id="sync-off">
+        <div id="legacy" hidden>
+          <input id="pass" type="password" placeholder="Its passphrase" autocomplete="current-password" />
+        </div>
+        <button id="sync-on">Turn on sync</button>
+        <div id="link-wait" hidden>
+          <div class="hint" style="margin-left:0">On a device where your memory already syncs, open <b>Settings &rarr; Sync</b> and type this code:</div>
+          <div id="link-code" class="code"></div>
+          <div class="hint" id="link-left" style="margin-left:0"></div>
+          <details><summary class="hint" style="margin-left:0;cursor:pointer">No other device at hand?</summary>
+            <input id="recovery" type="text" placeholder="Recovery code" autocomplete="off" spellcheck="false" />
+            <button class="ghost" id="recovery-go">Use the recovery code</button>
+            <button class="ghost" id="restart">Start the synced copy again from this browser</button>
+          </details>
+          <button class="ghost" id="link-cancel">Cancel</button>
+        </div>
+        <button class="ghost" id="sync-erase" hidden>Delete the synced copy</button>
+      </div>
+      <div id="sync-on-box" hidden>
+        <div id="link-requests"></div>
+        <button id="sync-now">Sync now</button>
+        <button class="ghost" id="show-recovery">Recovery code (optional)</button>
+        <div id="recovery-out" class="code" hidden></div>
+        <button class="ghost" id="sync-stop">Turn off in this browser</button>
+      </div>
+    </div>
+    <div class="status" id="memory-status"></div>
+
+    <h2>Your own OpenRouter key</h2>
+    <div class="hint" style="margin-left:0">
+      With a key of your own from OpenRouter, Lodestone answers here under it, with no limit on messages and nothing
+      counted against the free ones. harmonism.io prepares each answer as always and hands it back; your browser sends
+      it to OpenRouter, which reads it under your account. Your key never reaches harmonism.io. The key comes from your
+      other devices when they sync it, or you can paste it here.
+    </div>
+    <div class="hint" id="byok-status" style="margin-left:0"></div>
+    <input id="byok-key" type="password" placeholder="sk-or-v1-…" autocomplete="off" spellcheck="false" />
+    <button class="ghost" id="byok-save">Keep this key here</button>
+    <button id="byok-allow">Let Lodestone reach OpenRouter</button>
+    <button class="ghost" id="byok-stop" hidden>Stop using my key here</button>
+    <div class="status" id="byok-msg"></div>
+
+  </div>
+  <script type="module" src="options.js"></script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 // whisperlocal.js — dictation on this computer, one engine for Lodestone and
-// Lode. This file is the same in lodestone/desktop/src/ and lode-desktop/src/
+// Quarry. This file is the same in lodestone/desktop/src/ and quarry-desktop/src/
 // (each app's selftest fails when the two differ); change it in one, copy it to
 // the other.
 //
@@ -15,7 +15,7 @@
 // whisper-cli, and the folder removed when it answers. Nothing is kept. With no
 // language set, Whisper names it; when what it wrote looks like a misheard term
 // of the corpus and the language has a vocabulary sentence, the clip is heard
-// once more, primed with it (whisper.cpp's --prompt), as Lode's provider path does.
+// once more, primed with it (whisper.cpp's --prompt), as Quarry's provider path does.
 
 const path = require("path");
 const fs = require("fs");
@@ -103,8 +103,8 @@ function isWav(buf) {
 const CODES = { english: "en", french: "fr", spanish: "es", arabic: "ar", portuguese: "pt", german: "de", italian: "it", chinese: "zh", japanese: "ja", hindi: "hi", russian: "ru", dutch: "nl", turkish: "tr", persian: "fa", urdu: "ur" };
 const code = l => { l = String(l || "").toLowerCase(); if (!l || l === "auto") return null; if (CODES[l]) return CODES[l]; const c = l.slice(0, 2); return /^[a-z]{2}$/.test(c) ? c : null; };
 
-// What the vocabulary prompt exists for, as Whisper mishears it unprimed (Lode's speech.js).
-const SPELLED = /\b(?:Lodestone|Lode|Harmonism|Harmonist|Harmonia|Harmonic Realism|Logos|Ṛta|Dharma|Sushumna|OpenCode|Obsidian|Codeberg)\b/gu;
+// What the vocabulary prompt exists for, as Whisper mishears it unprimed (Quarry's speech.js).
+const SPELLED = /\b(?:Lodestone|Quarry|Harmonism|Harmonist|Harmonia|Harmonic Realism|Logos|Ṛta|Dharma|Sushumna|OpenCode|Obsidian|Codeberg)\b/gu;
 const LIKELY_TERMS = /\b(?:lo[ad]{1,2}e?stones?|load ?st(?:one|ar)s?|lowdstones?|harmonis[mt]\w*|armonis\w*|harmonic realism|armand\s+et|r[iy]t+a|sushum\w*|sashamna|sushma|open ?co(?:de|at)|code ?b[ue]rg|obsidian|dh?arma)\b/iu;
 const likelyMisheard = text => LIKELY_TERMS.test(String(text).replace(SPELLED, " "));
 

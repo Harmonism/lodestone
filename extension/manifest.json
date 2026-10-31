@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Lodestone — Harmonist Companion",
+  "version": "2.2.11",
+  "description": "Take Lodestone across the web: absorb any page and receive its Harmonist reading, optionally kept in your own Lodestone memory.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Lodestone — call Lodestone to this page"
+  },
+  "options_page": "options.html",
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": [
+    "storage",
+    "contextMenus",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://harmonism.io/*",
+    "https://www.harmonism.io/*"
+  ],
+  "optional_host_permissions": [
+    "https://openrouter.ai/*"
+  ]
+}

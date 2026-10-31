@@ -1,6 +1,6 @@
 // gguf.js — what a model file needs, read from its head.
 //
-// Ported unchanged from Lode desktop (lode-desktop/src/llamaserver.js, ggufInfo, 0.10.1),
+// Ported unchanged from Lode desktop, now Quarry desktop (quarry-desktop/src/llamaserver.js, ggufInfo, 0.10.1),
 // where it told Prism ML's ternary files from standard ones on the first Mac run:
 // the standard engine refuses them ("invalid ggml type 143"). Lodestone uses
 // `needs`: "prism" runs the file on Prism ML's engine, "unknown" on none.

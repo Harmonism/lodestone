@@ -1,0 +1,64 @@
+{
+  "manifest_version": 3,
+  "name": "Lodestone — Harmonist Companion",
+  "version": "2.2.11",
+  "description": "Take Lodestone across the web: absorb any page and receive its Harmonist reading, optionally kept in your own Lodestone memory.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "lodestone@harmonism.io",
+      "strict_min_version": "121.0",
+      "data_collection_permissions": {
+        "required": [
+          "websiteContent",
+          "personalCommunications",
+          "authenticationInfo",
+          "personallyIdentifyingInfo",
+          "locationInfo"
+        ]
+      }
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Lodestone — call Lodestone to this page",
+    "theme_icons": [
+      {
+        "light": "icons/icon16-ondark.png",
+        "dark": "icons/icon16.png",
+        "size": 16
+      },
+      {
+        "light": "icons/icon32-ondark.png",
+        "dark": "icons/icon48.png",
+        "size": 32
+      }
+    ]
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "background": {
+    "scripts": [
+      "background.js"
+    ],
+    "type": "module"
+  },
+  "permissions": [
+    "storage",
+    "contextMenus",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://harmonism.io/*",
+    "https://www.harmonism.io/*"
+  ],
+  "optional_host_permissions": [
+    "https://openrouter.ai/*"
+  ]
+}

@@ -138,7 +138,7 @@ const firstFile = m => fileOf(m, m.files[0]);
 // A model on the Prism engine counts as downloaded only once that engine is here
 // too, so "Download" fetches whichever is missing. Which models need it: those
 // the catalog marks (`engine: "prism"`), and any file whose tensor types say so,
-// read from its head as Lode desktop does (gguf.js), so a ternary file added
+// read from its head as Quarry desktop does (gguf.js), so a ternary file added
 // from Hugging Face runs as well. Read once per file and remembered.
 const prismDir = () => path.join(userDir(), "engines", models.PRISM_ENGINE.tag);
 const hasPrism = () => fs.existsSync(path.join(prismDir(), EXE));
@@ -1147,7 +1147,7 @@ ipcMain.handle("bridge-reply", (e, id, ok, payload) => {
 // From Lodestone and the library
 
 // Speech on this computer (1.13.2): whisper.cpp on Metal with Whisper large v3
-// turbo, the engine and model Lode uses too (whisperlocal.js, the same file in
+// turbo, the engine and model Quarry uses too (whisperlocal.js, the same file in
 // both apps; build-whisper.sh builds the engine). Where the engine is missing
 // (a build without it), Whisper small in the page, as before.
 const speechEngine = () => whisperLocal.findEngine(whisperLocal.engineCandidates({ resources: app.isPackaged ? process.resourcesPath : null, roots: [path.join(__dirname, "..")] }));

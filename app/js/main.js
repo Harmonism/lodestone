@@ -5032,7 +5032,7 @@ async function maybeOutreach(opts = {}) {
 }
 
 // ─── Sharing with a human guide ──────────────────────────────────────────────
-// Your path → Share with your guide, and /share in a conversation (on
+// Your path → Share with your human guide, and /share in a conversation (on
 // Telegram /share gave a guide a code to read a profile on the server). The
 // practitioner chooses what goes in: the parts below, notes from the life book,
 // whole conversations, with the names in them replaced if they wish. Keys, card
@@ -5331,7 +5331,7 @@ async function revokeAllGuideLinks() {
   if (!links.length) { toast("You have no link to revoke. A file, once given, cannot be called back.", 5000); return; }
   if (!await ask(links.length === 1 ? "Revoke the link you have given? It stops opening at once, for anyone." : "Revoke every link you have given? They stop opening at once, for anyone.")) return;
   let done = 0; for (const l of links) if (await revokeGuideLink(l, { quiet: true })) done++;
-  toast(done === links.length ? "Revoked: no link you gave opens now." : "Some links could not be revoked: try again from Your path → Share with your guide.", 6000);
+  toast(done === links.length ? "Revoked: no link you gave opens now." : "Some links could not be revoked: try again from Your path → Share with your human guide.", 6000);
   drawMade(); drawLinks(false);
 }
 

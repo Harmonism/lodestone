@@ -1,0 +1,3 @@
+Copied from lodestone/app/js by build.sh. Do not edit here.
+app shell: munai-offline-shell-v111
+modules sha256: a995f6d210bd

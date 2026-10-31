@@ -1,6 +1,6 @@
 #!/bin/bash
 # Build whisper.cpp's whisper-cli for this Mac, with Metal, for on-computer
-# dictation in Lodestone and in Lode (one engine for both: Lode looks for it
+# dictation in Lodestone and in Quarry (one engine for both: Quarry looks for it
 # here, as it does for llama-server). Run on a Mac, from Terminal:
 #
 #     cd lodestone/desktop && ./build-whisper.sh            # this Mac's architecture

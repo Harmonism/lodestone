@@ -47,6 +47,10 @@ if [ -d "$DEST/.git" ]; then
 fi
 
 echo "==> copying $SRC → $DEST"
+# The extension lives beside lodestone/, not inside it (#1618): copied to
+# extension/ so its store zips are published, hashed and tagged like the rest.
+# Only what a build needs and what ships: no dist/ (built), no .build/ (scratch),
+# no icon backups (icons.bak-* would otherwise ship, #1469).
 rsync -a --delete --delete-excluded \
   --filter='P /.git/' \
   --exclude='/app/corpus/' \
@@ -61,6 +65,13 @@ rsync -a --delete --delete-excluded \
   --exclude='/mobile/android/local.properties' \
   --exclude='*.local' --exclude='*.bak-*' --exclude='*.retired-*' --exclude='.DS_Store' \
   "$SRC/" "$DEST/"
+if [ -d "$SRC/../lodestone-extension" ]; then
+  rsync -a --delete --delete-excluded \
+    --exclude='/dist/' --exclude='/.build/' --exclude='/icons.bak-*' --exclude='/store-icon*.bak-*' \
+    --exclude='*.local' --exclude='.DS_Store' \
+    "$SRC/../lodestone-extension/" "$DEST/extension/"
+  echo "    extension/ copied beside the app (its zips are built, not published)"
+fi
 if [ -n "$GITKEEP" ]; then rm -rf "$DEST/.git"; mv "$GITKEEP/.git" "$DEST/.git"; rmdir "$GITKEEP"; GITKEEP=""; fi
 
 echo "==> checking for internal or secret material"
@@ -104,6 +115,8 @@ if [ -d "$DEST/.git" ]; then echo "==> changes:"; git -C "$DEST" status --short 
 # ---- the release: one tag, one content -----------------------------------------
 SHELL_N="$(sed -nE 's/^const VERSION = "[^"]*-v([0-9]+)".*/\1/p' "$DEST/app/sw.js" | head -1)"
 DESK_V="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$DEST/desktop/package.json")"
+EXT_V=""
+[ -f "$DEST/extension/manifest.json" ] && EXT_V="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$DEST/extension/manifest.json")"
 [ -n "$SHELL_N" ] || { echo "==> refused: no VERSION in app/sw.js"; exit 1; }
 G() { git -C "$DEST" "$@"; }
 G add -A
@@ -121,6 +134,20 @@ want_tag() {   # tag, paths it covers
 }
 want_tag "web-v$SHELL_N" app
 [ "$DESKTOP" -eq 0 ] || want_tag "desktop-v$DESK_V" app desktop
+# The extension's own tag (October 31, 2026): its zips go to strangers by hand,
+# and until now nothing named what was uploaded. Tagged only when extension/
+# changed since the last extension tag, so an unrelated publish needs no new
+# extension version.
+if [ -n "$EXT_V" ]; then
+  LAST_EXT="$(G tag -l 'extension-v*' | sed 's/extension-v//' | sort -V | tail -1)"
+  if [ -z "$LAST_EXT" ] || ! G diff --cached --quiet "extension-v$LAST_EXT" -- extension; then EXT_TAG="extension-v$EXT_V"; fi
+  if [ -n "${EXT_TAG:-}" ] && G rev-parse -q --verify "refs/tags/extension-v$EXT_V" >/dev/null 2>&1; then
+    echo "==> refused: extension-v$EXT_V already names other files under extension/."
+    echo "    Bump the version in lodestone-extension/manifest.json and manifest.firefox.json, then run again."
+    exit 1
+  fi
+fi
+[ -n "${EXT_TAG:-}" ] && TAGS+=("$EXT_TAG")
 if G diff --cached --quiet; then echo "==> nothing new to commit"; else
   G -c user.name="Harmonia" -c user.email="harmonia@harmonism.io" commit -q -m "${MSG:-Lodestone: web shell v$SHELL_N, desktop $DESK_V}"
   echo "==> committed $(G rev-parse --short HEAD)"

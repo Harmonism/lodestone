@@ -195,7 +195,7 @@ const BUNDLED = [
 
 // The engine for `engine: "prism"` models: Prism ML's fork of llama.cpp, which
 // adds the ternary kernels mainline llama.cpp lacks (PTQ1_0, PQ2_0). The same
-// build Lode desktop runs (engines/prism-darwin-arm64: its llama-server is
+// build Quarry desktop runs (engines/prism-darwin-arm64: its llama-server is
 // byte-identical to this release's macOS arm64 one), where Bonsai first ran on
 // the Mac. Not bundled: fetched from the fork's GitHub release only when such a
 // model is first needed, checked against the SHA-256 GitHub publishes for each
