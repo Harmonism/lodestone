@@ -65,10 +65,16 @@ const SERVER_BACKBONE = "(harmonism.io places its current doctrinal backbone her
 // The corpus, the backbone and the persona are English; without a closing word a
 // model reads a French question among them and answers in English. Last, so it is
 // the instruction nearest the question. English is the default and needs none.
-const LANG_NAME = { fr: "French", es: "Spanish", ar: "Arabic", pt: "Portuguese", de: "German" };
+// The answer is written in the practitioner's language while the articles it cites
+// stay English, so the rule carries both halves.
+const LANG_NAME = {
+  en: "English", fr: "French", es: "Spanish", ar: "Arabic", pt: "Portuguese",
+  de: "German", zh: "Chinese", ja: "Japanese", hi: "Hindi", ru: "Russian",
+  it: "Italian", nl: "Dutch", tr: "Turkish", fa: "Persian", ur: "Urdu",
+};
 export function replyLanguage(lang) {
   const name = LANG_NAME[lang];
-  return name ? `<reply_language>The practitioner writes in ${name}. Write the whole answer in ${name}, whatever language the context above is in; quote the corpus in ${name} as well, keeping its terms as the persona sets them.</reply_language>` : "";
+  return name ? `<reply_language>The practitioner writes in ${name}. Write the whole answer in ${name}, whatever language the context above is in. You may render a quoted passage in ${name}, but keep every doctrinal term as the persona sets it (Logos, Dharma and the rest), and never soften a position in translation. The articles you cite are English: name them and address them by their English title and path (https://harmonism.io/…), never a translated one.</reply_language>` : "";
 }
 
 // ─── Time (v99) ──────────────────────────────────────────────────────────────
