@@ -509,7 +509,7 @@ async function updateCorpus() {
   L = await D.library();
   if (!r.ok) { if (r.needsLogin) $("#login").hidden = false; renderLibrary(r.message); return; }
   remote.corpus.newer = false; renderLibrary();
-  $("#corpusActions").replaceChildren(el("span", { class: "ok-box" }, "Updated. Lodestone takes it in the next time it opens; the library's companion uses it now."));
+  $("#corpusActions").replaceChildren(el("span", { class: "ok-box" }, "Updated. Lodestone takes it in the next time it opens; Lodestone on the library's pages uses it now."));
 }
 
 async function updateModels() {

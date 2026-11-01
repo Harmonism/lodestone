@@ -1,4 +1,4 @@
-# Lodestone — Harmonist Companion (Browser Extension)
+# Lodestone — Harmonist Guide (Browser Extension)
 
 The Lodestone sprite, beyond harmonism.io. Lodestone accompanies you across the web: absorb any page, receive its summary, and get the Harmonist reading — the page's claims held against Harmonism at the register the page calls for: the doctrine when it is an idea or argument, the individual path and the Wheel when it is a life, and the Architecture when it is a civilization.
 

@@ -2,7 +2,7 @@
   "name": "munai-offline-desktop",
   "productName": "Lodestone",
   "version": "1.17.2",
-  "description": "Lodestone, the Harmonist companion, and the harmonism.io library, on your own computer.",
+  "description": "Lodestone, the Harmonist guide, and the harmonism.io library, on your own computer.",
   "homepage": "https://harmonism.io/lodestone-desktop",
   "author": {
     "name": "Harmonia",
@@ -123,7 +123,7 @@
       "icon": "build/icon.png",
       "category": "Education",
       "executableName": "lodestone",
-      "synopsis": "The Harmonist companion and the Harmonism library, on your own computer",
+      "synopsis": "The Harmonist guide and the Harmonism library, on your own computer",
       "target": [
         "AppImage",
         "deb"
