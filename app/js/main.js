@@ -5760,7 +5760,7 @@ async function renderAccountBox() {
   // The Sovereignty Bundle.
   const bundle = el("div", {}, el("p", { class: "hint" }, "Loading…"));
   box.append(el("h5", {}, "Sovereignty Bundle"),
-    el("p", { class: "hint" }, "The entire publishable Harmonism corpus as Markdown, with starter templates for Cowork, Claude.ai and ChatGPT and Lodestone's doctrinal backbone, for building your own companion. Yours to keep, read offline, and bring to any AI tool."),
+    el("p", { class: "hint" }, "The entire publishable Harmonism corpus as Markdown, with starter templates for Cowork, Claude.ai and ChatGPT and Lodestone's doctrinal backbone, for building your own guide. Yours to keep, read offline, and bring to any AI tool."),
     bundle);
   accountCall("GET", "member/sovereignty-bundle.php?status=1").then(d => {
     bundle.innerHTML = "";
