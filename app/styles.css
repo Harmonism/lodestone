@@ -87,7 +87,7 @@ body {
   font-family: var(--font-body);
   background: var(--bg);
   color: var(--text);
-  font-size: 16.5px;
+  font-size: var(--fs-body, 17.5px);
   line-height: 1.62;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
@@ -1061,7 +1061,7 @@ html.foot-held .composer { padding-bottom: 6px; }
 .composer { gap: 0; }
 .composer-box { display: flex; flex-direction: column; background: var(--bg-surface); border: 1px solid var(--border-light); border-radius: 22px; transition: border-color .18s ease, box-shadow .18s ease; }
 .composer-box:focus-within { border-color: color-mix(in srgb, var(--accent-secondary) 55%, var(--border-light)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
-.composer-box textarea, .composer-box textarea:focus { display: block; width: 100%; min-height: 46px; max-height: min(240px, 38vh); padding: 13px 16px 4px; border: 0; border-radius: 22px 22px 0 0; background: transparent; outline: none; resize: none; line-height: 1.45; font-size: 16.5px; }
+.composer-box textarea, .composer-box textarea:focus { display: block; width: 100%; min-height: 46px; max-height: min(240px, 38vh); padding: 13px 16px 4px; border: 0; border-radius: 22px 22px 0 0; background: transparent; outline: none; resize: none; line-height: 1.45; font-size: var(--fs-body, 17.5px); }
 .composer-box textarea::placeholder { color: var(--text-muted); opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .composer-box .composer-tools { display: flex; align-items: center; gap: 4px; padding: 4px 8px 8px; min-width: 0; }
 .composer-box .composer-tools .web-toggle, .composer-box .composer-tools .mic { position: static; flex: 0 0 36px; width: 36px; height: 36px; border: 0; border-radius: 999px; background: transparent; color: var(--text-muted); }
@@ -1380,3 +1380,7 @@ html.kb-open #app { top: 0; }
 .msg.user .body > .reply-quote { background: rgba(255,255,255,.16); border-left-color: rgba(255,255,255,.85); }
 .msg.user .body > .reply-quote b, .msg.user .body > .reply-quote span { color: rgba(255,255,255,.92); }
 .row-menu.sheet button.del { margin-top: 4px; border-top: 1px solid var(--border); border-radius: 0 0 12px 12px; }
+
+/* November 3, 2026: the model's name and the reply mode leave the message box
+   unless Settings → Display asks for them; the box is easier to tap. */
+html:not(.composer-chips) #modelRow, html:not(.composer-chips) #voiceWrap { display: none !important; }

@@ -169,7 +169,7 @@
            answers come back), then dictation, and the last slot: a conversation by
            voice while the box is empty, Send once there is something to send. -->
       <div class="composer-box">
-        <textarea id="input" rows="1" dir="auto" placeholder="What is present for you?" aria-label="Message"></textarea>
+        <textarea id="input" rows="1" dir="auto" placeholder="Message" aria-label="Message"></textarea>
         <div class="composer-tools">
           <button class="web-toggle" id="attachBtn" type="button" aria-label="Attach a file" title="Attach a file: a PDF, a document, a photo or a recording. It is read on this device.">
           <svg viewBox="0 0 24 24"><path d="M20.5 11.5l-8.2 8.2a5 5 0 0 1-7.1-7.1l8.6-8.6a3.4 3.4 0 0 1 4.8 4.8l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9"/></svg>
@@ -542,6 +542,13 @@
               <option value="hi">हिन्दी</option><option value="ru">Русский</option>
             </select>
           </label>
+          <label>Text size
+            <select id="setFontSize">
+              <option value="small">Small</option><option value="default">Default</option>
+              <option value="large">Large</option><option value="larger">Larger</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" id="setComposerChips"> Show the model and the reply mode in the message box</label>
           <label class="check"><input type="checkbox" id="setShowCost"> Show the model and its cost under each answer</label>
           <label class="check"><input type="checkbox" id="setShowThinking"> Show the model's thinking as it answers (on OpenRouter)</label>
         </section>

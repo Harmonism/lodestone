@@ -154,7 +154,7 @@ function setWebNext(on) {
   S.webNext = !!on;
   $("#webBtn")?.setAttribute("aria-pressed", String(S.webNext));
   $("#composer")?.classList.toggle("web-armed", S.webNext);
-  const i = $("#input"); if (i) i.placeholder = S.webNext ? "Ask — Lodestone will also look online…" : "What is present for you?";
+  const i = $("#input"); if (i) i.placeholder = S.webNext ? "Ask — Lodestone will also look online…" : "Message";
 }
 
 // ─── The move from /munai-offline/ to /lodestone-app/ ───────────────────
@@ -246,7 +246,7 @@ async function boot() {
   }
   if (BRIDGE) return startBridge();
   await pairBrowserFromCode();
-  applyTheme(S.settings.theme);
+  applyTheme(S.settings.theme); applyDisplay();
   // The desktop window is served by the app's own local server, which always
   // holds the installed version, so a service worker in front of it can only
   // serve an older one — and did: 1.5.1's docked conversations (which stay
@@ -331,6 +331,16 @@ async function handleAppLink(link) {
     else toast(`Paired with ${p.name}. Choose it in the model menu under the message box.`, 6000);
     if (!$("#drawerSettings").hidden) renderSync();
   } catch (e) { toast(String(e.message || e), 7000); }
+}
+
+/** Text size and the message box's chips, Settings → Display (November 3, 2026).
+ *  The chips (the model's name, the reply mode) stay hidden unless asked for, so a
+ *  tap meant for the box does not land on them. */
+const FONT_PX = { small: 16, default: 17.5, large: 19, larger: 21 };
+function applyDisplay() {
+  const r = document.documentElement;
+  r.style.setProperty("--fs-body", (FONT_PX[S.settings?.fontSize] || FONT_PX.default) + "px");
+  r.classList.toggle("composer-chips", !!S.settings?.composerChips);
 }
 
 function applyTheme(t) {
@@ -6413,6 +6423,9 @@ async function renderSettings() {
   $("#setLang").value = S.settings.lang || "auto";
   if ($("#setUiLang")) $("#setUiLang").value = S.settings.uiLang || "auto";
   $("#setShowCost").checked = !!S.settings.showCost;
+  if ($("#setFontSize")) $("#setFontSize").value = FONT_PX[S.settings.fontSize] ? S.settings.fontSize : "default";
+  if ($("#setComposerChips")) $("#setComposerChips").checked = !!S.settings.composerChips;
+  applyDisplay();
   if ($("#setShowThinking")) $("#setShowThinking").checked = !!S.settings.showThinking;
   renderHybridSetting();
   const p = S.pack.runtime.pack;
@@ -7919,6 +7932,8 @@ function bindChrome() {
     S.settings.uiLang = e.target.value; await store.kv.set("settings", S.settings); syncSoon();
     if (resolveUiLang(S.settings.uiLang, S.settings.lang) !== was) location.reload();
   };
+  if ($("#setFontSize")) $("#setFontSize").onchange = async e => { S.settings.fontSize = e.target.value; applyDisplay(); await store.kv.set("settings", S.settings); syncSoon(); };
+  if ($("#setComposerChips")) $("#setComposerChips").onchange = async e => { S.settings.composerChips = e.target.checked; applyDisplay(); await store.kv.set("settings", S.settings); syncSoon(); };
   $("#setShowCost").onchange = async e => { S.settings.showCost = e.target.checked; await store.kv.set("settings", S.settings); renderChat(); };
   if ($("#setShowThinking")) $("#setShowThinking").onchange = async e => { S.settings.showThinking = e.target.checked; await store.kv.set("settings", S.settings); syncSoon(); };
   if ($("#setHybrid")) $("#setHybrid").onchange = async e => { S.settings.hybrid = e.target.checked; await store.kv.set("settings", S.settings); syncSoon(); };
