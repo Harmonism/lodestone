@@ -549,14 +549,14 @@ function openLibraryHome() { openSiteWindow(origin() + "/"); }
  */
 function openSiteWindow(url) {
   if (siteWin && !siteWin.isDestroyed()) { siteWin.loadURL(url); siteWin.show(); siteWin.focus(); return; }
-  const b = win && !win.isDestroyed() ? win.getBounds() : null;
+  // Opens filling the screen (maximized, not full screen), as Lodestone's own window does.
   siteWin = new BrowserWindow({
-    ...(b ? { x: b.x + 40, y: b.y + 40, width: Math.max(900, b.width - 80), height: Math.max(600, b.height - 80) } : { width: 1100, height: 780 }),
-    minWidth: 380, minHeight: 520, title: "harmonism.io", backgroundColor: themeBg(),
+    width: 1180, height: 820, minWidth: 380, minHeight: 520, title: "harmonism.io", backgroundColor: themeBg(), show: false,
     icon: fs.existsSync(icon) ? icon : undefined,
     webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: true },
   });
   lockDown(siteWin);
+  siteWin.once("ready-to-show", () => { siteWin?.maximize(); siteWin?.show(); });
   siteWin.loadURL(url);
   siteWin.on("closed", () => {
     siteWin = null;
