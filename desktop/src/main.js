@@ -459,7 +459,7 @@ const telegram = new TelegramBridge({
 
 // ─── Windows ────────────────────────────────────────────────────────────────
 
-let win = null, phoneWin = null, returnTo = null;
+let win = null, phoneWin = null, siteWin = null, returnTo = null;
 const icon = path.join(__dirname, "..", "build", "icon.png");
 
 /** A harmonism.io address the app can show from this computer, or null. */
@@ -489,15 +489,18 @@ function lockDown(w) {
     // Lodestone's own origin by its parsed origin (1.13.1): "http://127.0.0.1:47863@evil.example/" began with it.
     let own = false; try { own = new URL(url).origin === origin(); } catch {}
     const local = own ? url : localFor(url);
-    if (local) w.loadURL(local);
+    if (local && routeSite(w, local)) {}
+    else if (local) w.loadURL(local);
     else if (/^https?:/.test(url)) shell.openExternal(url);
     return { action: "deny" };
   });
   w.webContents.on("will-navigate", (e, url) => {
+    if (url.startsWith(origin() + "/") && routeSite(w, url)) { e.preventDefault(); return; }
     if (url.startsWith(origin() + "/") || ownPage(url)) return;
     e.preventDefault();
     const local = localFor(url);
-    if (local) w.loadURL(local);
+    if (local && routeSite(w, local)) {}
+    else if (local) w.loadURL(local);
     else if (/^https?:/.test(url)) shell.openExternal(url);
   });
 }
@@ -536,7 +539,42 @@ function showLauncher(screen = null, extra = {}) {
 const uiTheme = () => cfg.theme === "light" ? "light" : "dark";
 const themeBg = () => uiTheme() === "light" ? "#f8f6f2" : "#0a0a14";
 function openApp() { win?.loadURL(appURL()); }
-function openLibraryHome() { win?.loadURL(origin() + "/"); }
+function openLibraryHome() { openSiteWindow(origin() + "/"); }
+
+/**
+ * harmonism.io in a window of its own (November 4, 2026). Loaded into Lodestone's
+ * window it replaced the conversation, ended an answer being written, and closing
+ * it closed Lodestone, leaving whatever app lay behind. Closing it now returns to
+ * Lodestone; a link to Lodestone from the site brings Lodestone's window forward.
+ */
+function openSiteWindow(url) {
+  if (siteWin && !siteWin.isDestroyed()) { siteWin.loadURL(url); siteWin.show(); siteWin.focus(); return; }
+  const b = win && !win.isDestroyed() ? win.getBounds() : null;
+  siteWin = new BrowserWindow({
+    ...(b ? { x: b.x + 40, y: b.y + 40, width: Math.max(900, b.width - 80), height: Math.max(600, b.height - 80) } : { width: 1100, height: 780 }),
+    minWidth: 380, minHeight: 520, title: "harmonism.io", backgroundColor: themeBg(),
+    icon: fs.existsSync(icon) ? icon : undefined,
+    webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: true },
+  });
+  lockDown(siteWin);
+  siteWin.loadURL(url);
+  siteWin.on("closed", () => {
+    siteWin = null;
+    if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); }
+  });
+}
+
+/** Where a page of the app's own origin opens: the site in its window, Lodestone in Lodestone's. True when it was sent elsewhere. */
+function routeSite(w, url) {
+  const isApp = url.startsWith(appURL());
+  if (w === win && !isApp) { openSiteWindow(url); return true; }
+  if (w === siteWin && isApp) {
+    if (!win || win.isDestroyed()) createWindow();
+    else { if (!win.webContents.getURL().startsWith(appURL())) win.loadURL(url); if (win.isMinimized()) win.restore(); win.show(); win.focus(); }
+    return true;
+  }
+  return false;
+}
 /** Your path or the life book, in the app (October 26, 2026): at once when the app is open, else after it loads (?open=). */
 function openInApp(what) {
   if (!win) return;
@@ -1246,8 +1284,9 @@ function buildMenu() {
     { label: "Use from Your Phone…", click: openPhoneWindow },
   ];
   const nav = [
-    { label: "Back", accelerator: isMac ? "Cmd+[" : "Alt+Left", click: () => win?.webContents.navigationHistory.goBack() },
-    { label: "Forward", accelerator: isMac ? "Cmd+]" : "Alt+Right", click: () => win?.webContents.navigationHistory.goForward() },
+    // The window in front: Lodestone's, or harmonism.io's own (November 4, 2026).
+    { label: "Back", accelerator: isMac ? "Cmd+[" : "Alt+Left", click: () => (BrowserWindow.getFocusedWindow() || win)?.webContents.navigationHistory.goBack() },
+    { label: "Forward", accelerator: isMac ? "Cmd+]" : "Alt+Right", click: () => (BrowserWindow.getFocusedWindow() || win)?.webContents.navigationHistory.goForward() },
   ];
   const template = [
     ...(isMac

@@ -1002,12 +1002,12 @@ async function openLatestThread() {
 }
 
 /**
- * Another conversation, opened by the practitioner (1.13.1): not while an answer
- * is being written, which would land in the conversation opened instead.
+ * Another conversation, opened by the practitioner. Since November 4, 2026 also
+ * while an answer is being written: the answer keeps its own conversation
+ * (sendOne holds it) and is there, still arriving, when that one is opened again.
  */
 async function openThread(t) {
   if (!t) return false;
-  if (S.busy) { toast("The answer is still being written: wait for it, or Stop it, then open the other conversation.", 5000); return false; }
   S.thread = t; await loadThread();
   return true;
 }
@@ -1023,7 +1023,6 @@ async function loadThread() {
 }
 
 async function newThread() {
-  if (S.busy) { toast("The answer is still being written: wait for it, or Stop it, then begin a new conversation.", 5000); return; }
   speaker.stop();
   S.thread = null; S.history = []; rememberOpen(); restoreDraft(); clearReply(); closeFind();
   renderChat(); renderCostLine(); closeDrawers(); if (threadsDocked()) renderThreadList(); $("#input").focus();
@@ -1253,7 +1252,7 @@ async function togglePin(t) {
 }
 
 async function deleteThread(t) {
-  if (S.busy && S.thread?.id === t.id) { toast("Wait for the answer to finish before deleting this conversation."); return; }
+  if (S.busy && S.liveThread === t.id) { toast("Wait for the answer to finish before deleting this conversation."); return; }
   if (!await ask(`Delete “${t.title || "this conversation"}” from this device?`)) return;
   await store.threads.remove(t.id);
   recallDropThread(t.id);
@@ -1510,7 +1509,10 @@ function renderChat() {
   }
   const pb = pinBar(); if (pb) chat.append(pb);
   let day = "";
+  const liveHere = S.busy && S.liveNode && S.liveThread === S.thread?.id;
   for (const m of S.history) {
+    // The answer still arriving, kept as it comes (partial), is drawn by its live node below, not twice.
+    if (liveHere && S.liveAm && (m === S.liveAm || (m.id != null && m.id === S.liveAm.id) || (m.meta?.partial && m.role === "assistant"))) continue;
     const d = m.ts ? new Date(m.ts).toDateString() : day;
     if (d && d !== day) { chat.append(daySeparator(m.ts)); day = d; }
     chat.append(msgNode(m));
@@ -2273,7 +2275,7 @@ function giveBackTo(prefill) {
 }
 
 async function sendOne(prefill) {
-  let turnForNotice = null, noticesDone = false, userKept = false;
+  let turnForNotice = null, noticesDone = false, userKept = false, turnThread = null;
   const input = $("#input");
   let text = (prefill ?? input.value).trim();
   if (S.busy) { giveBackTo(prefill); return; }
@@ -2321,15 +2323,20 @@ async function sendOne(prefill) {
 
   try {
     if (!S.thread) { S.thread = await store.threads.create(text.slice(0, 60)); S.convCount = (S.convCount || 0) + 1; }
+    // The conversation this answer belongs to, held whatever the practitioner opens meanwhile
+    // (November 4, 2026). `showing` is true while that very view is still on screen.
+    const thread = S.thread, history = S.history; turnThread = thread;
+    const showing = () => S.thread?.id === thread.id && S.history === history;
+    const touch = () => { const t = S.thread?.id === thread.id ? S.thread : thread; t.updated = Date.now(); return store.threads.put(t); };
     await refreshWhere();
 
     const hp = await ingestHPCode(text);
     if (hp) {
-      const uid = await store.messages.add({ threadId: S.thread.id, role: "user", content: "(Harmonic Profile code)" }); userKept = true;
-      const am = { threadId: S.thread.id, role: "assistant", content: hp, meta: { model: "harmonic-profile" } };
+      const uid = await store.messages.add({ threadId: thread.id, role: "user", content: "(Harmonic Profile code)" }); userKept = true;
+      const am = { threadId: thread.id, role: "assistant", content: hp, meta: { model: "harmonic-profile" } };
       am.id = await store.messages.add(am);
-      S.history.push({ id: uid, threadId: S.thread.id, role: "user", content: "(Harmonic Profile code)", ts: Date.now() }, am);
-      await touchThread(); renderChat();
+      history.push({ id: uid, threadId: thread.id, role: "user", content: "(Harmonic Profile code)", ts: Date.now() }, am);
+      await touch(); renderChat();
       return;
     }
 
@@ -2350,7 +2357,7 @@ async function sendOne(prefill) {
     // a crisis or a care moment is never kept as a fact.
     const notesBefore = S.profile.notes;
     if (keep) S.profile.notes = withMemory(notesBefore, keep);
-    const turn = await prepareTurn(text, S.history, { getWeb, files, folders: true, summary: threadSummary(S.thread) });
+    const turn = await prepareTurn(text, history, { getWeb, files, folders: true, summary: threadSummary(thread) });
     turnForNotice = turn;
     if (keep) {
       S.profile.notes = notesBefore;
@@ -2359,56 +2366,55 @@ async function sendOne(prefill) {
 
     if (turn.crisis) {
       // The message is kept as stored, marked: no model reads it, now or on a later turn.
-      const um = { threadId: S.thread.id, role: "user", content: redact(text), meta: { crisis: turn.crisis.category, ...(asWritten ? { asWritten: true } : {}), ...(files.length ? { files: storedFiles(files) } : {}) } };
+      const um = { threadId: thread.id, role: "user", content: redact(text), meta: { crisis: turn.crisis.category, ...(asWritten ? { asWritten: true } : {}), ...(files.length ? { files: storedFiles(files) } : {}) } };
       um.id = await store.messages.add(um); userKept = true;
-      const am = { threadId: S.thread.id, role: "assistant", content: turn.reply, meta: { crisis: turn.crisis.category, model: "crisis-template" } };
+      const am = { threadId: thread.id, role: "assistant", content: turn.reply, meta: { crisis: turn.crisis.category, model: "crisis-template" } };
       am.id = await store.messages.add(am);
-      S.history.push(um, am);
-      await touchThread();
+      history.push(um, am);
+      await touch();
       renderChat();
       return;
     }
     const { tier, fitted, w, web, sources, images } = turn;
 
-    const um = { threadId: S.thread.id, role: "user", content: redact(text), meta: { ...hereMeta(), ...(replyTo ? { replyTo } : {}), ...(turn.care ? { care: turn.care.level } : {}), ...(asWritten ? { asWritten: true } : {}), ...(files.length ? { files: storedFiles(files) } : {}) } };
+    const um = { threadId: thread.id, role: "user", content: redact(text), meta: { ...hereMeta(), ...(replyTo ? { replyTo } : {}), ...(turn.care ? { care: turn.care.level } : {}), ...(asWritten ? { asWritten: true } : {}), ...(files.length ? { files: storedFiles(files) } : {}) } };
     um.id = await store.messages.add(um); userKept = true;
     if (replyTo) clearReply();
-    S.history.push(um);
+    history.push(um);
     recallAdd(um);
     const chat = $("#chat");
-    if (chat.querySelector(".empty")) chat.innerHTML = "";
     const unode = msgNode(um); unode.classList.add("fresh");
-    chat.append(unode);
+    if (showing()) { if (chat.querySelector(".empty")) chat.innerHTML = ""; chat.append(unode); }
 
     if (S.engine.kind === "reader") {
-      const rm = { threadId: S.thread.id, role: "assistant", content: readerReply(turn.hits), meta: { ...hereMeta(), sources, model: "corpus-only" } };
+      const rm = { threadId: thread.id, role: "assistant", content: readerReply(turn.hits), meta: { ...hereMeta(), sources, model: "corpus-only" } };
       rm.id = await store.messages.add(rm);
-      S.history.push(rm);
-      chat.append(msgNode(rm)); readFromQuestion(unode);
-      await touchThread();
+      history.push(rm);
+      if (showing()) { chat.append(msgNode(rm)); readFromQuestion(unode); }
+      await touch();
       noticesDone = true;
-      await addNotices(turn, S.thread.id, n => { S.history.push(n); chat.insertBefore(msgNode(n), chat.querySelector(".tail-space")); });   // no model here: the care line is the only safety net
+      await addNotices(turn, thread.id, n => { history.push(n); if (showing()) chat.insertBefore(msgNode(n), chat.querySelector(".tail-space")); });   // no model here: the care line is the only safety net
       return;
     }
 
     // v107: how much depth this turn needs, and on the hybrid which model answers it.
     await offerHybrid();
     const plan = await planTurn(text, turn, { heavy: !!(files.length || images?.length || web.length || webViaProvider), fitted, tier });
-    const am = { threadId: S.thread.id, role: "assistant", content: "", meta: { ...hereMeta(), sources, web: web.map(r => ({ title: r.title, url: r.url })), yours: turn.yours, model: S.engine.describe(plan.model || null), witness: w?.strength || null, ...(turn.recalled?.length ? { recalled: turn.recalled } : {}), ...(turn.care ? { care: turn.care.level } : {}) } };
+    const am = { threadId: thread.id, role: "assistant", content: "", meta: { ...hereMeta(), sources, web: web.map(r => ({ title: r.title, url: r.url })), yours: turn.yours, model: S.engine.describe(plan.model || null), witness: w?.strength || null, ...(turn.recalled?.length ? { recalled: turn.recalled } : {}), ...(turn.care ? { care: turn.care.level } : {}) } };
     // Spoken as it is written, when the mode asks for it (never in witness mode, never a crisis reply: those never reach here).
     // Not spoken: witness mode, and a care moment (1.13.1), read rather than heard in passing.
     const speak = wantsSpeech(spoke) && !w && !turn.care && (await startSpeaking(am, detectLang(text, S.settings.lang || "auto")));
     if (speak && voiceSettings().mode === "voice") voiceOnly.add(am);
-    const node = msgNode(am); node.classList.add("streaming", "fresh"); chat.append(node);
-    S.liveNode = node; S.liveThread = S.thread.id;
+    const node = msgNode(am); node.classList.add("streaming", "fresh"); if (showing()) chat.append(node);
+    S.liveNode = node; S.liveThread = thread.id; S.liveAm = am;
     const body = node.querySelector(".body"); body.classList.add("typing");
     // v99: before the first word, a quiet "Thinking…" with the seconds, not a lone caret.
     const waitStart = Date.now();
     const thinking = el("span", { class: "thinking" }, t("Thinking…"));
     body.append(thinking);
     const thinkT = setInterval(() => { const sec = Math.round((Date.now() - waitStart) / 1000); if (thinking.isConnected && sec >= 3) thinking.textContent = `${t("Thinking…")} ${sec} s`; }, 1000);
-    readFromQuestion(unode, node);
-    const paint = streamPainter(body, () => { fitTail(unode, node); noteNewBelow(); });
+    if (showing()) readFromQuestion(unode, node);
+    const paint = streamPainter(body, () => { if (node.isConnected) { fitTail(unode, node); noteNewBelow(); } });
     // v99: the answer is kept as it arrives (marked partial), so a dropped network,
     // a locked phone or a closed app leaves what was written, marked cut, not nothing.
     let saving = Promise.resolve(), savedAt = 0;
@@ -2425,13 +2431,8 @@ async function sendOne(prefill) {
     // Stop keeps what was written so far, marked as stopped, rather than losing it to an error.
     try {
       // Stop pressed while the turn was being prepared: nothing is asked of the model (1.13.1).
-      // v107: the model's thinking as it arrives, folded above the answer, when Settings → Display asks for it.
-      let reasonBox = null;
-      const onThinking = S.settings.showThinking && orModelNow() ? txt => {
-        if (!reasonBox) { reasonBox = el("details", { class: "reason" }, el("summary", {}, t("Thinking")), el("div", { class: "reason-body" })); body.parentNode.insertBefore(reasonBox, body); }
-        reasonBox.lastChild.textContent = txt;
-        am.meta.thinking = String(txt).slice(0, 8000);   // kept with the answer, so it is there when the conversation is opened again
-      } : null;
+      // The model's thinking is no longer shown (its setting removed November 4, 2026).
+      const onThinking = null;
       if (!S.stopRequested) for await (const partial of S.engine.stream(withImages(fitted.messages, images), { maxTokens: tier.maxTokens, web: webViaProvider, ...plan, onThinking })) {
         out = partial;
         if (thinking.isConnected && stripRetrievalNote(out).trim()) { clearInterval(thinkT); thinking.remove(); }
@@ -2449,13 +2450,13 @@ async function sendOne(prefill) {
           // What was written stays, marked cut, with Try again under it.
           am.content = kept; am.meta.partial = false; am.meta.cut = String(e?.message || e).slice(0, 200);
           if (am.id == null) am.id = await store.messages.add(am).catch(() => null); else await store.messages.put({ ...am }).catch(() => {});
-          S.history.push(am);
+          history.push(am);
           node.replaceWith(msgNode(am));
         } else {
           node.remove();
           if (am.id != null) { await store.messages.put({ id: am.id, threadId: am.threadId, uid: `${am.ts}-assistant`, role: "assistant", ts: am.ts, content: "", deleted: Date.now(), meta: {} }).catch(() => {}); }
         }
-        logDiag("turn", e?.message || e); showUnanswered(e); throw e;
+        logDiag("turn", e?.message || e); if (S.thread?.id === thread.id) showUnanswered(e); throw e;
       }
     }
     await saving;
@@ -2473,20 +2474,24 @@ async function sendOne(prefill) {
     const label = currentModelLabel();
     if (label) am.meta.modelLabel = label;
     if (am.id != null) await store.messages.put({ ...am }); else am.id = await store.messages.add(am);
-    S.history.push(am);
-    chat.querySelectorAll(".last-only").forEach(b => b.remove());   // Retry and Edit move to the new last exchange
+    history.push(am);
     const settle = n => (n.classList.add("settled"), n);   // v89: the finished answer takes the streaming one's place without arriving twice
-    node.replaceWith(settle(msgNode(am)));
+    if (showing()) {
+      chat.querySelectorAll(".last-only").forEach(b => b.remove());   // Retry and Edit move to the new last exchange
+      node.replaceWith(settle(msgNode(am)));
+      if (unode.isConnected) unode.replaceWith(settle(msgNode(um)));
+    }
     announce(`${t("Lodestone answered:")} ${String(out).replace(/[#*_>`]/g, "").split(/(?<=[.!?])\s/)[0].slice(0, 200)}`);
-    if (unode.isConnected) unode.replaceWith(settle(msgNode(um)));
-    await touchThread();
+    await touch();
     noticesDone = true;
-    await addNotices(turn, S.thread.id, n => { S.history.push(n); chat.insertBefore(msgNode(n), chat.querySelector(".tail-space")); });
+    await addNotices(turn, thread.id, n => { history.push(n); if (showing()) chat.insertBefore(msgNode(n), chat.querySelector(".tail-space")); });
+    // Opened again while the answer was arriving: the view is a fresh read of the store, so it is read again, whole.
+    if (!showing() && S.thread?.id === thread.id) { S.liveNode = null; S.history = await store.messages.forThread(thread.id); renderChat(); }
     renderCostLine();
     capWarn();
     afterTurn(turn);
-    scheduleSummary(S.thread, S.history, turn.fitted);
-    longWarn(S.thread, usage, turn.fitted);
+    scheduleSummary(thread, history, turn.fitted);
+    longWarn(thread, usage, turn.fitted);
   } catch (e) {
     console.error(e);
     // The trust asked before harmonism.io carries a turn : asked once, then the message goes.
@@ -2497,12 +2502,12 @@ async function sendOne(prefill) {
     if (capped || !$("#chat .msg.unanswered")) toast(capped ? String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, "") : `Something failed: ${e.message || e}`, capped ? 15000 : undefined);
     }
     // The answer failed, the care line does not: it was never the model's to give.
-    if (turnForNotice?.care?.level === "refer" && !noticesDone && S.thread) {
+    if (turnForNotice?.care?.level === "refer" && !noticesDone && turnThread) {
       noticesDone = true;
-      await addNotices({ ...turnForNotice }, S.thread.id, n => { S.history.push(n); $("#chat").append(msgNode(n)); }).catch(() => {});
+      await addNotices({ ...turnForNotice }, turnThread.id, n => { if (S.thread?.id === turnThread.id) { S.history.push(n); $("#chat").append(msgNode(n)); } }).catch(() => {});
     }
   } finally {
-    S.busy = false; setSending(false); S.liveNode = null; S.liveThread = null;
+    S.busy = false; setSending(false); S.liveNode = null; S.liveThread = null; S.liveAm = null;
     if (prefill == null && !userKept && text && !$("#input").value.includes(text)) giveBackTo(text);   // v99: words never stored go back to the box
     if (threadsDocked()) renderThreadList();
     syncSoon(5000);
@@ -6401,8 +6406,49 @@ async function renderSettings() {
     S.where = info.remote?.host || null; S.whereModel = info.remote?.model || "";
     kvBox.append(el("div", {}, el("b", {}, S.where ? `Rented from ${S.where}, with your key` : "On this computer")), el("div", {}, info.label || "Lodestone's model"),
       el("div", {}, "Context 32,768 tokens · full doctrinal backbone"));
-    sel.parentElement.hidden = true;
-    $("#setChangeTier").textContent = "Change model…";
+    // The model chosen here, in place (November 4, 2026): this computer's models, the
+    // harmonism.io account's, and those rented under the key, as the chip's menu listed them.
+    const q = await DESKTOP.quickModels().catch(() => null);
+    sel.parentElement.hidden = !q;
+    if (q) {
+      S.models = q;
+      const cur = q.current, opts = [];
+      const grp = (label, items) => { if (items.length) sel.append(el("optgroup", { label }, items)); };
+      const opt = (value, label, sub) => { opts.push({ value, label }); return el("option", { value }, sub ? `${label} · ${sub}` : label); };
+      grp("On this computer — nothing leaves it", q.local.map(m => opt(`local:${m.id}`, m.label, m.hand)));
+      if (q.hosted) grp("Your harmonism.io account", (q.hostedModels || []).map(m => opt(`hosted:${m.id}`, m.label, m.maker)));
+      if (q.remote?.hasKey) {
+        const seen = new Set(), items = [];
+        for (const m of q.recommended || []) { seen.add(m.id); items.push(opt(`remote:${m.id}`, m.label, `${m.maker} · tested with Lodestone`)); }
+        for (const m of q.offered || []) { seen.add(m.id); items.push(opt(`remote:${m.id}`, m.label, `${m.maker} · not recommended`)); }
+        for (const id of q.recent || []) if (!seen.has(id)) { seen.add(id); items.push(opt(`remote:${id}`, id, q.assess?.[id]?.note || "not tested")); }
+        if (cur.kind === "remote" && cur.model && !seen.has(cur.model)) items.push(opt(`remote:${cur.model}`, cur.model, "in use"));
+        items.push(el("option", { value: "__other" }, `Another model on ${q.remote.host}…`));
+        grp(`Rented from ${q.remote.host}, with your key`, items);
+      } else grp("Rented under your own key", [el("option", { value: "__keys", disabled: true }, "Add an OpenRouter key in Models and keys…")]);
+      const now = cur.kind === "local" ? `local:${cur.id}` : cur.kind === "hosted" ? `hosted:${cur.model}` : cur.kind === "remote" ? `remote:${cur.model}` : "";
+      sel.value = now;
+      const other = $("#setModelOther"), oid = $("#setModelOtherId"), note = $("#setModelOtherNote");
+      oid.placeholder = "maker/model, as the provider names it";
+      sel.onchange = async () => {
+        if (sel.value === "__other") { other.hidden = false; note.hidden = true; oid.value = ""; oid.focus(); return; }
+        other.hidden = note.hidden = true;
+        const [kind, ...rest] = sel.value.split(":"), id = rest.join(":");
+        const label = opts.find(o => o.value === sel.value)?.label || id;
+        if (S.busy) { sel.value = now; toast("Wait for this answer to finish, then change the model."); return; }
+        await switchModelTo(kind === "local" ? { kind, id } : { kind, model: id }, label);
+        renderSettings();
+      };
+      const useOther = async () => {
+        const id = oid.value.trim(); if (!id) return;
+        if (S.busy) { toast("Wait for this answer to finish, then change the model."); return; }
+        await switchModelTo({ kind: "remote", model: id }, id);
+        renderSettings();
+      };
+      $("#setModelOtherUse").onclick = useOther;
+      oid.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); useOther(); } else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); sel.value = now; other.hidden = note.hidden = true; } };
+    }
+    $("#setChangeTier").textContent = "Models and keys…";
     $("#setCheckUpdate").textContent = "Check for updates";
     S.desktopVersion = info.version || null;
   } else if (t.engine === "webllm") {
@@ -6426,7 +6472,6 @@ async function renderSettings() {
   if ($("#setFontSize")) $("#setFontSize").value = FONT_PX[S.settings.fontSize] ? S.settings.fontSize : "default";
   if ($("#setComposerChips")) $("#setComposerChips").checked = !!S.settings.composerChips;
   applyDisplay();
-  if ($("#setShowThinking")) $("#setShowThinking").checked = !!S.settings.showThinking;
   renderHybridSetting();
   const p = S.pack.runtime.pack;
   $("#setCorpus").innerHTML = "";
@@ -7897,6 +7942,7 @@ function bindChrome() {
     $("#input").value = `Walk me through "${a.t}" from where I stand.`; autosize(); $("#input").focus();
   };
   $("#btnMe").onclick = $("#btnPathSide").onclick = $("#btnPathTop").onclick = () => openMe();
+
   // The vault, at the foot of the conversations: the life book in Your path, where it is read and arranged.
   $("#btnVaultSide").onclick = $("#setLbBrowse").onclick = () => openLifeBook();
   bindLifeBookPanel();
@@ -7935,7 +7981,6 @@ function bindChrome() {
   if ($("#setFontSize")) $("#setFontSize").onchange = async e => { S.settings.fontSize = e.target.value; applyDisplay(); await store.kv.set("settings", S.settings); syncSoon(); };
   if ($("#setComposerChips")) $("#setComposerChips").onchange = async e => { S.settings.composerChips = e.target.checked; applyDisplay(); await store.kv.set("settings", S.settings); syncSoon(); };
   $("#setShowCost").onchange = async e => { S.settings.showCost = e.target.checked; await store.kv.set("settings", S.settings); renderChat(); };
-  if ($("#setShowThinking")) $("#setShowThinking").onchange = async e => { S.settings.showThinking = e.target.checked; await store.kv.set("settings", S.settings); syncSoon(); };
   if ($("#setHybrid")) $("#setHybrid").onchange = async e => { S.settings.hybrid = e.target.checked; await store.kv.set("settings", S.settings); syncSoon(); };
   if (FOLDERS?.foldersAdd) {
     $("#setFolderAdd").onclick = async () => { try { if (!DESKTOP) $("#setFoldersStats").textContent = "Reading…"; renderFolders(await FOLDERS.foldersAdd()); } catch (e) { toast(String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ""), 6000); } };
