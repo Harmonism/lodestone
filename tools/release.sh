@@ -124,6 +124,13 @@ fi
 if [ "$DO_DESKTOP" -eq 1 ]; then
   [ -f app/corpus/corpus.json ] || echo "  · no corpus pack yet — build-corpus.py will make one"
   [ -f desktop/site-en/index.html ] || die "no English library in desktop/site-en/ — see Deploy Commands § build-mac.sh (unpack ../.site-packs/en.tar.gz)."
+  # The installers carry desktop/site-en/; it must be the latest pack, and the latest
+  # pack must be today's built site (1.17.3 shipped the 22 Oct library, 1.17.5 the 1 Nov one).
+  if [ -n "$(find "$ASTRO/dist" -name '*.html' -not -path "$ASTRO/dist/lodestone-app/*" -newer .site-packs/index.json -print -quit 2>/dev/null)" ]; then
+    die "harmonia-astro/dist/ is newer than .site-packs/ — run: python3 tools/build-site-packs.py --dist ../harmonia-astro/dist --out .site-packs, then unpack en.tar.gz into desktop/site-en/ (desktop/README.md § Build)."
+  fi
+  python3 -c 'import json,sys; a=json.load(open(".site-packs/index.json"))["packs"]["en"]["sha256"]; b=json.load(open("desktop/site-en/.pack.json"))["sha256"]; sys.exit(a!=b)' \
+    || die "desktop/site-en/ is not the latest .site-packs/en.tar.gz — unpack it (desktop/README.md § Build)."
 fi
 
 for entry in "win-x64:windows-setup.exe" "linux-appimage:linux-x86_64.AppImage" "linux-deb:linux-amd64.deb"; do
