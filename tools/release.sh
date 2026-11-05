@@ -178,7 +178,22 @@ elif [ "$DO_WEB" -eq 0 ] && [ "$DO_DESKTOP" -eq 0 ]; then
   step "5. Deploy — not needed (nothing the website serves changed)"
 else
   step "5. Deploy to harmonism.io (one password prompt)"
-  ( cd "$ASTRO" && run bash ./deploy-companion.sh --quick ) || die "deploy-companion.sh failed"
+  # Step 3 already published and tagged; deploy-companion.sh would copy, scan and
+  # hash the whole public tree again to find nothing new (November 3, 2026). What
+  # its second pass guarded, app/ changing between the tag and the upload, is
+  # checked here with the same comparison preflight uses, without the copy; when
+  # app/ did move, the full publish runs as before and decides.
+  SKIP_PUB=0
+  if [ "$DRY" -eq 0 ] && [ -f "$PUB/app/sw.js" ]; then
+    if [ -z "$(rsync -ain --delete --exclude='corpus/' --exclude='vendor/models/' --exclude='*.bak-*' --exclude='.DS_Store' app/ "$PUB/app/" 2>/dev/null | grep -v '^\.d')" ]; then
+      SKIP_PUB=1
+    else
+      echo "  · app/ moved after step 3: the deploy publishes again before it uploads"
+    fi
+  fi
+  # Step 6 runs the live check when the web app is in the release; skip the deploy's own.
+  SKIP_VER=0; [ "$DO_WEB" -eq 1 ] && SKIP_VER=1
+  ( cd "$ASTRO" && export LODESTONE_SKIP_PUBLISH=$SKIP_PUB LODESTONE_SKIP_VERIFY=$SKIP_VER && run bash ./deploy-companion.sh --quick ) || die "deploy-companion.sh failed"
 fi
 
 # ── 6. verify ────────────────────────────────────────────────────────────────
