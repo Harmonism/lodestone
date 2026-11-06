@@ -201,6 +201,8 @@ npm run dist:linux && npm run dist:win      # on Linux (Windows needs 32- and 64
 npm run release                             # copies installers into release/
 ```
 
+`site-en/` must be the latest `../.site-packs/en.tar.gz`, and the packs must be built from the current `harmonia-astro/dist/` (`python3 tools/build-site-packs.py --dist ../harmonia-astro/dist --out .site-packs`): `pack-library.js` and `tools/release.sh --desktop` refuse otherwise.
+
 The installers carry what is in `../app/corpus/` and `site-en/` at build time; the app updates both later on request. Run `node pack-library.js` after changing `site-en/` (the `dist:*` scripts and `build-mac.sh` do it).
 
 ## Publishing on harmonism.io
