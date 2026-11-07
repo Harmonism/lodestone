@@ -97,7 +97,14 @@
     },
     "dmg": {
       "title": "Lodestone",
-      "artifactName": "Lodestone-${version}-mac-${arch}.${ext}"
+      "artifactName": "Lodestone-${version}-mac-${arch}.${ext}",
+      "background": "build/background.png",
+      "iconSize": 100,
+      "window": { "width": 660, "height": 400 },
+      "contents": [
+        { "x": 180, "y": 200 },
+        { "x": 480, "y": 200, "type": "link", "path": "/Applications" }
+      ]
     },
     "win": {
       "icon": "build/icon.png",
