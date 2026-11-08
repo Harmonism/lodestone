@@ -273,6 +273,7 @@ export const FR = {
  "Larger": "Très grande",
  "Show the model and the reply mode in the message box": "Afficher le modèle et le mode de réponse dans la zone de message",
  "Show the model and its cost under each answer": "Afficher le modèle et son coût sous chaque réponse",
+ "Show what this conversation has cost, under the message box": "Afficher ce que cette conversation a coûté, sous la zone de message",
  "About": "À propos",
  "Lodestone and the corpus": "Lodestone et le corpus",
  "Help": "Aide",

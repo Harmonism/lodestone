@@ -1401,7 +1401,7 @@ function costInMenu(kids) {
 function renderCostLine() {
   const b = $("#costLine"); if (!b) return;
   const u = sumUsage([...S.history.map(m => m.meta?.usage), S.thread?.side]);
-  if (!S.thread || (!u.in && !u.out && !u.priced)) { b.hidden = true; return; }
+  if (!S.thread || S.settings?.hideConvCost || (!u.in && !u.out && !u.priced)) { b.hidden = true; return; }
   b.textContent = `This conversation: ${u.priced ? fmtCost(u.cost) : "no cost"} · ${kTok(u.in)} in, ${kTok(u.out)} out`;
   b.title = u.priced ? "What this conversation has cost, as the provider reported it. Click for usage over time." : "Tokens used by this conversation; the model reported no cost. Click for usage over time.";
   b.hidden = false;
@@ -6469,6 +6469,7 @@ async function renderSettings() {
   $("#setLang").value = S.settings.lang || "auto";
   if ($("#setUiLang")) $("#setUiLang").value = S.settings.uiLang || "auto";
   $("#setShowCost").checked = !!S.settings.showCost;
+  if ($("#setShowConvCost")) $("#setShowConvCost").checked = !S.settings.hideConvCost;
   if ($("#setFontSize")) $("#setFontSize").value = FONT_PX[S.settings.fontSize] ? S.settings.fontSize : "default";
   if ($("#setComposerChips")) $("#setComposerChips").checked = !!S.settings.composerChips;
   applyDisplay();
@@ -7981,6 +7982,7 @@ function bindChrome() {
   if ($("#setFontSize")) $("#setFontSize").onchange = async e => { S.settings.fontSize = e.target.value; applyDisplay(); await store.kv.set("settings", S.settings); syncSoon(); };
   if ($("#setComposerChips")) $("#setComposerChips").onchange = async e => { S.settings.composerChips = e.target.checked; applyDisplay(); await store.kv.set("settings", S.settings); syncSoon(); };
   $("#setShowCost").onchange = async e => { S.settings.showCost = e.target.checked; await store.kv.set("settings", S.settings); renderChat(); };
+  if ($("#setShowConvCost")) $("#setShowConvCost").onchange = async e => { S.settings.hideConvCost = !e.target.checked; await store.kv.set("settings", S.settings); renderCostLine(); syncSoon(); };
   if ($("#setHybrid")) $("#setHybrid").onchange = async e => { S.settings.hybrid = e.target.checked; await store.kv.set("settings", S.settings); syncSoon(); };
   if (FOLDERS?.foldersAdd) {
     $("#setFolderAdd").onclick = async () => { try { if (!DESKTOP) $("#setFoldersStats").textContent = "Reading…"; renderFolders(await FOLDERS.foldersAdd()); } catch (e) { toast(String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ""), 6000); } };
