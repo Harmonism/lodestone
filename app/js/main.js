@@ -5874,7 +5874,7 @@ async function renderHP() {
   const st = $("#hpStatus");
   st.textContent = S.assessment
     ? "Taken. Your Wheel reading above began from it; below is the profile as it stands now, redrawn whenever the Wheel moves. Retake the assessment when your life has moved."
-    : "Not taken yet. The assessment reads where you stand across the eight pillars, your Enneagram and your constitution, about twenty minutes; Lodestone then reads you through it.";
+    : "Not taken yet. The assessment reads where you stand across the eight pillars, your Enneagram and your constitution, 30 to 40 minutes, or 10 to 15 for the Wheel alone; Lodestone then reads you through it.";
   // What Lodestone holds, said plainly: the same text it reads.
   let shown = $("#hpShown");
   // Folded away: the profile itself is drawn below; this is the text behind it.
