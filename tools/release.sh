@@ -9,7 +9,8 @@
 #
 #   --dry-run     print every step and stop before the first one that changes anything
 #   --no-deploy   build and tag, upload nothing
-#   -y            do not ask before starting
+#   --ask         ask before starting (the default is to go straight on)
+#   -y            accepted and ignored: going straight on is the default
 #
 # WHY ONE VERB. Four things ship on four paths, and until now three unrelated
 # entry points started them (release-desktop.command, deploy-site.command and a
@@ -41,7 +42,7 @@ ASTRO="$LODESTONE/../harmonia-astro"
 EXT="$LODESTONE/../lodestone-extension"
 
 DO_WEB=0; DO_DESKTOP=0; DO_EXT=0; DO_STATUS=0
-DRY=0; NODEPLOY=0; YES=0
+DRY=0; NODEPLOY=0; YES=1
 for a in "$@"; do case "$a" in
   --status) DO_STATUS=1 ;;
   --web) DO_WEB=1 ;;
@@ -51,6 +52,7 @@ for a in "$@"; do case "$a" in
   --dry-run) DRY=1 ;;
   --no-deploy) NODEPLOY=1 ;;
   -y|--yes) YES=1 ;;
+  --ask) YES=0 ;;
   -h|--help) sed -n '2,40p' "$0"; exit 0 ;;
   *) echo "unknown option: $a (see --help)" >&2; exit 2 ;;
 esac; done
