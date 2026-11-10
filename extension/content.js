@@ -531,7 +531,7 @@
     setSpriteState("absorbing");
     sendMessage(
       "Absorb this page. Give me its essence: a compact summary of what it actually says, then the Harmonist analysis — " +
-      "how its claims sit against the doctrine, which pillar of the Wheel it touches, and what a practitioner should take or leave.",
+      "how its claims sit against the doctrine, at the register the page calls for, and what a practitioner should take or leave.",
       true
     );
   }
