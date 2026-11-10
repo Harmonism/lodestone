@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Lodestone",
-  "version": "2.2.14",
+  "version": "2.2.15",
   "description": "Summarize any page, absorb it, or ask for its Harmonist reading, then keep talking with Lodestone beside the page.",
   "icons": {
     "16": "icons/icon16.png",
