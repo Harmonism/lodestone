@@ -1,7 +1,7 @@
 {
   "name": "munai-offline-desktop",
   "productName": "Lodestone",
-  "version": "1.17.6",
+  "version": "1.17.7",
   "description": "Lodestone, the Harmonist guide, and the harmonism.io library, on your own computer.",
   "homepage": "https://harmonism.io/lodestone-desktop",
   "author": {
@@ -100,10 +100,21 @@
       "artifactName": "Lodestone-${version}-mac-${arch}.${ext}",
       "background": "build/background.png",
       "iconSize": 100,
-      "window": { "width": 660, "height": 400 },
+      "window": {
+        "width": 660,
+        "height": 400
+      },
       "contents": [
-        { "x": 180, "y": 200 },
-        { "x": 480, "y": 200, "type": "link", "path": "/Applications" }
+        {
+          "x": 180,
+          "y": 200
+        },
+        {
+          "x": 480,
+          "y": 200,
+          "type": "link",
+          "path": "/Applications"
+        }
       ]
     },
     "win": {
