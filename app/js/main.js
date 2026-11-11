@@ -7342,10 +7342,20 @@ function voicePlanLine(plan) {
 }
 /**
  * The language set for dictation, as a two-letter code, or null for Whisper to hear it.
- * Never the reply language or the device's: naming English to Whisper while French is
- * spoken makes it translate into English instead of writing down what was said.
+ * Unset ("app"): the interface's language when the interface is translated (French), or
+ * English when both the interface and the device are English; otherwise heard. Left to
+ * name it per clip, Whisper lands on Chinese or Icelandic for a short French phrase; but
+ * naming English while French is spoken makes it translate instead of writing it down,
+ * so English is named only when the device agrees.
  */
-const dictCode = () => { const l = S.settings.dictLang && S.settings.dictLang !== "auto" ? S.settings.dictLang : ""; return l ? l.slice(0, 2) : null; };
+const dictCode = () => {
+  const l = S.settings.dictLang || "app";
+  if (l === "auto") return null;
+  if (l !== "app") return l.slice(0, 2);
+  const ui = (document.documentElement.lang || "").slice(0, 2).toLowerCase();
+  if (ui && ui !== "en") return ui;
+  return (navigator.language || "").slice(0, 2).toLowerCase() === "en" ? "en" : null;
+};
 
 /**
  * How a recording is written out on the web: "provider", "device" (the speech
@@ -7734,7 +7744,7 @@ async function renderDictation() {
       : `Whisper writes them out on this device; your voice goes nowhere. Downloaded once (about ${info.asrMB || speechWeb.MB} MB).`;
   }
   $("#setDictDownload").hidden = !!info.asr;
-  $("#setDictLang").value = S.settings.dictLang || "auto";
+  $("#setDictLang").value = S.settings.dictLang || "app";
   $("#setDictTidy").checked = S.settings.dictTidy !== false;
   $("#setDictPolish").checked = S.settings.dictPolish !== false;
   $("#setDictPolish").disabled = S.settings.dictTidy === false;

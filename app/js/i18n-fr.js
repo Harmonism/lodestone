@@ -231,6 +231,7 @@ export const FR = {
  "Through the provider": "Par le fournisseur",
  "Language you dictate in": "Langue dans laquelle vous dictez",
  "Heard from what I say": "Déduite de ce que je dis",
+ "The app's language": "La langue de l’application",
  "Tidy what was said: hesitations (um, euh, äh), stutters and repeated words taken out, capitals and commas set right. On this device; the words you meant are left as you said them.": "Mettre au propre ce qui a été dit : hésitations (um, euh, äh), bégaiements et mots répétés retirés, majuscules et virgules remises en place. Sur cet appareil ; les mots que vous vouliez dire restent tels que vous les avez dits.",
  "Then by the model you use: where you changed your mind (“at five, actually six”), what you settled on is kept. The words go where your message will go; with a model on this device they stay here. Not with the browser's own small model, and never on words about safety, keys or card numbers.": "Puis par le modèle que vous utilisez : là où vous avez changé d’avis (« à cinq heures, non, six »), seul ce que vous avez retenu est gardé. Les mots vont là où ira votre message ; avec un modèle sur cet appareil, ils restent ici. Pas avec le petit modèle propre au navigateur, et jamais sur des mots touchant à la sécurité, aux clés ou aux numéros de carte.",
  "Download the speech model (about 250 MB)": "Télécharger le modèle vocal (environ 250 Mo)",
