@@ -194,7 +194,7 @@ button:focus-visible { outline: 1.5px solid color-mix(in srgb, var(--text-muted)
 .home-note[hidden] { display: none; }
 .home-note p { margin: 0; flex: 1; }
 .checkins:empty { display: none; }
-.checkins { padding: 10px 12px 0; display: grid; gap: 8px; max-width: 760px; width: 100%; margin: 0 auto; }
+.checkins { padding: 10px 12px 0; display: grid; gap: 8px; max-width: 760px; width: 100%; margin: 0 auto; max-height: 62vh; max-height: 62dvh; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; } /* 2026-11-11: the first-sketch card (eight pillars) outgrew a phone screen and, with no scroll of its own, pushed the chat and composer off it: a practitioner could not reach the buttons. */
 .checkin { background: var(--bg-surface); border: 1px solid var(--border-light); border-left: 3px solid var(--pc, var(--accent-secondary)); border-radius: 10px; padding: 10px 12px; }
 .checkin p { font-size: .95rem; }
 .checkin .row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
