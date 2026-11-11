@@ -38,6 +38,7 @@ import hashlib
 import importlib.util
 import json
 import re
+import unicodedata
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -206,10 +207,21 @@ def chunk_offsets(text: str):
     return out
 
 
+def _gh_slug(segment: str) -> str:
+    # github-slugger, which Astro's glob loader applies to each path segment:
+    # lowercase, keep letters, marks, numbers, connector punctuation, spaces and
+    # hyphens, drop the rest (commas, apostrophes, colons, dashes), spaces → "-".
+    keep = (c for c in segment.lower()
+            if c in " -" or unicodedata.category(c)[0] in "LMN" or unicodedata.category(c) == "Pc")
+    return "".join(keep).replace(" ", "-")
+
+
 def url_for(relpath: str) -> str:
-    # Mirrors companion-rag.php::filepathToUrl (EN).
-    slug = re.sub(r"\.md$", "", relpath, flags=re.I).lower().replace(" ", "-")
-    return "https://harmonism.io/" + slug
+    # The live URL Astro builds for this file. companion-rag.php::filepathToUrl
+    # only lowercases and hyphenates spaces, so its links break on any title with
+    # punctuation; this one is checked against dist/.
+    slug = "/".join(_gh_slug(seg) for seg in re.sub(r"\.md$", "", relpath, flags=re.I).split("/"))
+    return "https://harmonism.io/" + re.sub(r"/index$", "", slug)
 
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
