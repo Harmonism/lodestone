@@ -1128,5 +1128,11 @@ export const FR = {
  "From what you have told Lodestone, this area of your life has grown.": "D’après ce que vous avez dit à Lodestone, ce domaine de votre vie a grandi.",
  "From what you have told Lodestone, this area of your life has slipped back.": "D’après ce que vous avez dit à Lodestone, ce domaine de votre vie a reculé.",
  "Nothing placed. Your Wheel stays empty until you place it, here or in Your path.": "Rien n’a été situé. Votre Roue reste vide tant que vous ne la remplissez pas, ici ou dans Votre chemin.",
- "Your Wheel of Harmony": "Votre Roue de l’Harmonie"
+ "Your Wheel of Harmony": "Votre Roue de l’Harmonie",
+ "Presence": "Présence",
+ "Health": "Santé",
+ "Matter": "Matière",
+ "Relationships": "Relations",
+ "Learning": "Apprentissage",
+ "Recreation": "Récréation"
 };

@@ -55,6 +55,13 @@ const PATTERNS = {
     [/^Something failed: (.+)$/s, m => `Un problème est survenu : ${m[1]}`],
     [/^([1-6]) of 6$/, m => `${m[1]} sur 6`],
     [/^(\d+) areas are on your Wheel$/, m => `${m[1]} domaines sont dans votre Roue`],
+    [/^Your Wheel: (\d+) of (\d+)$/, m => `Votre Roue : ${m[1]} sur ${m[2]}`],
+    [/^(.+) is on your Wheel: (.+)$/, m => `${t(m[1])} est dans votre Roue : ${t(m[2])}`],
+    [/^(.+) is on your Wheel$/, m => `${t(m[1])} est dans votre Roue`],
+    [/^(.+) rises to (.+)$/, m => `${t(m[1])} monte à ${t(m[2])}`],
+    [/^(.+) is now (.+), ([1-6]) of 6\. The Wheel moves both ways: it shows where things stand, it is not a verdict\.$/, m => `${t(m[1])} est maintenant à ${t(m[2])}, ${m[3]} sur 6. La Roue bouge dans les deux sens : elle montre où en sont les choses, ce n’est pas un verdict.`],
+    [/^About my (.+) pillar: I want to look at where it really stands\.$/, m => `À propos de mon domaine ${t(m[1])} : je veux regarder où il en est vraiment.`],
+    [/^I want to look at my practice "(.+)" with you\.$/s, m => `Je veux regarder ma pratique « ${m[1]} » avec vous.`],
   ],
 };
 

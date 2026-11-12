@@ -34,7 +34,7 @@ import { tidyTranscript, CLEANUP_PROMPT, cleanupRequest, acceptCleanup, SPOKEN_S
 import { isNative, lanFetch, pairWith, pairing, computerServer, parsePairLink, onAppLink } from "./native.js";
 import * as shareout from "./shareout.js";
 import * as seal from "./seal.js";
-import { t, setLanguage, resolve as resolveUiLang } from "./i18n.js";
+import { t, setLanguage, uiLang, resolve as resolveUiLang } from "./i18n.js";
 import { Idiomorph } from "../vendor/idiomorph/idiomorph.esm.js";
 import remend from "../vendor/remend/remend.js";
 
@@ -3887,7 +3887,7 @@ function renderCheckins() {
       p.lastCheckin = Date.now();
       await savePractices();
       renderCheckins();
-      if (talk) send(`I want to look at my practice "${p.text}" with you.`);
+      if (talk) send(t(`I want to look at my practice "${p.text}" with you.`));
     };
     box.append(el("div", { class: "checkin", style: `--pc:${PILLAR_COLOR(p.pillar)}` },
       el("p", {}, `${cap(p.pillar)}: “${p.text}”. How has it gone since you last looked?`),
@@ -4786,7 +4786,7 @@ async function learnLocally({ force = false, leaving = false } = {}) {
         const sum = (await complete(learning.PROFILE_PROMPT, learning.profileRequest(S.learned.summary, convo) + fix, 1200)).replace(/<think>[\s\S]*?<\/think>/g, "").trim();
         if (sum.length > 40) S.learned.summary = sum.slice(0, 6000);
       }
-      const w = learning.parseJson(await complete(learning.WHEEL_PROMPT, learning.wheelRequest(S.wheel, S.learned.wheel, evidence) + fix, 1500));
+      const w = learning.parseJson(await complete(learning.WHEEL_PROMPT, learning.wheelRequest(S.wheel, S.learned.wheel, evidence) + fix + (uiLang() === "fr" ? "\n\nThe practitioner reads Lodestone in French: write every \"evidence\" field in French." : ""), 1500));
       if (w && typeof w === "object") {
         const r = learning.applyWheelUpdates(S.wheel, S.learned.wheel, w);
         S.learned.wheel = r.learned;
@@ -4900,7 +4900,7 @@ function proposalCards() {
       el("div", { class: "row" },
         el("button", { type: "button", onclick: () => answerProposal(pr, true) }, "Yes, place it"),
         el("button", { type: "button", onclick: () => answerProposal(pr, false) }, "Not yet"),
-        el("button", { type: "button", onclick: () => { answerProposal(pr, false); send(`About my ${pillarName(pr.pillar)} pillar: I want to look at where it really stands.`); } }, "Talk it through"))))),
+        el("button", { type: "button", onclick: () => { answerProposal(pr, false); send(t(`About my ${pillarName(pr.pillar)} pillar: I want to look at where it really stands.`)); } }, "Talk it through"))))),
     el("div", { class: "row fs-foot" },
       firsts.length > 1 ? el("button", { type: "button", class: "primary", onclick: () => answerFirsts(firsts, true) }, "Place them all") : null,
       firsts.length > 1 ? el("button", { type: "button", onclick: () => answerFirsts(firsts, false) }, "Not now") : null,
@@ -4916,7 +4916,7 @@ function proposalCards() {
       el("div", { class: "row" },
         el("button", { type: "button", onclick: () => answerProposal(pr, true) }, up ? "Yes, it has" : "Yes, that is fair"),
         el("button", { type: "button", onclick: () => answerProposal(pr, false) }, "Not yet"),
-        el("button", { type: "button", onclick: () => { answerProposal(pr, false); send(`About my ${pillarName(pr.pillar)} pillar: I want to look at where it really stands.`); } }, "Talk it through"))));
+        el("button", { type: "button", onclick: () => { answerProposal(pr, false); send(t(`About my ${pillarName(pr.pillar)} pillar: I want to look at where it really stands.`)); } }, "Talk it through"))));
   }
   return cards;
 }
