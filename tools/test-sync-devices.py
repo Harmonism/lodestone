@@ -163,7 +163,7 @@ def main():
         # ── removed from the computer, the phone stops at its next sync ──────
         before = count(A)
         settings(B)
-        B.click("#syncBody .device:not(.here) button:has-text('Remove')")
+        B.click("#syncBody .device:not(.here) button:has-text('Remove')"); B.click(".ask-card .ask-btns .btn.primary, .ask-card .ask-choice.yes")   # Lodestone's own question sheet since v89
         B.wait_for_function("document.querySelectorAll('#syncBody .device-list .device').length == 1", timeout=20000)
         check("the removed device leaves the list at once", names(B) == ["Study computer"], str(names(B)))
         close(B)
@@ -189,7 +189,8 @@ def main():
         settings(B)
         B.click("#syncBody details.link-alt summary:has-text('Lost a device?')")
         B.wait_for_selector("#syncBody details.link-alt input[type=password]", timeout=5000)
-        B.fill("#syncBody details.link-alt input[type=password]", PASS); B.click("#syncBody details.link-alt button:has-text('Change the key')")
+        B.fill("#syncBody details.link-alt input[type=password]", PASS); B.click("#syncBody details.link-alt button:has-text('Change the key')"); B.wait_for_timeout(600)
+        if B.locator(".ask-card").count(): B.click(".ask-card .ask-btns .btn.primary, .ask-card .ask-choice.yes")
         B.wait_for_function("(() => { const e = document.querySelector('#syncBody .devices'); return e && document.querySelectorAll('#syncBody .device').length === 1; })()", timeout=40000)
         epoch1 = db("SELECT epoch FROM space")[0][0]
         check("Change the key starts the copy again under a new key, from this device", epoch1 != epoch0 and names(B) == ["Study computer"], f"{epoch0[:6]} → {epoch1[:6]} {names(B)}")

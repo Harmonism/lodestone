@@ -12,6 +12,8 @@ export const FR = {
  "Simple mode: only the conversation. The Wheel, your path, the library and their cards are set aside, with the buttons for files, looking up and talking by voice. Learning goes on quietly, and everything waits here.": "Mode simple : seulement la conversation. La Roue, votre chemin, la bibliothèque et leurs cartes sont mis de côté, avec les boutons des fichiers, de la recherche en ligne et de la conversation à voix haute. L’apprentissage continue discrètement, et tout attend ici.",
  "Conversation": "Conversation",
  "Appearance": "Apparence",
+ "Remove": "Retirer",
+ "Rename": "Renommer",
  "Wheel": "Roue",
  "Wisdom Canon": "Canon de la sagesse",
  "About you": "Vous",

@@ -78,6 +78,8 @@ const PATTERNS = {
     [/^(Closed|Abstract|Direct|Domain) — Lodestone speaks of the body and sexuality only as openly as you have\.$/, m => `${{ Closed: "Fermé", Abstract: "Abstrait", Direct: "Direct", Domain: "Par domaine" }[m[1]]} — Lodestone parle du corps et de la sexualité seulement aussi ouvertement que vous.`],
     [/^Last learned (.+?)(?: · (.+) in the last 30 days)?\.$/, m => `Dernier apprentissage : ${m[1]}${m[2] ? ` · ${m[2]} sur les 30 derniers jours` : ""}.`],
     [/^For (English|French|Spanish|Arabic|Portuguese|German); each language keeps its own choice\. (\d+) voices? on (this computer|this device)\.$/, m => `Pour ${{ English: "l’anglais", French: "le français", Spanish: "l’espagnol", Arabic: "l’arabe", Portuguese: "le portugais", German: "l’allemand" }[m[1]]} ; chaque langue garde son propre choix. ${m[2]} voix sur ${PLACE_FR[m[3]]}.`],
+    // A device's line in Settings: "This device · synced 5 min ago · Lodestone 1.17.9", each part in French.
+    [/^(?:This device|synced |not seen since )/, m => m.input.split(" · ").map(x => x === "This device" ? "Cet appareil" : x.startsWith("synced ") ? `synchronisé ${AGO_FR(x.slice(7))}` : x.startsWith("not seen since ") ? `pas vu depuis le ${x.slice(15)}` : x).join(" · ")],
     [/^Something failed: (.+)$/s, m => `Un problème est survenu : ${m[1]}`],
     [/^([1-6]) of 6$/, m => `${m[1]} sur 6`],
     [/^(\d+) areas are on your Wheel$/, m => `${m[1]} domaines sont dans votre Roue`],
