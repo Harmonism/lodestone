@@ -1465,6 +1465,9 @@ function openUsage() { renderUsage(); openDrawer("#drawerUsage"); }
 // ─── Chat rendering ──────────────────────────────────────────────────────────
 
 function renderChat() {
+  // November 13, 2026: a conversation drawn anew decides the jump button afresh; it
+  // stayed from the one before, over an empty new conversation.
+  { const jb = $("#jumpBottom"); if (jb) { jb.hidden = true; jb.classList.remove("new"); } requestAnimationFrame(() => updateJump()); }
   const chat = $("#chat");
   // v99: a redraw of the same conversation (a summary, a setting, a sync) keeps the
   // reader where they were; only opening a conversation goes to its end.
@@ -2967,7 +2970,7 @@ function placeJump() {
 }
 function updateJump() {
   const c = $("#chat"); if (!c) return;
-  const far = c.scrollHeight - c.scrollTop - c.clientHeight > 240;
+  const far = !c.querySelector(".empty") && c.scrollHeight - c.scrollTop - c.clientHeight > 240;
   const b = jumpButton();
   if (far && b.hidden) { placeJump(); b.hidden = false; }
   else if (!far && !b.hidden) { b.hidden = true; b.classList.remove("new"); }
@@ -3892,10 +3895,16 @@ function duePractices() {
 // a model that ignored the instruction) kept its English evidence on a French card.
 // What Lodestone heard is in the language of the app, or of the replies when set.
 const evidenceLang = () => uiLang() === "fr" || S.settings?.lang === "fr" ? "fr" : "en";
+/** English or French, by their commonest small words; `dflt` when it cannot tell. */
+const textLang = (s, dflt) => {
+  const en = (String(s || "").match(/\b(you|your|the|and|with|have|has|had|of|to|is|are|was|were|in|on)\b/gi) || []).length;
+  const fr = (String(s || "").match(/\b(vous|votre|vos|le|la|les|et|avec|de|des|du|est|une|un|au|aux|sur)\b/gi) || []).length;
+  return en > fr ? "en" : fr > en ? "fr" : dflt;
+};
 let evFixing = false; const evTried = new Set();
 async function fixEvidenceLang() {
   const want = evidenceLang();
-  const stale = (S.learned?.pending || []).filter(pr => pr.evidence && pr.lang !== want && !evTried.has(pr.id));
+  const stale = (S.learned?.pending || []).filter(pr => pr.evidence && textLang(pr.evidence, pr.lang || want) !== want && !evTried.has(pr.id));
   if (!stale.length || evFixing || want !== "fr" || !S.engine?.stream) return;
   evFixing = true; stale.forEach(pr => evTried.add(pr.id));
   try {
@@ -4174,7 +4183,7 @@ async function drawSync() {
   const conf = await sy.conf();
   const comp = await computerLabel();
   const err = conf.error ? ` ${conf.error.message}` : "";
-  const fineFor = via => el("p", { class: "fine" }, via === "computer" ? SYNC_DISCLOSURE_COMPUTER : SYNC_DISCLOSURE + (DESKTOP ? "" : " " + SYNC_WEB_NOTE));
+  const fineFor = via => el("p", { class: "fine" }, ...(via === "computer" ? [SYNC_DISCLOSURE_COMPUTER] : [SYNC_DISCLOSURE, ...(DESKTOP ? [] : [" ", SYNC_WEB_NOTE])]));   // two text nodes, so each finds its French
 
   if (!conf.on) {
     st.textContent = "Off: your memory is on this device only." + err;
@@ -4827,7 +4836,7 @@ async function learnLocally({ force = false, leaving = false } = {}) {
         const r = learning.applyWheelUpdates(S.wheel, S.learned.wheel, w);
         S.learned.wheel = r.learned;
         for (const pr of r.proposals) {
-          pr.lang = evLang;
+          pr.lang = textLang(pr.evidence, evLang);   // what the model wrote, not what it was asked for
           S.learned.pending = (S.learned.pending || []).filter(x => x.pillar !== pr.pillar);
           S.learned.pending.push(pr);
         }
@@ -6687,6 +6696,12 @@ function drawPageNav(d) {
 }
 function setPageNavOn(d, name) {
   d.querySelectorAll(".page-nav-items button").forEach(b => b.classList.toggle("on", b.dataset.for === name));
+  // On a phone the list is one sideways row: the lit item is brought into it, not left cut at the edge.
+  const on = d.querySelector(".page-nav-items button.on"), nav = on?.closest(".page-nav");
+  if (on && nav && nav.scrollWidth > nav.clientWidth + 2) {
+    const r = on.getBoundingClientRect(), n = nav.getBoundingClientRect();
+    if (r.left < n.left + 8 || r.right > n.right - 8) nav.scrollBy({ left: r.left - n.left - (n.width - r.width) / 2, behavior: "smooth" });
+  }
 }
 function markPageNav(d) {
   const main = d.querySelector(".page-main"); if (!main) return;

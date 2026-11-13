@@ -15,6 +15,11 @@
 import { FR } from "./i18n-fr.js";
 
 const TABLES = { fr: FR };
+// November 13, 2026: the page is translated text node by text node, each trimmed before
+// it is looked up, so the 57 keys written with a space at an edge (" You need a
+// harmonism.io account…", "Harmonist vocabulary: ") never matched and stayed English.
+// Each is also filed under its trimmed form, unless that form has its own entry.
+for (const tb of Object.values(TABLES)) for (const k of Object.keys(tb)) { const tk = k.trim(); if (tk !== k && tk && !(tk in tb)) tb[tk] = String(tb[k]).trim(); }
 let LANG = "en";
 let table = null;
 
@@ -60,6 +65,19 @@ const PATTERNS = {
     [/^Your recordings go to (OpenRouter|harmonism\.io|xAI|OpenAI)( and the transcription service it uses \(fifteen minutes a day\)|, charged to your key), which writes them out\. Nothing to download\.$/, m => `Vos enregistrements vont à ${m[1]}${m[2].startsWith(",") ? ", aux frais de votre clé" : " et au service de transcription qu’il utilise (quinze minutes par jour)"}, qui les transcrit. Rien à télécharger.`],
     [/^· downloaded once, on first use \(about (\d+) MB\)$/, m => `· téléchargé une seule fois, à la première utilisation (environ ${m[1]} Mo)`],
     [/^· (.+), on (this device|this computer)('s GPU)?$/, m => `· ${m[1]}, sur ${m[3] ? `le GPU de ${PLACE_FR[m[2]]}` : PLACE_FR[m[2]]}`],
+    [/^(.+) refused the key\. Check that it is complete and still active\.$/, m => `${m[1]} a refusé la clé. Vérifiez qu’elle est complète et toujours active.`],
+    [/^(.+) refused the key: (.+)$/s, m => `${m[1]} a refusé la clé : ${m[2]}`],
+    [/^The key works with (\S+)\.$/, m => `La clé fonctionne avec ${m[1]}.`],
+    [/^The key works with (\S+) \((.+)\)\.$/s, m => `La clé fonctionne avec ${m[1]} (${m[2]}).`],
+    [/^of (\d+)$/, m => `sur ${m[1]}`],
+    [/^(\d+) articles on this device · pack of (.+)$/, m => `${m[1]} articles sur cet appareil · paquet du ${m[2]}`],
+    [/^(\d+) days, to (.+?)\.?\.$/, m => `${m[1]} jours, jusqu’au ${m[2]}.`],
+    [/^Lodestone asks (\d+) times? in all, week by week (.+): fewer as you go, none in the last week\. Then one closing question on (.+), and it steps away\.$/, m => `Lodestone vous interroge ${m[1]} fois en tout, semaine par semaine ${m[2]} : de moins en moins, aucune la dernière semaine. Puis une question de clôture le ${m[3]}, et il se retire.`],
+    [/^(\d+) notes? Lodestone reads back(?:, (\d+) switched off)?, synced, encrypted, between your devices\.$/, m => `${m[1]} note${m[1] === "1" ? "" : "s"} que Lodestone relit${m[2] ? `, ${m[2]} désactivée${m[2] === "1" ? "" : "s"}` : ""}, synchronisée${m[1] === "1" ? "" : "s"} et chiffrée${m[1] === "1" ? "" : "s"} entre vos appareils.`],
+    [/^(New|Oriented|Fluent|Native) — Lodestone uses the terms as far as you have used them yourself\.$/, m => `${{ New: "Nouveau", Oriented: "Orienté", Fluent: "Familier", Native: "Natif" }[m[1]]} — Lodestone emploie les termes autant que vous les avez employés vous-même.`],
+    [/^(Closed|Abstract|Direct|Domain) — Lodestone speaks of the body and sexuality only as openly as you have\.$/, m => `${{ Closed: "Fermé", Abstract: "Abstrait", Direct: "Direct", Domain: "Par domaine" }[m[1]]} — Lodestone parle du corps et de la sexualité seulement aussi ouvertement que vous.`],
+    [/^Last learned (.+?)(?: · (.+) in the last 30 days)?\.$/, m => `Dernier apprentissage : ${m[1]}${m[2] ? ` · ${m[2]} sur les 30 derniers jours` : ""}.`],
+    [/^For (English|French|Spanish|Arabic|Portuguese|German); each language keeps its own choice\. (\d+) voices? on (this computer|this device)\.$/, m => `Pour ${{ English: "l’anglais", French: "le français", Spanish: "l’espagnol", Arabic: "l’arabe", Portuguese: "le portugais", German: "l’allemand" }[m[1]]} ; chaque langue garde son propre choix. ${m[2]} voix sur ${PLACE_FR[m[3]]}.`],
     [/^Something failed: (.+)$/s, m => `Un problème est survenu : ${m[1]}`],
     [/^([1-6]) of 6$/, m => `${m[1]} sur 6`],
     [/^(\d+) areas are on your Wheel$/, m => `${m[1]} domaines sont dans votre Roue`],

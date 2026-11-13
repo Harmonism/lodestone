@@ -1286,6 +1286,9 @@ button.x > svg.ico, button.lu-x > svg.ico, .attach-bar button > svg.ico { margin
 .jump-bottom svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .jump-bottom.new::after { content: ""; position: absolute; top: 2px; right: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg-surface); }
 .jump-bottom[hidden] { display: none; }
+/* November 13, 2026: it lives on <body>, above #main's own layer, so it showed over Your path, Settings, the Library and the conversations list. */
+:root:has(.drawer.page:not([hidden]), #drawerLibrary:not([hidden]), #setup:not([hidden])) .jump-bottom { display: none; }
+@media (max-width: 760px) { :root:has(.drawer:not([hidden]):not(.docked)) .jump-bottom { display: none; } }
 @media (prefers-reduced-motion: reduce) { .jump-bottom { animation: none; } }
 
 /* v99: a message left without an answer: said in place, with Try again. */
