@@ -37,7 +37,7 @@ LANGS = ["en", "fr", "es", "ar", "pt", "de", "zh", "ja", "hi", "ru"]
 SKIP_DIRS_ROOT = {"audio", "lodestone-app", "munai-offline", "member", "pagefind-temp"}
 SKIP_DIRS_ANY = {"member"}
 SKIP_EXT = {".php", ".md", ".epub", ".zip"}
-SKIP_NAMES = {".htaccess", ".DS_Store"}
+SKIP_NAMES = {".htaccess", ".DS_Store", "sovereignty-bundle.json"}   # rewritten by every post-build (the bundle's size), and only the website's download button reads it
 
 
 def files_for(dist: Path, lang: str):

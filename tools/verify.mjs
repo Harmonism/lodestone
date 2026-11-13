@@ -192,6 +192,18 @@ function readAsar(file) {
   return out;
 }
 
+/** What differs between the release's package.json and the one electron-builder packed:
+ *  every field the app keeps must equal the release's, and the release's other fields
+ *  may only be those electron-builder leaves out. Empty when they agree. */
+export function packageJsonDiff(rel, app) {
+  const LEFT_OUT = new Set(["build", "scripts", "devDependencies"]);
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const out = [];
+  for (const k of Object.keys(app)) if (!(k in rel)) out.push(`${k}: in the app, not in the release`); else if (!same(rel[k], app[k])) out.push(`${k}: differs`);
+  for (const k of Object.keys(rel)) if (!(k in app) && !LEFT_OUT.has(k)) out.push(`${k}: in the release, not in the app`);
+  return out;
+}
+
 async function desktop() {
   const res = resourcesDir(positional);
   const asar = readAsar(path.join(res, "app.asar"));
@@ -215,6 +227,7 @@ async function desktop() {
 
   // Its own code: everything in app.asar but its third-party packages.
   const deps = new Map();
+  let pkgBuf = null;
   for (const [p, buf] of asar) {
     if (p.startsWith("node_modules/")) {
       // Each package by its place, nested ones too (node_modules/qrcode/node_modules/yargs), as the lock file names them.
@@ -222,7 +235,17 @@ async function desktop() {
       if (m) { try { const j = JSON.parse(buf.toString("utf8")); if (j.name && j.version) deps.set(m[1], j.version); } catch {} }
       continue;
     }
+    if (p === "package.json") { pkgBuf = buf; continue; }
     cmp("desktop/" + p, buf);
+  }
+  // package.json is rewritten by electron-builder as it packs the app (its build settings,
+  // scripts and devDependencies left out), so its bytes never match the release's: it is
+  // compared field by field, and only those three may be missing from the app's copy.
+  if (pkgBuf) {
+    const relText = await raw("desktop/package.json");
+    const r = relText ? packageJsonDiff(JSON.parse(relText), JSON.parse(pkgBuf.toString("utf8"))) : null;
+    if (!relText) cmp("desktop/package.json", pkgBuf);
+    else rows.push({ path: "desktop/package.json", state: r.length ? "different" : "same", note: r.length ? r.join("; ") : undefined });
   }
   // The third-party packages: each at the version the release's lock file names.
   const lockText = await raw("desktop/package-lock.json");
