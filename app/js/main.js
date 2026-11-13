@@ -339,9 +339,20 @@ async function handleAppLink(link) {
 const FONT_PX = { small: 16, default: 17.5, large: 19, larger: 21 };
 function applyDisplay() {
   const r = document.documentElement;
-  r.style.setProperty("--fs-body", (FONT_PX[S.settings?.fontSize] || FONT_PX.default) + "px");
-  r.classList.toggle("composer-chips", !!S.settings?.composerChips);
+  const simple = !!S.settings?.simple;
+  const fs = FONT_PX[S.settings?.fontSize] && !(simple && S.settings.fontSize === "default") ? S.settings.fontSize : simple ? "large" : "default";
+  r.style.setProperty("--fs-body", FONT_PX[fs] + "px");
+  r.classList.toggle("composer-chips", !!S.settings?.composerChips && !simple);
+  r.classList.toggle("simple", simple);
 }
+
+/** Simple mode and reply length (November 13, 2026). Simple mode leaves the
+ *  conversation alone on the screen, for someone who gets lost in menus: no Wheel,
+ *  path, library or their cards, larger text, a taller box. Learning goes on and its
+ *  proposals wait, unseen, until simple mode is off. Replies are short in simple
+ *  mode unless "Developed" was chosen; the length never cuts what safety needs. */
+const replyLen = () => S.settings?.replyLen || (S.settings?.simple ? "short" : "full");
+const lengthBlock = () => replyLen() === "short" ? "<reply_length>\nThis practitioner asked for short replies. Two to four sentences, under 70 words: the one thing that matters most for them now, in plain words, then at most one question. No lists. If they ask for more, give more. Never shorten what their safety needs: when something sounds urgent, say plainly and first what to do now.\n</reply_length>" : "";
 
 function applyTheme(t) {
   const mode = t === "auto" ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark") : (t || "dark");
@@ -2131,6 +2142,7 @@ async function prepareTurn(text, history, { getWeb = null, files = [], folders =
       held: heldBlock(S.heldBlocks),
       calibration: calib.blocks,
       reading: reading.block,
+      length: lengthBlock(),
       lang,
     } });
     // turns already folded into the summary are not sent a second time
@@ -3877,8 +3889,31 @@ function duePractices() {
   return S.practices.filter(p => !p.archived && now - (p.lastCheckin || p.created) >= p.cadence * 864e5);
 }
 
+// November 13, 2026: a proposal written before the app was switched to French (or by
+// a model that ignored the instruction) kept its English evidence on a French card.
+// What Lodestone heard is in the language of the app, or of the replies when set.
+const evidenceLang = () => uiLang() === "fr" || S.settings?.lang === "fr" ? "fr" : "en";
+let evFixing = false; const evTried = new Set();
+async function fixEvidenceLang() {
+  const want = evidenceLang();
+  const stale = (S.learned?.pending || []).filter(pr => pr.evidence && pr.lang !== want && !evTried.has(pr.id));
+  if (!stale.length || evFixing || want !== "fr" || !S.engine?.stream) return;
+  evFixing = true; stale.forEach(pr => evTried.add(pr.id));
+  try {
+    const src = Object.fromEntries(stale.map(pr => [pr.id, pr.evidence]));
+    const out = learning.parseJson(await complete("Translate each value of this JSON object into French, addressing the reader as \"vous\". Keep the keys. Return only the JSON object.", JSON.stringify(src), 800));
+    if (!out || typeof out !== "object") return;
+    await freshLearned();
+    for (const pr of S.learned.pending || []) if (typeof out[pr.id] === "string" && out[pr.id].trim()) { pr.evidence = out[pr.id].trim().slice(0, 240); pr.lang = want; }
+    await saveLearned();
+    renderCheckins();
+  } catch (e) { console.warn("[evidence lang]", e); } finally { evFixing = false; }
+}
+
 function renderCheckins() {
   const box = $("#checkins"); box.innerHTML = "";
+  if (S.settings?.simple) return;
+  fixEvidenceLang();
   if (!BRIDGE) for (const c of proposalCards()) box.append(c);
   if (!BRIDGE) for (const c of lifeBookCards()) box.append(c);
   for (const p of duePractices().slice(0, 2)) {
@@ -4786,11 +4821,14 @@ async function learnLocally({ force = false, leaving = false } = {}) {
         const sum = (await complete(learning.PROFILE_PROMPT, learning.profileRequest(S.learned.summary, convo) + fix, 1200)).replace(/<think>[\s\S]*?<\/think>/g, "").trim();
         if (sum.length > 40) S.learned.summary = sum.slice(0, 6000);
       }
-      const w = learning.parseJson(await complete(learning.WHEEL_PROMPT, learning.wheelRequest(S.wheel, S.learned.wheel, evidence) + fix + (uiLang() === "fr" ? "\n\nThe practitioner reads Lodestone in French: write every \"evidence\" field in French." : ""), 1500));
+      const evLang = evidenceLang();
+      const evRule = evLang === "fr" ? "\n\nThe practitioner reads Lodestone in French: write every \"evidence\" field in French, addressing them as \"vous\", whatever language the examples above are in." : "";
+      const w = learning.parseJson(await complete(learning.WHEEL_PROMPT + evRule, learning.wheelRequest(S.wheel, S.learned.wheel, evidence) + fix + evRule, 1500));
       if (w && typeof w === "object") {
         const r = learning.applyWheelUpdates(S.wheel, S.learned.wheel, w);
         S.learned.wheel = r.learned;
         for (const pr of r.proposals) {
+          pr.lang = evLang;
           S.learned.pending = (S.learned.pending || []).filter(x => x.pillar !== pr.pillar);
           S.learned.pending.push(pr);
         }
@@ -6472,6 +6510,8 @@ async function renderSettings() {
   if ($("#setShowConvCost")) $("#setShowConvCost").checked = !S.settings.hideConvCost;
   if ($("#setFontSize")) $("#setFontSize").value = FONT_PX[S.settings.fontSize] ? S.settings.fontSize : "default";
   if ($("#setComposerChips")) $("#setComposerChips").checked = !!S.settings.composerChips;
+  if ($("#setSimple")) $("#setSimple").checked = !!S.settings.simple;
+  if ($("#setReplyLen")) $("#setReplyLen").value = replyLen();
   applyDisplay();
   renderHybridSetting();
   const p = S.pack.runtime.pack;
@@ -7990,6 +8030,8 @@ function bindChrome() {
     if (resolveUiLang(S.settings.uiLang, S.settings.lang) !== was) location.reload();
   };
   if ($("#setFontSize")) $("#setFontSize").onchange = async e => { S.settings.fontSize = e.target.value; applyDisplay(); await store.kv.set("settings", S.settings); syncSoon(); };
+  if ($("#setSimple")) $("#setSimple").onchange = async e => { S.settings.simple = e.target.checked; applyDisplay(); if ($("#setReplyLen")) $("#setReplyLen").value = replyLen(); await store.kv.set("settings", S.settings); syncSoon(); renderChat(); renderCheckins(); };
+  if ($("#setReplyLen")) $("#setReplyLen").onchange = async e => { S.settings.replyLen = e.target.value; await store.kv.set("settings", S.settings); syncSoon(); };
   if ($("#setComposerChips")) $("#setComposerChips").onchange = async e => { S.settings.composerChips = e.target.checked; applyDisplay(); await store.kv.set("settings", S.settings); syncSoon(); };
   $("#setShowCost").onchange = async e => { S.settings.showCost = e.target.checked; await store.kv.set("settings", S.settings); renderChat(); };
   if ($("#setShowConvCost")) $("#setShowConvCost").onchange = async e => { S.settings.hideConvCost = !e.target.checked; await store.kv.set("settings", S.settings); renderCostLine(); syncSoon(); };

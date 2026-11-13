@@ -40,6 +40,7 @@ export function t(s) {
 
 // Strings made with values. Each returns the translation or null.
 const FR_PART = { "Good morning": "Bonjour", "Good afternoon": "Bon après-midi", "Good evening": "Bonsoir", "Good night": "Bonne nuit" };
+const AGO_FR = s => s === "just now" ? "à l’instant" : (s.match(/^(\d+) (min|h) ago$/) ? `il y a ${s.replace(/ ago$/, "")}` : `le ${s}`);
 const PLACE_FR = { "this device": "cet appareil", "this computer": "cet ordinateur", "your computer": "votre ordinateur" };
 const PATTERNS = {
   fr: [
@@ -52,6 +53,8 @@ const PATTERNS = {
     [/^Not revoked: (.+)$/, m => `Non révoqué : ${t(m[1])}`],
     [/^thinks on (.+)$/, m => `réfléchit via ${PLACE_FR[m[1]] || m[1]}`],
     [/^waking on (.+)…$/, m => `réveil via ${PLACE_FR[m[1]] || m[1]}…`],
+    [/^One memory across your devices(?:, as ([^,]+?))?(?:, synced (.+?))?\.$/, m => `Une seule mémoire sur vos appareils${m[1] ? `, avec ${m[1]}` : ""}${m[2] ? `, synchronisée ${AGO_FR(m[2])}` : ""}.`],
+    [/^Synced memory: not synced just now \((.+)\)\.$/s, m => `Mémoire synchronisée : la synchronisation n’a pas abouti (${m[1]}).`],
     [/^Something failed: (.+)$/s, m => `Un problème est survenu : ${m[1]}`],
     [/^([1-6]) of 6$/, m => `${m[1]} sur 6`],
     [/^(\d+) areas are on your Wheel$/, m => `${m[1]} domaines sont dans votre Roue`],

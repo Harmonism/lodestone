@@ -1384,3 +1384,18 @@ html.kb-open #app { top: 0; }
 /* November 3, 2026: the model's name and the reply mode leave the message box
    unless Settings → Display asks for them; the box is easier to tap. */
 html:not(.composer-chips) #modelRow, html:not(.composer-chips) #voiceWrap { display: none !important; }
+
+/* November 13, 2026 — Simple mode: the conversation alone. Header keeps the
+   conversations menu (where Settings is) and New conversation; no Wheel, path,
+   library, cards, attach, look-up or voice-conversation buttons. */
+:root.simple #btnMe, :root.simple #btnLibrary, :root.simple #btnSite, :root.simple #btnSettings,
+:root.simple #btnPathTop, :root.simple #btnPathSide, :root.simple #btnLibrarySide, :root.simple #btnVaultSide, :root.simple #openReadings,
+:root.simple #checkins, :root.simple #levelUp, :root.simple #syncBanner,
+:root.simple .empty .hint, :root.simple .greet-open,
+:root.simple #attachBtn, :root.simple #webBtn, :root.simple #talkBtn, :root.simple #costLine { display: none !important; }
+:root.simple #composer #sendBtn { display: grid !important; }
+:root.simple .composer textarea { min-height: 4.4em; }
+/* The cards above the chat gave way to nothing when the keyboard rose: on a phone
+   the first-sketch card took most of what was left, and the conversation showed a
+   line at a time. While the practitioner writes, the cards step aside. */
+@media (max-width: 760px) { body:has(#input:focus) #checkins, body:has(#input:focus) .sync-banner { display: none; } }
