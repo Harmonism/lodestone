@@ -87,7 +87,7 @@ body {
   font-family: var(--font-body);
   background: var(--bg);
   color: var(--text);
-  font-size: var(--fs-body, 17.5px);
+  font-size: var(--fs-body, 19px);
   line-height: 1.62;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
@@ -1061,7 +1061,7 @@ html.foot-held .composer { padding-bottom: 6px; }
 .composer { gap: 0; }
 .composer-box { display: flex; flex-direction: column; background: var(--bg-surface); border: 1px solid var(--border-light); border-radius: 22px; transition: border-color .18s ease, box-shadow .18s ease; }
 .composer-box:focus-within { border-color: color-mix(in srgb, var(--accent-secondary) 55%, var(--border-light)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
-.composer-box textarea, .composer-box textarea:focus { display: block; width: 100%; min-height: 46px; max-height: min(240px, 38vh); padding: 13px 16px 4px; border: 0; border-radius: 22px 22px 0 0; background: transparent; outline: none; resize: none; line-height: 1.45; font-size: var(--fs-body, 17.5px); }
+.composer-box textarea, .composer-box textarea:focus { display: block; width: 100%; min-height: 46px; max-height: min(240px, 38vh); padding: 13px 16px 4px; border: 0; border-radius: 22px 22px 0 0; background: transparent; outline: none; resize: none; line-height: 1.45; font-size: var(--fs-body, 19px); }
 .composer-box textarea::placeholder { color: var(--text-muted); opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .composer-box .composer-tools { display: flex; align-items: center; gap: 4px; padding: 4px 8px 8px; min-width: 0; }
 .composer-box .composer-tools .web-toggle, .composer-box .composer-tools .mic { position: static; flex: 0 0 36px; width: 36px; height: 36px; border: 0; border-radius: 999px; background: transparent; color: var(--text-muted); }
@@ -1385,6 +1385,12 @@ html.kb-open #app { top: 0; }
    unless Settings → Display asks for them; the box is easier to tap. */
 html:not(.composer-chips) #modelRow, html:not(.composer-chips) #voiceWrap { display: none !important; }
 
+/* November 13, 2026 — Search in Settings, and the groups' list wrapping on a phone
+   so every group shows without a sideways scroll. */
+.set-search { width: 100%; margin: 2px 0 0; }
+.set-search-none { margin: 4px; }
+.s-miss { display: none !important; }
+@media (max-width: 760px) { #drawerSettings .page-nav { flex-wrap: wrap; overflow-x: visible; } #drawerSettings .page-nav-items { flex-wrap: wrap; gap: 4px; } }
 /* November 13, 2026 — Simple mode: the conversation alone. Header keeps the
    conversations menu (where Settings is) and New conversation; no Wheel, path,
    library, cards, attach, look-up or voice-conversation buttons. */
@@ -1394,7 +1400,6 @@ html:not(.composer-chips) #modelRow, html:not(.composer-chips) #voiceWrap { disp
 :root.simple .empty .hint, :root.simple .greet-open,
 :root.simple #attachBtn, :root.simple #webBtn, :root.simple #talkBtn, :root.simple #costLine { display: none !important; }
 :root.simple #composer #sendBtn { display: grid !important; }
-:root.simple .composer textarea { min-height: 4.4em; }
 /* The cards above the chat gave way to nothing when the keyboard rose: on a phone
    the first-sketch card took most of what was left, and the conversation showed a
    line at a time. While the practitioner writes, the cards step aside. */

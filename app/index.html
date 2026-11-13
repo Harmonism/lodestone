@@ -389,12 +389,42 @@
     <div class="page-main">
     <div class="drawer-head"><h3>Settings</h3><button class="icon-btn" data-close aria-label="Close"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
     <div class="settings-body">
-      <!-- The version and updates first, then the settings in six groups; the
-           list at the top names the groups (1.14.1). -->
+      <!-- The version and updates first, then the settings in seven groups, Conversation
+           first (November 13, 2026); the list at the top names the groups (1.14.1). -->
       <div class="set-top">
         <div class="set-top-ver"><b id="setVersion">Lodestone</b><span>Updates come when you ask for them.</span></div>
         <button class="btn ghost" id="setCheckUpdate" type="button">Check for updates</button>
         <div class="hint" id="setUpdateMsg"></div>
+      </div>
+      <input id="setSearch" class="set-search" type="search" placeholder="Search settings" aria-label="Search settings" autocomplete="off" spellcheck="false">
+      <p class="hint set-search-none" id="setSearchNone" hidden>Nothing in Settings matches.</p>
+      <div class="set-group" data-nav="Conversation">
+        <h5 class="set-group-title">Conversation</h5>
+        <section data-nav="Conversation" id="setConversation">
+          <h4><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 5.5h15v10h-8l-4.5 3.5v-3.5h-2.5z"/></svg>Conversation</h4>
+          <label class="no-i18n">App language · Langue de l’application
+            <select id="setUiLang">
+              <option value="auto">Auto</option>
+              <option value="en">English</option><option value="fr">Français</option>
+            </select>
+          </label>
+          <label>Reply language
+            <select id="setLang">
+              <option value="auto">Match what I write</option>
+              <option value="en">English</option><option value="fr">Français</option>
+              <option value="es">Español</option><option value="ar">العربية</option>
+              <option value="pt">Português</option><option value="de">Deutsch</option>
+              <option value="zh">简体中文</option><option value="ja">日本語</option>
+              <option value="hi">हिन्दी</option><option value="ru">Русский</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" id="setSimple"> Simple mode: only the conversation. The Wheel, your path, the library and their cards are set aside, with the buttons for files, looking up and talking by voice. Learning goes on quietly, and everything waits here.</label>
+          <label>Length of replies
+            <select id="setReplyLen">
+              <option value="full">Developed</option><option value="short">Short</option>
+            </select>
+          </label>
+        </section>
       </div>
       <div class="set-group" data-nav="Model">
         <h5 class="set-group-title">Model</h5>
@@ -523,36 +553,14 @@
       <div class="set-group" data-nav="Display">
         <h5 class="set-group-title">Display</h5>
         <section data-nav="Appearance">
-          <h4><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 0 0 17z" style="fill:currentColor"/></svg>Appearance and language</h4>
+          <h4><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 0 0 17z" style="fill:currentColor"/></svg>Appearance</h4>
           <div class="seg" id="setTheme">
             <button type="button" data-v="dark">Dark</button><button type="button" data-v="light">Light</button><button type="button" data-v="auto">Auto</button>
           </div>
-          <label class="no-i18n">App language · Langue de l’application
-            <select id="setUiLang">
-              <option value="auto">Auto</option>
-              <option value="en">English</option><option value="fr">Français</option>
-            </select>
-          </label>
-          <label>Reply language
-            <select id="setLang">
-              <option value="auto">Match what I write</option>
-              <option value="en">English</option><option value="fr">Français</option>
-              <option value="es">Español</option><option value="ar">العربية</option>
-              <option value="pt">Português</option><option value="de">Deutsch</option>
-              <option value="zh">简体中文</option><option value="ja">日本語</option>
-              <option value="hi">हिन्दी</option><option value="ru">Русский</option>
-            </select>
-          </label>
           <label>Text size
             <select id="setFontSize">
               <option value="small">Small</option><option value="default">Default</option>
-              <option value="large">Large</option><option value="larger">Larger</option>
-            </select>
-          </label>
-          <label class="check"><input type="checkbox" id="setSimple"> Simple mode: only the conversation. The Wheel, your path, the library and their cards are set aside; the text is larger and the message box taller. Learning goes on quietly, and everything waits in Settings.</label>
-          <label>Length of replies
-            <select id="setReplyLen">
-              <option value="full">Developed</option><option value="short">Short</option>
+              <option value="large">Large</option><option value="larger">Very large</option>
             </select>
           </label>
           <label class="check"><input type="checkbox" id="setComposerChips"> Show the model and the reply mode in the message box</label>

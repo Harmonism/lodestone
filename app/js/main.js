@@ -336,19 +336,18 @@ async function handleAppLink(link) {
 /** Text size and the message box's chips, Settings → Display (November 3, 2026).
  *  The chips (the model's name, the reply mode) stay hidden unless asked for, so a
  *  tap meant for the box does not land on them. */
-const FONT_PX = { small: 16, default: 17.5, large: 19, larger: 21 };
+const FONT_PX = { small: 17.5, default: 19, large: 21, larger: 23 };   // November 13, 2026: the old default is the small one, 19 px the default, a 23 px step added
 function applyDisplay() {
   const r = document.documentElement;
   const simple = !!S.settings?.simple;
-  const fs = FONT_PX[S.settings?.fontSize] && !(simple && S.settings.fontSize === "default") ? S.settings.fontSize : simple ? "large" : "default";
-  r.style.setProperty("--fs-body", FONT_PX[fs] + "px");
+  r.style.setProperty("--fs-body", (FONT_PX[S.settings?.fontSize] || FONT_PX.default) + "px");
   r.classList.toggle("composer-chips", !!S.settings?.composerChips && !simple);
   r.classList.toggle("simple", simple);
 }
 
 /** Simple mode and reply length (November 13, 2026). Simple mode leaves the
  *  conversation alone on the screen, for someone who gets lost in menus: no Wheel,
- *  path, library or their cards, larger text, a taller box. Learning goes on and its
+ *  path, library or their cards. Text size and the box are left alone. Learning goes on and its
  *  proposals wait, unseen, until simple mode is off. Replies are short in simple
  *  mode unless "Developed" was chosen; the length never cuts what safety needs. */
 const replyLen = () => S.settings?.replyLen || (S.settings?.simple ? "short" : "full");
@@ -6361,7 +6360,27 @@ function renderLearnSetting() {
   box.onchange = async () => { await held.setLearnFromApps(box.checked); toast(box.checked ? "harmonism.io keeps what Lodestone has learned of you up to date from the conversations it answered." : "Conversations harmonism.io answered on this device no longer go back to it to update what Lodestone has learned of you.", 6000); };
 }
 
+const fold = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+function filterSettings(q) {
+  const d = $("#drawerSettings"), words = fold(q).split(/\s+/).filter(Boolean);
+  let any = false;
+  d.querySelectorAll(".settings-body .set-group").forEach(g => {
+    let shown = 0;
+    g.querySelectorAll(":scope > section").forEach(sec => {
+      const hit = !words.length || words.every(w => fold(sec.textContent).includes(w));
+      sec.classList.toggle("s-miss", !hit); if (hit && !sec.hidden) shown++;
+    });
+    g.classList.toggle("s-miss", !shown); if (shown) any = true;
+  });
+  d.querySelector(".set-top")?.classList.toggle("s-miss", !!words.length);
+  $("#setSearchNone").hidden = any || !words.length;
+  d.querySelector(".page-nav-items").dataset.key = "";
+  drawPageNav(d);
+  if (words.length) d.querySelector(".page-main").scrollTop = 0;
+}
+
 async function renderSettings() {
+  if ($("#setSearch")?.value) { $("#setSearch").value = ""; filterSettings(""); }
   renderRecallSetting();
   renderLearnSetting();
   renderImprove();
@@ -8033,6 +8052,9 @@ function bindChrome() {
   if ($("#setSimple")) $("#setSimple").onchange = async e => { S.settings.simple = e.target.checked; applyDisplay(); if ($("#setReplyLen")) $("#setReplyLen").value = replyLen(); await store.kv.set("settings", S.settings); syncSoon(); renderChat(); renderCheckins(); };
   if ($("#setReplyLen")) $("#setReplyLen").onchange = async e => { S.settings.replyLen = e.target.value; await store.kv.set("settings", S.settings); syncSoon(); };
   if ($("#setComposerChips")) $("#setComposerChips").onchange = async e => { S.settings.composerChips = e.target.checked; applyDisplay(); await store.kv.set("settings", S.settings); syncSoon(); };
+  // Search in Settings (November 13, 2026): a section stays when its words (labels,
+  // hints, the choices in its lists) hold every word typed, accents and case aside.
+  if ($("#setSearch")) $("#setSearch").oninput = () => filterSettings($("#setSearch").value);
   $("#setShowCost").onchange = async e => { S.settings.showCost = e.target.checked; await store.kv.set("settings", S.settings); renderChat(); };
   if ($("#setShowConvCost")) $("#setShowConvCost").onchange = async e => { S.settings.hideConvCost = !e.target.checked; await store.kv.set("settings", S.settings); renderCostLine(); syncSoon(); };
   if ($("#setHybrid")) $("#setHybrid").onchange = async e => { S.settings.hybrid = e.target.checked; await store.kv.set("settings", S.settings); syncSoon(); };
