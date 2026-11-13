@@ -77,6 +77,7 @@ if (location.protocol === "file:" && /\/(launcher|phone)\.html$/.test(location.p
     openLibrary: lang => call("open-library", lang),
     openPhone: () => call("open-phone"),
     setTheme: mode => call("set-theme", mode),
+    setSimple: on => call("set-simple", on),
     // Sync: encrypted in the window, carried under the account by the app
     syncAccount: () => call("sync-account"),
     syncSignIn: (email, password) => call("sync-sign-in", email, password),

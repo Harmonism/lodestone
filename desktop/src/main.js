@@ -84,6 +84,7 @@ let cfg = {
   folders: [],          // folders Lodestone may read, chosen in Settings → Advanced
   lifeBook: null,       // the vault whose Lodestone/ folder is the life book, chosen in Settings → Life book
   theme: "dark",        // the app's light or dark, told by the app (set-theme), so the setup pages follow it
+  simple: false,        // simple mode, told by the app (set-simple): the Library, Your Path and Life Book leave the menu
 };
 // The settings hold the encrypted keys, the Telegram token, the pairings: a
 // file that cannot be read is moved aside, not overwritten by the defaults at
@@ -1262,6 +1263,13 @@ handle("set-theme", async (e, mode) => {
   if (cfg.theme !== mode) { cfg.theme = mode; saveCfg(); }
   win?.setBackgroundColor(themeBg());
 }, { app: true });
+// Simple mode (web shell v124, desktop 1.17.10): the page sets the Wheel, Your path
+// and the library aside; the menu does the same, so ⌘2–⌘4 do not reopen them.
+handle("set-simple", async (e, on) => {
+  on = on === true;
+  if (!!cfg.simple === on) return;
+  cfg.simple = on; saveCfg(); buildMenu();
+}, { app: true });
 handle("web-lookup", async (e, question) => {
   if (typeof question !== "string" || !question.trim()) return [];
   return lookUp((u, init) => net.fetch(u, init), question, { braveKey: cfg.braveKey || null });
@@ -1274,9 +1282,11 @@ function buildMenu() {
   const ensure = fn => () => { if (!win) createWindow(); fn(); };
   const lodestone = [
     { label: "Talk with Lodestone", accelerator: "CmdOrCtrl+1", click: ensure(openApp) },
-    { label: "The Library", accelerator: "CmdOrCtrl+2", click: ensure(openLibraryHome) },
-    { label: "Your Path", accelerator: "CmdOrCtrl+3", click: ensure(() => openInApp("path")) },
-    { label: "Life Book", accelerator: "CmdOrCtrl+4", click: ensure(() => openInApp("lifebook")) },
+    ...(cfg.simple ? [] : [
+      { label: "The Library", accelerator: "CmdOrCtrl+2", click: ensure(openLibraryHome) },
+      { label: "Your Path", accelerator: "CmdOrCtrl+3", click: ensure(() => openInApp("path")) },
+      { label: "Life Book", accelerator: "CmdOrCtrl+4", click: ensure(() => openInApp("lifebook")) },
+    ]),
     { type: "separator" },
     { label: "Model…", click: ensure(() => showLauncher("models")) },
     { label: "Library Languages and Updates…", click: ensure(() => showLauncher("library")) },

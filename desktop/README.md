@@ -105,6 +105,10 @@ Offered untested (`untested: true`), and recommended on Tahir's preference: Bons
 
 Verified for the large tiers: every part's size and SHA-256 from the Hugging Face API; the architectures (`deepseek4`, `glm4moe`) are present in all four engine builds; the first part of DeepSeek V4 Flash was downloaded and its header read (5 parts, 1,048,576-token native context). Neither large model has been loaded end to end: no machine with the memory was available.
 
+## 1.17.10: web shell v128 and the 13 November library (13 Nov 2026)
+
+The web app's changes since 1.17.9 (shell v121 to v128) ship with the app from `../app/`: dictation naming the app's language to Whisper (on this computer's whisper-cli as well, through `asr-native`), the Conversation group first in Settings with a search over every section, simple mode and the length of replies (`<reply_length>`, also on Telegram answers, which the hidden page writes), text one step larger, the French pillar names, evidence and check-in messages. One needed the desktop's own code: simple mode set the Library, Your Path and Life Book aside in the page while the menu still offered them under ⌘2–⌘4. The page now tells the app (`setSimple`, the `set-simple` handler, `cfg.simple`), the menu is rebuilt without them, and `openFromDesktop` refuses them while simple mode is on. The English library is the pack built from the site of 13 November.
+
 ## 1.17.0: the model's whole window under one's own key (29 Oct 2026)
 
 Found on Mariam's second laptop: Claude Opus 5.5 under her OpenRouter key stopped after a paragraph, then answered a later message with "The model used its whole allowance thinking and wrote no answer". Cause: every turn asked for at most 1,200 output tokens, and a model with no profile in `RECOMMENDED` (a closed-weight model typed in under one's own key) got neither a token floor nor a reasoning setting, so its thinking and its answer shared those 1,200 tokens. It was not the context window.

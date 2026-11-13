@@ -343,6 +343,8 @@ function applyDisplay() {
   r.style.setProperty("--fs-body", (FONT_PX[S.settings?.fontSize] || FONT_PX.default) + "px");
   r.classList.toggle("composer-chips", !!S.settings?.composerChips && !simple);
   r.classList.toggle("simple", simple);
+  // Lodestone Desktop sets the Library, Your Path and Life Book aside from its menu too (1.17.10).
+  if (!BRIDGE) try { DESKTOP?.setSimple?.(simple); } catch {}
 }
 
 /** Simple mode and reply length (November 13, 2026). Simple mode leaves the
@@ -6870,7 +6872,7 @@ function initBack() {
   navSync();
 }
 function openFromDesktop(what) {
-  if ($("#main").hidden) return;
+  if ($("#main").hidden || S.settings?.simple) return;
   if (what === "lifebook") return openLifeBook();
   if (what === "path") openMe();
 }
