@@ -25,7 +25,13 @@ const MODEL = "Xenova/multilingual-e5-small";
 const DIMS = 384;
 const BATCH = 32;
 
-env.allowLocalModels = false;
+// LODESTONE_LOCAL_MODELS=1 reads the model the app vendors (app/vendor/models/) and never
+// the network: post-build.sh embeds that way at deploy, so the pack and its vectors
+// always leave together.
+if (process.env.LODESTONE_LOCAL_MODELS === "1") {
+  env.allowLocalModels = true; env.allowRemoteModels = false;
+  env.localModelPath = path.join(ROOT, "app", "vendor", "models") + "/";
+} else env.allowLocalModels = false;
 
 const corpusBytes = fs.readFileSync(path.join(DIR, "corpus.json"));
 const corpus = JSON.parse(corpusBytes.toString("utf8"));
