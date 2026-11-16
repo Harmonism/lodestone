@@ -21,17 +21,19 @@ export function detectLang(text, preferred = "auto") {
   if (/[\u4E00-\u9FFF]/.test(text)) return "zh";
   if (/[\u0900-\u097F]/.test(text)) return "hi";
   if (/[\u0400-\u04FF]/.test(text)) return "ru";
-  const words = normalize(text).replace(/[’]/g, "'").split(/[^\p{L}']+/u);
-  const FR = new Set("je j' tu vous il elle est suis sommes les des une un pas ne pour avec mon ma mes ton ta c'est qu' que qui être très veux peux dans sur mais aussi comment pourquoi quoi moi me".split(" "));
-  const ES = new Set("yo tú usted él ella está estoy soy los las una por para con mi mis tu qué que quién muy pero cómo por qué quiero puedo también ya no".split(" "));
-  const PT = new Set("eu você vocês ele ela está estou sou somos os as um uma por para com meu minha seu sua que quem muito mas como porquê quero posso também já não".split(" "));
-  const DE = new Set("ich du sie er es ist bin sind der die das ein eine nicht für mit mein meine dein deine dass wie warum sehr aber auch kann will möchte nicht und oder".split(" "));
+  // Case folded, accents kept (16 November 2026): stripped, "à" became the English "a" ("elle passe à midi" read
+  // as English), and the lists' own accented words ("très", "qué", "você") could never match.
+  const words = String(text || "").replace(/[’‘ʼ´`]/g, "'").toLowerCase().replace(/\s+/gu, " ").split(/[^\p{L}']+/u);
+  const FR = new Set("à ce cette du au aux je j' tu vous il elle est suis sommes les des une un pas ne pour avec mon ma mes ton ta c'est qu' que qui être très veux peux dans sur mais aussi comment pourquoi quoi moi me bonne nuit bonjour bonsoir merci salut".split(" "));
+  const ES = new Set("yo tú usted él ella está estoy soy los las una por para con mi mis tu qué que quién muy pero cómo por qué quiero puedo también ya no gracias hola buenas noches voy el del muéstrame artículo".split(" "));
+  const PT = new Set("pode ajuda ajudar obrigado obrigada eu você vocês ele ela está estou sou somos os as um uma por para com meu minha seu sua que quem muito mas como porquê quero posso também já não o é em do da dos das isso isto esse essa diz devo tem mostra artigo inteiro trabalho mais sei lá aqui dia dias noite boa bom vc vcs voce n q qdo quando mt muito hj hoje ta tá to tô pra pro tipo entendeu aí eu meu minha nada tbm também pq porque kkk kkkk né ne entao então gente fico fica ficou".split(" "));
+  const DE = new Set("ich du sie er es ist bin sind der die das ein eine nicht für mit mein meine dein deine dass wie warum sehr aber auch kann will möchte nicht und oder danke bitte gute nacht morgen nein mich mir dich dir wir ihr euch habe hat wird werden gibt gib ganz auf aus bei nach von vom zum zur über noch schon".split(" "));
   // "me" is French and English: with English's commonest words here too, "everyone would be better off without me" reads as English (1.13).
   const EN = new Set("i you he she the is am are and with my your what how why this that it's i'm want can not me be would to of a an in on for we was were have has do don't off without just so but if all they them there feel been will could should".split(" "));
   let fr = 0, es = 0, pt = 0, de = 0, en = 0;
   for (const w of words) {
     if (!w) continue;
-    if (FR.has(w) || w.startsWith("j'") || w.startsWith("c'") || w.startsWith("qu'") || w.startsWith("n'") || w.startsWith("l'")) fr++;
+    if (FR.has(w) || w.startsWith("j'") || w.startsWith("c'") || w.startsWith("qu'") || w.startsWith("n'") || w.startsWith("l'") || w.startsWith("m'") || w.startsWith("d'")) fr++;
     if (ES.has(w)) es++;
     if (PT.has(w)) pt++;
     if (DE.has(w)) de++;
@@ -45,7 +47,7 @@ export function detectLang(text, preferred = "auto") {
   // Maghrebi darija in Latin letters ("ana 3yit, bghit ghir nn3es"): its words, and words that write
   // ع ح ق خ ء as 3 7 9 5 2 inside letters. It is read as Arabic, so the reply, the crisis gate and the
   // care layer meet it as what it is (15 November 2026: "bghit nmout" was read as English).
-  const DJ = new Set("ana nta nti howa hiya 7na hna ntoma homa wach wash chno chnu chnou achno kifach kifash 3lach 3la 3lik 3liya 3ndi 3ndek 3ndo 3nd fin bghit bghiti bgha baghi baghya kant kayn kayna makaynch mabghitch walo bzaf bezzaf bzzaf safi wakha ghir dyal dyali dyalek dyalo dyalha dyalna m3a m3ak m3ah m3aya lia liya rani raki raha daba mzyan mezyan khoya khti yemma inchallah nchallah hamdullah wllah wallah machi mashi mochkil mouchkil hadchi chi shi ila w f mn".split(" "));
+  const DJ = new Set("ana nta nti howa hiya 7na hna ntoma homa wach wash chno chnu chnou achno kifach kifash 3lach 3la 3lik 3liya 3ndi 3ndek 3ndo 3nd fin bghit bghiti bgha baghi baghya kant kayn kayna makaynch mabghitch walo bzaf bezzaf bzzaf safi wakha ghir dyal dyali dyalek dyalo dyalha dyalna m3a m3ak m3ah m3aya lia liya rani raki raha daba mzyan mezyan khoya khti yemma inchallah nchallah hamdullah wllah wallah machi mashi mochkil mouchkil hadchi chi shi ila w f mn l mzyana lyoum baraka llahou llah fik atay nhar lil bach chukran choukran bslama chkoun huwa kaysken ghadi".split(" "));
   let dj = 0;
   for (const w of normalize(text).split(/[^\p{L}\p{N}']+/u)) {
     if (!w) continue;
@@ -53,10 +55,10 @@ export function detectLang(text, preferred = "auto") {
     else if (/\p{L}/u.test(w) && /[23579]/.test(w) && !/^\d+(st|nd|rd|th|s|h|am|pm|k|m|x|d)$/.test(w) && w.length >= 3) dj += 2;
   }
   if (dj >= 3 && dj > en + fr) return "ar";
-  if (fr > en && fr >= es && fr >= 1) return "fr";
-  if (es > en && es > fr && es >= 1) return "es";
-  if (pt > en && pt > es && pt >= 1) return "pt";
-  if (de > en && de >= 1) return "de";
+  // The language with most marks, ties in this order; Portuguese was tested before German without being
+  // compared with it, so "Gib mir eine Sache, … um einzuschlafen" read as Portuguese (16 November 2026).
+  const best = [["fr", fr], ["es", es], ["pt", pt], ["de", de]].reduce((b, c) => c[1] > b[1] ? c : b);
+  if (best[1] > en && best[1] >= 1) return best[0];
   return "en";
 }
 
@@ -142,7 +144,8 @@ export function crisisLine(country, lang, library) {
     fr: "Urgences", es: "Emergencias", ar: "الطوارئ", pt: "Emergência", de: "Notruf",
     zh: "急救", ja: "救急", hi: "आपातकाल", ru: "Скорая помощь",
   };
-  const lead = LEAD[key] || LEAD.en;
+  // Brazil reads European Portuguese as foreign in the one message that must not be (16 November 2026).
+  const lead = key === "pt" && String(country || "").toUpperCase().trim() === "BR" ? "Se você está pensando em tirar a própria vida ou em se machucar, fale com alguém agora:" : LEAD[key] || LEAD.en;
   const em = res ? (EM[key] || "Emergency") : null;
   const line = res ? `📞 ${res.name}: ${res.hotline}${em ? ` · ${em}: ${res.emergency}` : ""}` : "📞 Befrienders Worldwide — https://www.befrienders.org (a helpline in your country)";
   return `${lead}\n${line}`;

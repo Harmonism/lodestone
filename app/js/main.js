@@ -1,7 +1,7 @@
 // main.js — the Lodestone web app's controller (in the browser, on a phone, and in Lodestone Desktop's window).
 import * as store from "./store.js";
 import * as corpusPack from "./corpus.js";
-import { Retriever, wantsWhole, isFollowUp } from "./retrieval.js";
+import { Retriever, wantsWhole, wholeArticle, isFollowUp } from "./retrieval.js";
 import { Embedder } from "./embedder.js";
 import { TIERS, MODELS, probeWebGPU, DeviceEngine, ServerEngine, ReaderEngine, isHandheld, isIOS, localInferenceAvailable, defaultModelFor, smallerModelThan, RENTED_CTX, OWNED_CTX, MODEL_CTX, OPEN_CTX, OPEN_MAX_TOKENS, OPEN_MAX_CAP } from "./engine.js";
 import { HostedEngine, OpenRouterEngine, hosted, secrets, phoneRoutesAvailable, RECOMMENDED, OFFERED, DEFAULT_REMOTE, refreshRecommended, assess, testOpenRouter, accountLinks, signInWithPassword, orContext, orPrice, orMaxOut, lightFor, orName, modelInfo } from "./phone.js";
@@ -11,6 +11,8 @@ import { heldBlock, personContext, buildSystem, fitMessages, withReply, estToken
 import { detectLang, detectCrisis, buildCrisisResponse, detectWitness, witnessBlock, governorBlock, crisisLine, emergencyLine, SELF_HARM_CATEGORIES } from "./safety.js";
 import { careCheck, indirectCare } from "./care.js";
 import * as presence from "./presence.js";
+import { situationNotes } from "./situation.js";
+import * as replyGuard from "./guard.js";
 import { render } from "./md.js";
 import { readAttachment, filesBlock, MAX_FILE_CHARS, kindOf, speechLanguage, transcribeClip, setSpeechMode, setNativeSpeech, sizeLabel } from "./attach.js";
 import { scanMessage, leaveOutMessage, redact, leaveOut, scanText } from "./privacygate.js";
@@ -2055,6 +2057,7 @@ async function prepareTurn(text, history, { getWeb = null, files = [], folders =
   const follow = isFollowUp(text) && !S.retriever.asked(text).length;
   const prior = prevSources.map(p => S.pack.corpus.articles.findIndex(a => a.p === p)).filter(i => i >= 0);
   let { hits, none } = await S.retriever.retrieve(text, { ...tier.rag, context: prevUser, follow, prior });
+  const situation = situationNotes({ text, history });
 
   // 2a — articles read whole, from the corpus pack on this device. Asked for in
   // full: the one named, else the one the practitioner last named, else the first
@@ -2065,6 +2068,9 @@ async function prepareTurn(text, history, { getWeb = null, files = [], folders =
   let full = [], articleBudget = 0;
   if (wantsWhole(text)) {
     let cands = S.retriever.asked(text);
+    // A topic of its own ("l'article entier sur le sommeil") finds its article by retrieval on the topic alone;
+    // only a bare "the whole article" looks back at the conversation (16 November 2026).
+    if (!cands.length) { const own = await wholeArticle(S.retriever, text, { lang, prevPaths: prevSources, rag: tier.rag }); if (own >= 0) cands = [own]; }
     for (let i = history.length - 1; i >= 0 && !cands.length; i--) if (history[i].role === "user") cands = S.retriever.asked(history[i].content);
     const prev = new Set(prevSources);
     const idx = cands.find(a => prev.has(arts[a].p)) ?? cands[0] ?? arts.findIndex(a => a.p === prevSources[0]);
@@ -2143,6 +2149,7 @@ async function prepareTurn(text, history, { getWeb = null, files = [], folders =
       lifebook: away(lifebook.lifeBookBlock(lbSel, lbBudget)),
       recall: away(presence.recallBlock(recalled)),
       care: presence.careBlock(care),
+      situation,   // situation.js, 16 November 2026
       summary: away(summaryBlock(summary?.text)),
       article: articleBlocks(),
       vault: none && !full.length ? S.retriever.formatNone() : S.retriever.format(hits),
@@ -2172,7 +2179,7 @@ async function prepareTurn(text, history, { getWeb = null, files = [], folders =
   const sources = [...new Set([...full.map(a => arts[a].p), ...hits.map(h => arts[h.article].p)])];
   const images = files.flatMap(f => f.images || []);
   await calib.advance();
-  return { tier, fitted, w, web, sources, images, hits, yours: [...new Set(yours.map(r => r.file))], lifebook: lbSel.map(e => e.rel), readingDue: reading.due, readingArc: reading.arc, care, lang,
+  return { situation, tier, fitted, w, web, sources, images, hits, yours: [...new Set(yours.map(r => r.file))], lifebook: lbSel.map(e => e.rel), readingDue: reading.due, readingArc: reading.arc, care, lang,
     recalled: recalled.map(r => ({ key: r.key, th: r.th, title: r.title, date: r.date })) };
 }
 
@@ -2450,6 +2457,7 @@ async function sendOne(prefill) {
     };
 
     let out = "";
+    const hold = replyGuard.guarded(turn);
     const t0 = performance.now();
     // Stop keeps what was written so far, marked as stopped, rather than losing it to an error.
     try {
@@ -2458,10 +2466,18 @@ async function sendOne(prefill) {
       const onThinking = null;
       if (!S.stopRequested) for await (const partial of S.engine.stream(withImages(fitted.messages, images), { maxTokens: tier.maxTokens, web: webViaProvider, ...plan, onThinking })) {
         out = partial;
+        if (hold) continue;   // guarded: nothing shown or kept until checked (guard.js), so no unchecked draft survives a crash
         if (thinking.isConnected && stripRetrievalNote(out).trim()) { clearInterval(thinkT); thinking.remove(); }
         paint(stripRetrievalNote(out));
         if (speak && speaker.key === am) speaker.feed(stripRetrievalNote(out));
         if (out.trim()) keepPartial();
+      }
+      if (hold && !S.stopRequested) {
+        const g = await guardReply(turn, text, out, plan);
+        out = g.out; if (g.status) { am.meta.guard = g.status; if (g.broken) am.meta.guardBroken = g.broken; }
+        clearInterval(thinkT); if (thinking.isConnected) thinking.remove();
+        paint(stripRetrievalNote(out));
+        if (speak && speaker.key === am) speaker.feed(stripRetrievalNote(out));
       }
       paint.flush();
     } catch (e) {
@@ -2487,8 +2503,12 @@ async function sendOne(prefill) {
     body.classList.remove("typing");
     if (speak && speaker.key === am) { if (S.stopRequested) speaker.stop(); else speaker.feed(stripRetrievalNote(out), true); }
     if (S.stopRequested) am.meta.stopped = true;
-    // A moment care.js only suspected, which the model read as real (1.13.2): the line is shown.
-    if (turn.care && presence.hasCareMark(out)) { turn.careMarked = true; am.meta.care = "marked"; }
+    // A moment care.js only suspected, which the model read as real (1.13.2): the line is shown. Since 16 November 2026 also a
+    // moment nothing caught, which the model read as real (prompt.js, Identity): the reader is the better judge than the phrase lists.
+    if (presence.hasCareMark(out)) { turn.careMarked = true; am.meta.care = "marked"; }
+    if (presence.hasEmergencyMark(out)) { turn.emergencyMarked = true; am.meta.emergency = "marked"; }
+    // A reply that asks the plain question or sends them to emergency care without its mark still brings the line (16 November 2026).
+    if (!turn.careMarked && !turn.emergencyMarked) { const said = presence.replyCalls(out); if (said === "care") { turn.careMarked = true; am.meta.care = "said"; } else if (said === "emergency") { turn.emergencyMarked = true; am.meta.emergency = "said"; } }
     out = stripRetrievalNote(out).trim() || (S.stopRequested ? "(stopped before answering)" : "…");
     guard.clear();   // it loaded and answered: nothing for the loop guard to catch
     am.content = out; am.meta.ms = Math.round(performance.now() - t0); delete am.meta.partial;
@@ -2541,6 +2561,22 @@ async function sendOne(prefill) {
 // ─── After an answer: the care line and the pause bell (1.13) ───────────────
 // Neither is written by a model, neither is sent to one (meta.notice).
 
+/** The second check (guard.js): on a guarded turn the finished reply is read against the turn's safety notes and care
+ *  check, and written again once if it breaks one. Returns { out, status, broken }; any failure leaves the reply as written. */
+async function guardReply(turn, text, out, opts = {}) {
+  if (!replyGuard.guarded(turn) || !String(out || "").trim()) return { out, status: null, broken: "" };
+  try {
+    const rules = replyGuard.rulesOf(turn);
+    let said = "";
+    for await (const p of S.engine.stream(replyGuard.checkMessages(rules, text, stripRetrievalNote(out)), { maxTokens: 2000, temperature: 0, background: true })) said = p;
+    const v = replyGuard.verdict(said);
+    if (v.ok) return { out, status: "passed", broken: "" };
+    let again = "";
+    for await (const p of S.engine.stream(replyGuard.rewriteMessages(turn.fitted.messages, stripRetrievalNote(out), v.broken), { maxTokens: turn.tier.maxTokens, ...opts })) again = p;
+    return again.trim() ? { out: again, status: "rewritten", broken: v.broken } : { out, status: "unchecked", broken: v.broken };
+  } catch (e) { logDiag("guard", e?.message || e); return { out, status: "unchecked", broken: "" }; }
+}
+
 /** Adds the notices this turn calls for to the thread; `show` receives each stored message. */
 async function addNotices(turn, threadId, show, channel = null) {
   const lang = turn.lang || "en";
@@ -2549,6 +2585,8 @@ async function addNotices(turn, threadId, show, channel = null) {
     // A danger the gate caught that is not to their own life (dissociation, an overdose, a child) gets the emergency numbers, not the suicide line (1.18).
     const other = turn.care?.how === "gate" && !SELF_HARM_CATEGORIES.has(turn.care.category);
     out.push({ notice: "care", content: other ? emergencyLine(S.profile.country, lang, S.pack.runtime.crisis) : crisisLine(S.profile.country, lang, S.pack.runtime.crisis) });
+  } else if (turn.emergencyMarked) {
+    out.push({ notice: "care", content: emergencyLine(S.profile.country, lang, S.pack.runtime.crisis) });
   }
   // The pause bell: one sitting at a time, on this device, whatever the window or the bot.
   const st = presence.advanceSitting(await store.kv.get("sitting").catch(() => null));
@@ -2822,9 +2860,12 @@ async function bridgeHandle(r) {
     if (turn.care?.level === "refer") return `Lodestone could not answer just now (${e.message || e}).\n\n${crisisLine(S.profile.country, turn.lang || "en", S.pack.runtime.crisis)}`;
     throw e;
   }
+  { const g = await guardReply(turn, text, out); out = g.out; }   // the second check, as in the window
   const tgUsage = usageNow(), tgLabel = currentModelLabel();
   setTimeout(() => afterTurn(turn), 0);
-  if (turn.care && presence.hasCareMark(out)) turn.careMarked = true;   // 1.13.2, as in the window
+  if (presence.hasCareMark(out)) turn.careMarked = true;   // 1.13.2, as in the window
+  if (presence.hasEmergencyMark(out)) turn.emergencyMarked = true;
+  if (!turn.careMarked && !turn.emergencyMarked) { const said = presence.replyCalls(out); if (said === "care") turn.careMarked = true; else if (said === "emergency") turn.emergencyMarked = true; }
   out = stripRetrievalNote(out).trim() || "…";
   await store.messages.add({ threadId: th.id, role: "assistant", content: out, meta: { ...hereMeta(), ...(turn.recalled?.length ? { recalled: turn.recalled } : {}), ...(turn.care ? { care: turn.care.level } : {}), sources: turn.sources, model: S.engine.describe(), witness: turn.w?.strength || null, channel: "telegram", ms: Math.round(performance.now() - t0), ...(tgUsage ? { usage: tgUsage } : {}), ...(tgLabel ? { modelLabel: tgLabel } : {}) } });
   th.updated = Date.now(); await store.threads.put(th);

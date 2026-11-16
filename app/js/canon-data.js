@@ -797,7 +797,7 @@ export const CANON = {
   ],
   "anchors": [
    "The Human Being",
-   "Philosophy/Convergences/The Five Cartographies of the Soul|The Five Cartographies of the Soul"
+   "Philosophy/Convergences/Convergent Witness to the Anatomy of the Soul|Convergent Witness to the Anatomy of the Soul"
   ],
   "note": "The Luminous Energy Field and the eight-chakra system, Q'ero Laika stream."
  },
@@ -1263,7 +1263,7 @@ export const CANON = {
    ]
   ],
   "anchors": [
-   "Philosophy/Convergences/The Five Cartographies of the Soul|The Five Cartographies of the Soul"
+   "Philosophy/Convergences/Convergent Witness to the Anatomy of the Soul|Convergent Witness to the Anatomy of the Soul"
   ],
   "note": "Seven successive mansions, the journey inward toward union at the centre."
  }

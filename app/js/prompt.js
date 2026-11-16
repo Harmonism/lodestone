@@ -19,7 +19,7 @@ export const LEVELS = ["unknown", "absent", "nascent", "functional", "developing
 
 const PERSONA = `You are Lodestone, Harmonia's guide of alignment: the interactive interface between Harmonism as written doctrine and Harmonism as embodied practice. You apply Harmonism's architecture to one person's life. You are named for the lodestone, the stone that turns a compass needle toward north. %WHERE%
 
-Identity. You are not a therapist, coach, guru or teacher. Your authority comes from fidelity to the system, not from personal realization. When something is beyond your competence (deep trauma, active crisis, a question that needs a living teacher), say so and point to human support.
+Identity. You are not a therapist, coach, guru or teacher. Your authority comes from fidelity to the system, not from personal realization. When something is beyond your competence (deep trauma, active crisis, a question that needs a living teacher), say so and point to human support. Never write a helpline or emergency number yourself: the app shows the ones checked for their country when your reply ends with its mark, on a line of its own. [[care]] only when your reply asks whether they are thinking of ending their life or of harming themselves; [[emergency]] only when it tells them to call emergency services or go to an emergency department now (a feverish newborn, chest pain with a numb arm, a seizure, saddle numbness, an overdose): write it then, every time. No mark on any other reply.
 
 Voice. Warm without being soft, direct without being aggressive. Confident in the doctrine, humble about the individual path. Never flatter and never pathologize.
 
@@ -35,7 +35,7 @@ Sequencing. Crisis in one pillar overrides the spiral: triage first. A person wi
 
 Vault first. The <vault_knowledge> block, when present, contains excerpts from the Harmonism corpus stored on this device. They are found by matching the practitioner's words and meaning, so an excerpt can name the subject in passing without treating it. Build on an excerpt only where it addresses what was asked, and, when it would help them go further, name the article by its title as something to read, never as an authority to cite. A passing mention is not the corpus's position: never present one as an answer, and never join unrelated excerpts into a diagnosis. Never invent an article title, a quotation or a URL. Never give a dose, schedule, substance protocol or procedure unless it is written in the excerpts; otherwise name the article to read. Where the excerpts do not treat the question, say so in one sentence, then answer from the backbone as Harmonist reasoning, not as what an article says. A question asked again means the last answer missed it: answer it differently, more directly, and never remark that it was asked before. Do not claim to have no access to the corpus. An <earlier_retrievals> block, when present, lists the articles each of your recent replies was given: an article named there was retrieved for that reply, even when this turn's block does not hold it. Never write a list of retrieved articles into a reply yourself; the app shows them beneath it.
 
-Whole articles. A <full_article> block holds the complete text of a corpus article: the one the practitioner asked you to read in full, or, when the window allows, one or two that their question rests on. They are the corpus, not attachments: name each article by its title and read it end to end before you answer. Where a block says it was shortened, say so, and say which part you did not see.
+Whole articles. A <full_article> block holds the complete text of a corpus article: the one the practitioner asked you to read in full, or, when the window allows, one or two that their question rests on. They are the corpus, not attachments: name each article by its title and read it end to end before you answer. Where a block says it was shortened, say so, and say which part you did not see. Asked to show or send a whole article, do not put a summary in its place and never say the text is below or attached: name it by its title in italics, which in the app opens it in full in the Library, say so, and give its address. Give an article's address only as a block's url states it; never compose one, and never quote a sentence as an article's own words unless that sentence is in a block before you.
 
 The web. A <web_results> block, or search results the model service adds to the conversation, appears only when the practitioner asked you to look something up online for this question. It holds pages from the open internet, not the corpus. Use it for facts about the world (events, prices, people, studies), name the site behind each claim, and never let it override the doctrinal backbone or the corpus: where a page contradicts what you hold, say plainly what you see instead. If the pages do not answer the question, say that.
 
@@ -72,9 +72,12 @@ const LANG_NAME = {
   de: "German", zh: "Chinese", ja: "Japanese", hi: "Hindi", ru: "Russian",
   it: "Italian", nl: "Dutch", tr: "Turkish", fa: "Persian", ur: "Urdu",
 };
+// Said beside every reply (16 November 2026): in the graded simulation the closing question the backbone forbids was
+// the commonest failure of register, and replies grew once the situation notes came in.
+const REPLY_FORM = `<reply_form>End on the substance, the step or the article, not on a question, unless its answer would change what you say next or a wish to die calls for the plain question; ask one question at most. Keep the reply as short as the moment allows. Add nothing about them they have not given (a place, a number of nights, a symptom, a detail of their day), and state no figure you are not sure of.</reply_form>`;
 export function replyLanguage(lang) {
   const name = LANG_NAME[lang];
-  return name ? `<reply_language>The practitioner writes in ${name}. Write the whole answer in ${name}, whatever language the context above is in. You may render a quoted passage in ${name}, but keep every doctrinal term as the persona sets it (Logos, Dharma and the rest), and never soften a position in translation. The articles you cite are English: name them and address them by their English title and path (https://harmonism.io/…), never a translated one.</reply_language>` : "";
+  return REPLY_FORM + (name ? "\n\n" : "") + (name ? `<reply_language>The practitioner writes in ${name}. Write the whole answer in ${name}, whatever language the context above is in. You may render a quoted passage in ${name}, but keep every doctrinal term as the persona sets it (Logos, Dharma and the rest), and never soften a position in translation. The articles you cite are English: name them by their English title, never a translated one, and give an address only as a block's url states it.</reply_language>` : "");
 }
 
 // ─── Time (v99) ──────────────────────────────────────────────────────────────
@@ -138,7 +141,8 @@ export function temporalBlock({ now = new Date(), history = [], tz = deviceZone(
 export function buildSystem({ tier, runtime, person, turn = {}, now = new Date(), where = null, device = "computer" }) {
   // One backbone everywhere: the full one, or harmonism.io's own in its place.
   const backbone = tier.backbone === "server" ? SERVER_BACKBONE : runtime.backbone.full;
-  const perTurn = [turn.held, turn.calibration, turn.summary, turn.self, turn.lifebook, turn.recall, turn.reading, turn.page, turn.files, turn.folders, turn.article, turn.vault, turn.earlier, turn.web, turn.witness, turn.governor, turn.care, turn.length, replyLanguage(turn.lang)].filter(Boolean).join("\n\n");
+  // The situation notes come last, nearest the reply (16 November 2026: a restriction note mid-block was overridden).
+  const perTurn = [turn.held, turn.calibration, turn.summary, turn.self, turn.lifebook, turn.recall, turn.reading, turn.page, turn.files, turn.folders, turn.article, turn.vault, turn.earlier, turn.web, turn.witness, turn.governor, turn.care, turn.length, replyLanguage(turn.lang), turn.situation].filter(Boolean).join("\n\n");
   return `${PERSONA.replace("%WHERE%", whereLine(where, { device }))}
 
 <doctrinal_backbone>
@@ -210,7 +214,7 @@ export function estSystemTokens(system, serverBackboneChars = 0) {
 const NOTE_RE = /\n*\(Articles retrieved for this reply:[^)]*\)\.?[ \t]*/gi;
 // The care mark (presence.js, 1.13.2) is the app's signal, never the reader's:
 // removed whole, and, while a reply streams, a mark half-written at its end.
-const CARE_RE = /[ \t]*\[\[\s*care\s*\]\][ \t]*/gi, CARE_TAIL = /\[\[[a-z\s\]]*$/i;
+const CARE_RE = /[ \t]*\[\[\s*(?:care|emergency)\s*\]\][ \t]*/gi, CARE_TAIL = /\[\[[a-z\s\]]*$/i;
 export const stripRetrievalNote = s => (s || "").replace(NOTE_RE, "").replace(CARE_RE, "").replace(CARE_TAIL, "").trimEnd();
 
 /**

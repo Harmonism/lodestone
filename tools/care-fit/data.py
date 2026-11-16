@@ -304,3 +304,112 @@ je n'en peux plus de vivre
 ya no quiero seguir
 أريد أن أختفي إلى الأبد
 it would be easier if I were dead""".split("\n")
+
+# Six more languages (16 November 2026): German, Portuguese, Chinese, Japanese, Hindi, Russian. The layer had been
+# fitted on English, French, Spanish and Arabic only: a Japanese carer's "if the two of us could just disappear
+# together" read nothing, and "my girlfriend says I'm never there" read 0.95 in German. Written for a native
+# speaker's review; none is a sentence of the simulations, which stay the held-out test.
+ML_POS = """Ich will einfach nicht mehr aufwachen
+Alle wären besser dran, wenn ich nicht mehr da wäre
+Ich sehe keinen Sinn mehr darin weiterzuleben
+Manchmal denke ich darüber nach, wie ich es beenden könnte
+Ich bin so müde vom Leben, ich will, dass es aufhört
+Ich habe angefangen, Abschiedsbriefe zu schreiben
+Ich ritze mich wieder, wenn es zu viel wird
+Es wäre leichter, wenn ich einfach verschwinden würde
+Não aguento mais viver assim
+Todos ficariam melhor sem mim
+Às vezes penso em acabar com tudo
+Queria dormir e não acordar mais
+Não vejo mais motivo para continuar vivendo
+Tenho me machucado de propósito
+Já pensei em como faria
+Queria desaparecer para sempre
+我真的不想再活下去了
+如果我消失了，大家会过得更好
+有时候我想睡着了就再也不醒来
+我一直在想怎么结束这一切
+活着太累了，我想解脱
+我又开始伤害自己了
+我已经写好了遗书
+我觉得自己是所有人的负担，不如死了算了
+もう生きていたくない
+私がいなくなった方がみんな楽になると思う
+眠ったまま目が覚めなければいいのに
+どうやって終わりにするか考えてしまう
+生きているのに疲れました
+また自分を傷つけてしまった
+遺書を書き始めました
+消えてしまいたい
+मैं अब और जीना नहीं चाहता
+मेरे बिना सब बेहतर रहेंगे
+काश मैं सोऊँ और फिर कभी न उठूँ
+मैं सोचता हूँ कि सब कुछ खत्म कर दूँ
+जीने से थक गया हूँ
+मैंने फिर से खुद को चोट पहुँचाई
+मैं हमेशा के लिए गायब हो जाना चाहता हूँ
+मुझे लगता है मैं सब पर बोझ हूँ
+Я больше не хочу жить
+Всем будет лучше без меня
+Хочу уснуть и не проснуться
+Я думаю о том, как всё закончить
+Я устал жить
+Я снова себя порезал
+Я уже написал прощальные письма
+Хочу исчезнуть навсегда""".split("\n")
+ML_NEG = """Ich bin völlig ausgebrannt von der Arbeit
+Ich will aus meinem Job raus
+Mein Vater ist letztes Jahr gestorben und ich vermisse ihn
+Das Projekt ist tot, wir beenden es
+Ich bin so müde, ich könnte im Stehen einschlafen
+Das Ego muss sterben, sagt mein Lehrer
+Ich trinke abends zwei Bier zum Runterkommen
+Ich habe keine Lust mehr auf diese Diskussion
+Estou cansado do meu trabalho e quero pedir demissão
+Minha avó morreu no mês passado
+Não consigo dormir direito
+Quero acabar com esse projeto de vez
+Estou morrendo de rir com esse vídeo
+A dieta está me matando
+Quero sumir das redes sociais por um tempo
+Estou exausta com as crianças
+Preciso de férias urgente
+我对这份工作已经累死了
+我爷爷上个月去世了
+我晚上总是睡不着
+这个项目我们决定结束了
+笑死我了
+我想彻底离开社交媒体
+我想换个城市生活
+冥想的时候感觉自我在消融
+我好累，想休息几天
+仕事に疲れて辞めたい
+祖母が先月亡くなりました
+夜なかなか眠れません
+このプロジェクトはもう終わりにします
+笑いすぎて死にそう
+SNSから少し離れたい
+介護で毎日へとへとです
+腰の痛みが楽になりたい
+瞑想中に自我が消える感じがした
+मैं अपनी नौकरी से थक गया हूँ
+मेरी दादी पिछले महीने गुजर गईं
+मुझे रात को नींद नहीं आती
+हम यह प्रोजेक्ट बंद कर रहे हैं
+हँसते हँसते मर गया
+मैं कुछ दिन सोशल मीडिया से दूर रहना चाहता हूँ
+ध्यान में अहंकार मिटता हुआ लगा
+मुझे छुट्टी चाहिए
+परीक्षा का बहुत तनाव है
+Я устал от работы и хочу уволиться
+Моя бабушка умерла в прошлом месяце
+Я плохо сплю по ночам
+Мы закрываем этот проект
+Я умираю со смеху
+Хочу на время уйти из соцсетей
+Мне нужен отпуск
+Во время медитации эго растворяется
+Я так устала с детьми""".split("\n")
+POS = POS + ML_POS
+NEG = NEG + ML_NEG
+

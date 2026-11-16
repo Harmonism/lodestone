@@ -32,12 +32,75 @@ function stem(w) {
 
 /** Does the message ask to read an article in full ("read the whole article", "the full text of …", "in full")? */
 export const wantsWhole = text =>
-  /\b(whole|entire|full|complete)\s+(text|article|paper|piece|essay|thing)\b|\b(read|show|give|bring|pull)\b[^.?!]{0,40}\b(in full|in its entirety|end to end|from start to finish|all of it)\b|\bin full\b|\bend to end\b/i.test(text || "");
+  /\b(whole|entire|full|complete)\s+(text|article|paper|piece|essay|thing)\b|\b(read|show|give|bring|pull)\b[^.?!]{0,40}\b(in full|in its entirety|end to end|from start to finish|all of it)\b|\bin full\b|\bend to end\b/i.test(text || "") || WHOLE_OTHER.test(text || "");
+// The same ask in the other nine languages (16 November 2026: « l'article entier » got passages, and the reply offered to read what it did not have).
+const WHOLE_OTHER = /article (entier|complet|en entier|intégral)|tout l['’]article|texte (intégral|complet)|art[ií]culo (completo|entero)|todo el art[ií]culo|artigo (completo|inteiro)|o artigo todo|(ganzen|ganze|vollständigen|vollständige|kompletten|komplette) (artikel|text)|artikel (vollständig|komplett|ganz)|المقال كامل|كامل المقال|النص الكامل|всю статью|статью (целиком|полностью)|весь текст|全文|整篇文章|記事全体|記事を全部|पूरा लेख|पूरा आर्टिकल/iu;
+const WHOLE_OTHER_G = new RegExp(WHOLE_OTHER.source, "giu");
 
 /** Does the message point back at the conversation rather than name a topic ("your last message", "that article", "review it"), or open on a short continuation ("and for women?", "why?", "what about the evening?")? */
 export const isFollowUp = text =>
   /^\s*(and|but|so|or|also|then|what about|how about|why|why not|same|and if|what if)\b[^.?!]{0,40}[.?!]?\s*$/i.test(text || "") ||
   /\b(your|the)\s+(last|previous|earlier|above)\s+(message|reply|answer|response)\b|\b(that|this|the)\s+(article|piece|paper|passage|section)\b|\b(review|revise|redo|rewrite|continue|elaborate|expand)\s+(on\s+)?(that|it|this|your|the)\b/i.test(text || "") || wantsWhole(text);
+
+/** What a whole-article request is about, once the request is taken out ("l'article entier sur le sommeil" → "sommeil"),
+ *  or "" for a bare one ("send me the whole article"), which points back at the conversation (16 November 2026). */
+const WHOLE_ASK = /\b(whole|entire|full|complete)\s+(text|article|paper|piece|essay|thing)\b|\b(in full|in its entirety|end to end|from start to finish|all of it)\b/giu;
+const REQUEST_WORDS = new Set(("send read give show bring pull please the about can you could would whole entire full complete text article articles paper piece essay thing all from start finish end its entirety " +
+  "envoie envoyer envoyez moi lis lire lisez donne donner montre montrer veux voudrais sil plait plaît stp merci sur les des une pour peux pouvez tu vous entier entière complet intégral texte tout tout " +
+  "schick schicken schicke mir gib zeig zeige lies bitte möchte ich will einen den das die der über ganzen ganze artikel vollständig vollständigen komplett komplette kannst du " +
+  "quiero dame envíame enviame manda mándame lee léeme muestra muéstrame muestrame enséñame enseñame por favor sobre del el los las artículo articulo completo entero texto todo puedes " +
+  "quero manda envie mostra artigo inteiro sobre do da dos das por favor me pode " +
+  "أرسل ارسل لي من فضلك عن المقال كامل كاملا النص الكامل أريد اريد " +
+  "пришли пришлите мне пожалуйста про о всю статью целиком полностью весь текст покажи дай").split(" "));
+// Chinese and Japanese put no space between words: their request words are taken out as strings.
+const CJK_ASK = /给我看看|给我看|请|发给我|关于|的全文|全文|整篇文章|文章|を全部|全部|見せて|読ませて|について|の記事|記事全体|記事/gu;
+export function wholeTopic(text) {
+  const rest = String(text || "").replace(WHOLE_ASK, " ").replace(WHOLE_OTHER_G, " ").replace(CJK_ASK, " ").replace(/的(?=\s|$)/gu, " ");
+  const words = rest.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(w => w && !REQUEST_WORDS.has(w) && !/^(l|d|s|m|t|qu)$/.test(w));
+  const left = words.filter(w => /[\u3040-\u30FF\u4E00-\u9FFF]/.test(w) || w.length > 2);
+  return left.join(" ");
+}
+
+// A country article answers a question about that country, and nothing else (16 November 2026). The meaning
+// model draws Spanish to the Spanish-quoting country articles: "¿le doy una nalgada?" retrieved Mexico, Peru
+// and Spain. Names in the ten languages, nouns and adjectives; "x*" is a word beginning, the rest whole words
+// or, in scripts without spaces between words, plain substrings; "_" joins a name of two words.
+const COUNTRY_NAMES = {
+  "Brazil": "brazil* bresil* brasil* البرازيل 巴西 ブラジル бразил* ब्राज़ील",
+  "Canada": "canad* montreal* quebec* toronto vancouver كندا 加拿大 カナダ канад* कनाडा",
+  "China": "china chine chinese chinois* chino chinoise chinesisch* china's الصين 中国 中國 中華 китай* चीन",
+  "Egypt": "egypt* egipt* egito agypt* مصر 埃及 エジプト египет* मिस्र",
+  "France": "france francais* francia frances* franzos* frankreich franca فرنسا 法国 フランス франци* फ़्रांस",
+  "Gabon": "gabon* الغابون 加蓬 ガボン габон*",
+  "Greece": "greece grece grec grecque greek grecia griech* grega grego اليونان 希腊 ギリシャ греци* यूनान",
+  "India": "india inde indien indienne indian hindu* hindou* الهند 印度 インド инди* भारत",
+  "Indonesia": "indonesi* إندونيسيا 印尼 インドネシア индонези*",
+  "Iran": "iran iranian* iranien* persia* persan* إيران 伊朗 イラン иран* ईरान",
+  "Italy": "italy ital* إيطاليا 意大利 イタリア итали* इटली",
+  "Japan": "japan* japon* japao japones* 日本 اليابان япони* जापान",
+  "Mexico": "mexic* mexiq* mexik* المكسيك 墨西哥 メキシコ мексик* मेक्सिको",
+  "Peru": "peru peruan* peruvi* perou peruvien* بيرو 秘鲁 ペルー перу* पेरू",
+  "Portugal": "portug* البرتغال 葡萄牙 ポルトガル португал*",
+  "Russia": "russia* russie russe russes russland russisch* rusia ruso rusa rusos russo russa روسيا 俄罗斯 ロシア росси* русск* रूस",
+  "Saudi Arabia": "saudi* saoudi* saudita* سعودية السعودية 沙特 サウジ саудов*",
+  "South Korea": "korea* coree* corea* koreia* korean* كوريا 韩国 韓国 한국 коре*",
+  "Spain": "spain spanish espagne espagnol* espana espanol* spanien spanisch* espanha espanhol* إسبانيا 西班牙 スペイン испани*",
+  "Thailand": "thailand* thailande* tailandia thai thaï ไทย تايلاند 泰国 таиланд*",
+  "Tibet": "tibet* التبت 西藏 チベット тибет*",
+  "Turkey": "turkey turquie turquia turkei turkiye turkish turc turque turco turca تركيا 土耳其 トルコ турци* турец*",
+  "UK": "uk britain british britannique* britanic* britisch* england angleterre royaume-uni inglaterra reino_unido بريطانيا 英国 イギリス британи* англи*",
+  "USA": "usa america american americain* americano* amerika* etats-unis estados_unidos eua أمريكا الولايات_المتحدة 美国 アメリカ америк* сша",
+  "Vietnam": "vietnam* viet_nam فيتنام 越南 ベトナム вьетнам*",
+};
+const fold = s => String(s || "").normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
+function namesCountry(text, country) {
+  const t = fold(text);
+  return (COUNTRY_NAMES[country] || country.toLowerCase()).split(" ").map(w => w.replace(/_/g, " ")).some(w => {
+    if (/[^\u0000-\u024F]/.test(w) && !/[\u0400-\u04FF]/.test(w)) return t.includes(w);
+    const stem = fold(w.replace(/\*$/, "")), pre = w.endsWith("*");
+    return new RegExp(`(?:^|[^\\p{L}])${stem.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}${pre ? "" : "(?![\\p{L}])"}`, "u").test(t);
+  });
+}
 
 export class Retriever {
   constructor({ corpus, runtime, embeddings }) {
@@ -85,6 +148,8 @@ export class Retriever {
     // Titles a practitioner can ask for by name: the part before " — ", as
     // whole words, and only with two topic words or more, so that "Water" or
     // "Love" never takes over an ordinary question.
+    // Country articles (World/Civilizations/): kept only when the question names the country.
+    this.country = new Map(this.articles.map((x, i) => [i, x.p && x.p.startsWith("World/Civilizations/") ? x.t.replace(/ and Harmonism$/, "") : null]).filter(([, c]) => c));
     this.first = new Map(); // article -> its first chunk with content
     for (let i = N - 1; i >= 0; i--) if (!this._stub(i)) this.first.set(this.chunks[i][0], i);
     this.named = [];
@@ -287,6 +352,7 @@ export class Retriever {
       seen.add(i);
       if (gated && !about(i)) continue;
       const [a, h, s, e] = this.chunks[i];
+      if (this.country.has(a) && !asked.includes(a) && !namesCountry(query + " " + context, this.country.get(a))) continue;
       if ((perArt.get(a) || 0) >= perArticle) continue;
       if (this._stub(i)) continue;
       const text = this.articles[a].x.slice(s, e).trim();
@@ -332,4 +398,22 @@ export class Retriever {
     }
     return [...seen].sort((x, y) => y[1] - x[1]).slice(0, limit).map(([a]) => a);
   }
+}
+
+/** The article a whole-article request names (16 November 2026, round 3). A topic alone ("sono", "jeûne") is too little for the
+ *  embedding in a language the corpus is not written in, and the whole sentence carries the request's own words ("show me the
+ *  whole article on fasting" found Purification): an article cited earlier in the conversation and found by either comes
+ *  first, then the topic's best that the sentence also finds, then the topic's best in English and the sentence's in any other
+ *  language. Returns an article index, or -1. */
+export async function wholeArticle(retriever, text, { lang = "en", prevPaths = [], rag = {} } = {}) {
+  const topic = wholeTopic(text);
+  if (!topic) return -1;
+  const opts = { ...rag, context: "", follow: false, prior: [] };
+  const top = r => r.none ? [] : [...new Set(r.hits.map(h => h.article))].slice(0, 5);
+  // In another language, a topic word the synonym table carries is asked in its English ("ayuno" → "fasting"); English
+  // words keep their own ("fasting" has an entry of its own, toward Purification).
+  const asked = lang === "en" ? topic : topic.split(" ").map(w => (retriever.syn?.[norm(w)] || "").split(" ")[0] || w).join(" ");
+  const T = top(await retriever.retrieve(asked, opts)), F = top(await retriever.retrieve(text, opts));
+  const prev = new Set(prevPaths);
+  return [...T, ...F].find(a => prev.has(retriever.articles[a].p)) ?? T.find(a => F.includes(a)) ?? (lang === "en" ? T[0] ?? F[0] : F[0] ?? T[0]) ?? -1;
 }

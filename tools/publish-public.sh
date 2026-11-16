@@ -51,6 +51,8 @@ echo "==> copying $SRC → $DEST"
 # extension/ so its store zips are published, hashed and tagged like the rest.
 # Only what a build needs and what ships: no dist/ (built), no .build/ (scratch),
 # no icon backups (icons.bak-* would otherwise ship, #1469).
+# The simulation harness stays private (16 November 2026): its personas carry held subjects and crisis scripts;
+# tools/sim/ holds the reacting personas, the frozen test set and the grader.
 rsync -a --delete --delete-excluded \
   --filter='P /.git/' \
   --exclude='/app/corpus/' \
@@ -64,7 +66,8 @@ rsync -a --delete --delete-excluded \
   --exclude='/mobile/android/.gradle/' --exclude='/mobile/android/build/' --exclude='/mobile/android/**/build/' \
   --exclude='/mobile/android/local.properties' \
   --exclude='*.local' --exclude='*.bak-*' --exclude='*.retired-*' --exclude='.DS_Store' \
-  --exclude='/tools/simulate.mjs' --exclude='/tools/simulation-users.json' \
+  --exclude='/tools/simulate.mjs' --exclude='/tools/simulation-users*.json' \
+  --exclude='/tools/sim/' --exclude='/tools/care-fit/vecs.json' \
   "$SRC/" "$DEST/"
 if [ -d "$SRC/../lodestone-extension" ]; then
   rsync -a --delete --delete-excluded \

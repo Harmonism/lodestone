@@ -1,0 +1,20 @@
+// test-guard.mjs — the second check's logic (app/js/guard.js), without a model.   node tools/test-guard.mjs
+import * as G from "../app/js/guard.js";
+import { situationNotes } from "../app/js/situation.js";
+let pass = 0, fail = 0;
+const ok = (c, m) => { if (c) pass++; else { fail++; console.log("FAIL", m); } };
+const hist = [{ role: "user", content: "tenho 15 anos. quando fica ruim eu corto meus braços" }];
+const teen = { situation: situationNotes({ text: "n tem ngm solto assim entende?", history: hist }), care: null };
+ok(G.guarded(teen), "a minor who disclosed cutting earlier is guarded on a later turn");
+ok(!G.guarded({ situation: situationNotes({ text: "what is the wheel of harmony?", history: [] }), care: null }), "a doctrine question is not guarded");
+ok(G.guarded({ situation: "", care: { level: "ask" } }), "a care turn is guarded");
+const rules = G.rulesOf({ situation: teen.situation, care: { level: "ask" } });
+ok(/clean blade/.test(rules) && /young_person/.test(rules), "the rules carry the care prohibitions and the young-person note");
+ok(!/doctrine_terms/.test(G.rulesOf({ situation: situationNotes({ text: "tenho 15, o que é a roda?", history: hist }), care: null })), "a doctrine note is not checked");
+ok(!/plain question|\[\[care\]\] on a line/.test(rules), "the checker never enforces asking first or the mark");
+ok(G.verdict('{"ok": true}').ok, "ok parsed");
+ok(!G.verdict('Sure. {"ok": false, "broken": "x"} done').ok, "a broken verdict inside prose is read");
+ok(G.verdict("not json").ok, "an unreadable verdict lets the reply stand");
+const m = G.rewriteMessages([{ role: "system", content: "S" }, { role: "user", content: "U" }], "DRAFT", "BROKEN");
+ok(m.length === 2 && m[1].content === "U" && /BROKEN/.test(m[0].content) && /DRAFT/.test(m[0].content), "the rewrite keeps the practitioner's message last and names the breach in the system prompt");
+console.log(`${pass} passed, ${fail} failed`);

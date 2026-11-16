@@ -26,7 +26,7 @@ const meta = JSON.parse(fs.readFileSync(C + "embeddings.json"));
 const b = fs.readFileSync(C + "embeddings.bin"); const buf = b.buffer.slice(b.byteOffset, b.byteOffset + b.length);
 const emb = { meta, q: new Int8Array(buf, 0, meta.count * meta.dims), scales: new Float32Array(buf, meta.scales_offset, meta.count) };
 const ex = await pipeline("feature-extraction", meta.model, { dtype: "q8" });
-const { Retriever, wantsWhole, isFollowUp } = await import(pathToFileURL(path.join(ROOT, "app/js/retrieval.js")).href);
+const { Retriever, wantsWhole, wholeArticle, isFollowUp } = await import(pathToFileURL(path.join(ROOT, "app/js/retrieval.js")).href);
 const { fullArticleBlock } = await import(pathToFileURL(path.join(ROOT, "app/js/prompt.js")).href);
 const R = new Retriever({ corpus, runtime, embeddings: emb });
 R.embedQuery = async t => (await ex("query: " + t, { pooling: "mean", normalize: true })).data;
@@ -61,7 +61,8 @@ for (const [id, text] of Object.entries(questions)) {
   let { hits, none } = await R.retrieve(text, { ...rag, context: "", follow, prior: [] });
   let full = [], budget = 0;
   if (wantsWhole(text)) {
-    const idx = R.asked(text)[0];
+    let idx = R.asked(text)[0];
+    if (!(idx >= 0)) { const own = await wholeArticle(R, text, { rag }); if (own >= 0) idx = own; }   // main.js, 16 November 2026
     if (idx >= 0) { full = [idx]; hits = []; budget = arts[idx].x.length; }
   } else if (!noWhole) {
     const named = R.asked(text), depth = new Map();
