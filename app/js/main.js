@@ -8,7 +8,7 @@ import { HostedEngine, OpenRouterEngine, hosted, secrets, phoneRoutesAvailable, 
 import { routeTurn } from "./route.js";
 import * as unlock from "./unlock.js";
 import { heldBlock, personContext, buildSystem, fitMessages, withReply, estTokens, estSystemTokens, PILLARS, LEVELS, webBlock, foldersBlock, earlierBlock, fullArticleBlock, stripRetrievalNote, summaryBlock, summaryRequest, renderSummary, summaryPlan } from "./prompt.js";
-import { detectLang, detectCrisis, buildCrisisResponse, detectWitness, witnessBlock, governorBlock, crisisLine } from "./safety.js";
+import { detectLang, detectCrisis, buildCrisisResponse, detectWitness, witnessBlock, governorBlock, crisisLine, emergencyLine, SELF_HARM_CATEGORIES } from "./safety.js";
 import { careCheck, indirectCare } from "./care.js";
 import * as presence from "./presence.js";
 import { render } from "./md.js";
@@ -2021,19 +2021,26 @@ function onLinkClick(e) {
 
 /**
  * One turn's context, the same for the window and for the Telegram bridge.
- * The crisis gate runs first and no model sees a message it catches; the web
+ * The crisis gate runs first: a message it catches is answered by the model, told
+ * what was caught, with the line for their country shown beneath (1.18); the web
  * is consulted only after it, and only when `getWeb` is given.
  */
 async function prepareTurn(text, history, { getWeb = null, files = [], folders = false, summary = null } = {}) {
   const lang = detectLang(text, S.settings.lang || "auto");
   const runtime = S.pack.runtime;
 
-  // 1 — deterministic crisis gate: no model sees this message
+  // 1 — deterministic crisis gate (1.18, 15 November 2026). It no longer answers in the model's place:
+  // a template in place of a reply read as a machine flinching, worst on a false catch, and the turn
+  // was then hidden from every later reply. A caught message is a care moment at its surest: the
+  // model answers, told what was caught (presence.careBlock), the line for their country is shown
+  // beneath whatever it writes (addNotices), and the turn stays in the conversation the model sees.
+  // The template stays for a turn no model answers (the reading tier).
   const crisis = detectCrisis(text, lang, runtime.crisis);
-  if (crisis) return { crisis, reply: buildCrisisResponse(crisis.category, S.profile.country, crisis.lang || lang, runtime.crisis) };
   // 1b — the care layer (1.13): what is said indirectly, by phrase or by meaning, still before any model
   const embed = S.retriever?.embedQuery || null;
-  const care = await careCheck(text, embed).catch(() => null);
+  const care = crisis
+    ? { kind: crisis.category, category: crisis.category, how: "gate", level: "refer", template: buildCrisisResponse(crisis.category, S.profile.country, crisis.lang || lang, runtime.crisis) }
+    : await careCheck(text, embed).catch(() => null);
 
   // 2 — retrieval
   let tier = windowFor(S.engine.tier);
@@ -2403,7 +2410,7 @@ async function sendOne(prefill) {
     if (showing()) { if (chat.querySelector(".empty")) chat.innerHTML = ""; chat.append(unode); }
 
     if (S.engine.kind === "reader") {
-      const rm = { threadId: thread.id, role: "assistant", content: readerReply(turn.hits), meta: { ...hereMeta(), sources, model: "corpus-only" } };
+      const rm = { threadId: thread.id, role: "assistant", content: turn.care?.template || readerReply(turn.hits), meta: { ...hereMeta(), sources, model: turn.care?.template ? "crisis-template" : "corpus-only" } };
       rm.id = await store.messages.add(rm);
       history.push(rm);
       if (showing()) { chat.append(msgNode(rm)); readFromQuestion(unode); }
@@ -2538,7 +2545,11 @@ async function sendOne(prefill) {
 async function addNotices(turn, threadId, show, channel = null) {
   const lang = turn.lang || "en";
   const out = [];
-  if (turn.care?.level === "refer" || turn.careMarked) out.push({ notice: "care", content: crisisLine(S.profile.country, lang, S.pack.runtime.crisis) });
+  if (turn.care?.level === "refer" || turn.careMarked) {
+    // A danger the gate caught that is not to their own life (dissociation, an overdose, a child) gets the emergency numbers, not the suicide line (1.18).
+    const other = turn.care?.how === "gate" && !SELF_HARM_CATEGORIES.has(turn.care.category);
+    out.push({ notice: "care", content: other ? emergencyLine(S.profile.country, lang, S.pack.runtime.crisis) : crisisLine(S.profile.country, lang, S.pack.runtime.crisis) });
+  }
   // The pause bell: one sitting at a time, on this device, whatever the window or the bot.
   const st = presence.advanceSitting(await store.kv.get("sitting").catch(() => null));
   await store.kv.set("sitting", st.state);

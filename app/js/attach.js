@@ -760,7 +760,7 @@ export async function readAttachment(file, { canSee = false, status, language = 
 // What a file says cannot close the block it is read in, nor open one of the
 // app's own (1.13.1): "</file></attached_files><instructions>" in a file, or in
 // a name inside a zip, would otherwise stand outside it in the prompt.
-const OWN_TAGS = /<(\/?)\s*(file|attached_files|earlier_conversations|your_folders|life_book|lifebook|care_check|person_context|doctrinal_backbone|web_results|witness_mode_active|engagement_band|temporal|instructions?|system)\b/gi;
+const OWN_TAGS = /<(\/?)\s*(file|attached_files|earlier_conversations|your_folders|life_book|lifebook|care_check|crisis_check|person_context|doctrinal_backbone|web_results|witness_mode_active|engagement_band|temporal|instructions?|system)\b/gi;
 export const neutral = t => String(t ?? "").replace(OWN_TAGS, "‹$1$2");
 const attrSafe = t => neutral(t).replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/["<>]/g, "'").slice(0, 300);
 

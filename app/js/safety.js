@@ -41,6 +41,18 @@ export function detectLang(text, preferred = "auto") {
   if (/[ãõ]/.test(text)) pt += 2;
   if (/[ß]/.test(text)) de += 2;
   if (/[çœ]|[àèù]\b/.test(text)) fr += 1;
+  // Before French, whose "ma" and "me" darija shares ("wach ana 7ma9t?" was read as French).
+  // Maghrebi darija in Latin letters ("ana 3yit, bghit ghir nn3es"): its words, and words that write
+  // ع ح ق خ ء as 3 7 9 5 2 inside letters. It is read as Arabic, so the reply, the crisis gate and the
+  // care layer meet it as what it is (15 November 2026: "bghit nmout" was read as English).
+  const DJ = new Set("ana nta nti howa hiya 7na hna ntoma homa wach wash chno chnu chnou achno kifach kifash 3lach 3la 3lik 3liya 3ndi 3ndek 3ndo 3nd fin bghit bghiti bgha baghi baghya kant kayn kayna makaynch mabghitch walo bzaf bezzaf bzzaf safi wakha ghir dyal dyali dyalek dyalo dyalha dyalna m3a m3ak m3ah m3aya lia liya rani raki raha daba mzyan mezyan khoya khti yemma inchallah nchallah hamdullah wllah wallah machi mashi mochkil mouchkil hadchi chi shi ila w f mn".split(" "));
+  let dj = 0;
+  for (const w of normalize(text).split(/[^\p{L}\p{N}']+/u)) {
+    if (!w) continue;
+    if (DJ.has(w)) dj++;
+    else if (/\p{L}/u.test(w) && /[23579]/.test(w) && !/^\d+(st|nd|rd|th|s|h|am|pm|k|m|x|d)$/.test(w) && w.length >= 3) dj += 2;
+  }
+  if (dj >= 3 && dj > en + fr) return "ar";
   if (fr > en && fr >= es && fr >= 1) return "fr";
   if (es > en && es > fr && es >= 1) return "es";
   if (pt > en && pt > es && pt >= 1) return "pt";
@@ -82,6 +94,26 @@ export function buildCrisisResponse(category, country, lang, library) {
   }
   const cat = library.templates[category] || library.templates.active_suicidal_ideation;
   return (cat[key] || cat.en).replace("%RESOURCE%", block);
+}
+
+/** The gate's categories that concern the person's own life; the others are a danger to be called in (1.18). */
+export const SELF_HARM_CATEGORIES = new Set(["active_suicidal_ideation", "self_harm"]);
+
+/**
+ * The emergency numbers alone (1.18), beneath the answer to a danger the gate caught that is
+ * not to the person's own life: dissociation, an overdose, a child in danger now.
+ */
+export function emergencyLine(country, lang, library) {
+  const key = LANGS.includes(lang) ? lang : "en";
+  const res = country ? (library.resources || {})[String(country).toUpperCase().trim()] : null;
+  const LOCAL = {
+    en: "Call your local emergency number now.", fr: "Appelez maintenant le numéro d'urgence local.", es: "Llama ahora al número de emergencias local.",
+    ar: "اتصل الآن برقم الطوارئ المحلي.", pt: "Ligue agora para o número de emergência local.", de: "Rufen Sie jetzt den örtlichen Notruf an.",
+    zh: "请立即拨打当地的急救电话。", ja: "今すぐ地域の緊急通報番号に電話してください。", hi: "अभी अपने स्थानीय आपातकालीन नंबर पर कॉल करें।",
+    ru: "Позвоните сейчас по местному номеру экстренной помощи.",
+  };
+  const EM = { en: "Emergency", fr: "Urgences", es: "Emergencias", ar: "الطوارئ", pt: "Emergência", de: "Notruf", zh: "急救", ja: "救急", hi: "आपातकाल", ru: "Скорая помощь" };
+  return res ? `🚨 ${res.name} · ${EM[key]}: ${res.emergency}` : `🚨 ${LOCAL[key]}`;
 }
 
 /**

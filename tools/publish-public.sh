@@ -64,6 +64,7 @@ rsync -a --delete --delete-excluded \
   --exclude='/mobile/android/.gradle/' --exclude='/mobile/android/build/' --exclude='/mobile/android/**/build/' \
   --exclude='/mobile/android/local.properties' \
   --exclude='*.local' --exclude='*.bak-*' --exclude='*.retired-*' --exclude='.DS_Store' \
+  --exclude='/tools/simulate.mjs' --exclude='/tools/simulation-users.json' \
   "$SRC/" "$DEST/"
 if [ -d "$SRC/../lodestone-extension" ]; then
   rsync -a --delete --delete-excluded \

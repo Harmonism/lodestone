@@ -265,6 +265,13 @@ export class Retriever {
     // count (_names): rare common words such as "fix" or "issue" open no gate. An
     // article asked for by name is exempt.
     const names = this._names(query);
+    // A name that is a small part of a long question is not what it is about: "Sunday" and "Sam" in a
+    // question about a newborn's vaccines, "Dad" in one about chlorine dioxide, gated out every passage
+    // (the simulation of 15 November 2026: 37 of 100 turns reached the model with no corpus). Where the
+    // names are at most a quarter of five or more distinct terms and the gate leaves nothing, the
+    // ranking stands ungated; a short question about a name ("the best restaurant in Lyon") keeps the gate.
+    const terms = new Set(this.tokens(query));
+    const minor = names.size && terms.size >= 5 && names.size / terms.size <= 0.25;
     const semTop = new Set(sem.slice(0, 3).map(([i]) => i));
     const about = i => {
       if (!names.size || asked.includes(this.chunks[i][0])) return true;
@@ -272,11 +279,13 @@ export class Retriever {
       return n >= 2 || n === 1 && semTop.has(i);
     };
 
-    const perArt = new Map(); const seen = new Set(); const picked = []; let chars = 0;
+    let perArt, seen, picked, chars;
+    for (const gated of minor ? [true, false] : [true]) {
+    perArt = new Map(); seen = new Set(); picked = []; chars = 0;
     for (const i of ranked) {
       if (seen.has(i)) continue;
       seen.add(i);
-      if (!about(i)) continue;
+      if (gated && !about(i)) continue;
       const [a, h, s, e] = this.chunks[i];
       if ((perArt.get(a) || 0) >= perArticle) continue;
       if (this._stub(i)) continue;
@@ -287,7 +296,10 @@ export class Retriever {
       chars += text.length;
       if (picked.length >= k) break;
     }
-    return { hits: picked, mode: sem.length ? "hybrid" : "keyword", none: false };
+    if (picked.length) break;
+    }
+    // Nothing picked is nothing found: none, so the turn says so (backbone § XIII) instead of a silent empty block.
+    return { hits: picked, mode: sem.length ? "hybrid" : "keyword", none: !picked.length };
   }
 
   /** The <vault_knowledge> block when retrieval found nothing close to the question. */

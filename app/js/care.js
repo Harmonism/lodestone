@@ -44,12 +44,16 @@ export const PLAIN = {
     "je veux mourir", "me suicider", "je pense au suicide", "mettre fin à mes jours", "en finir avec la vie", "envie d'en finir", "je veux en finir", "plus envie de vivre",
     "quiero morir", "quiero morirme", "me quiero matar", "quiero matarme", "pienso en el suicidio", "quitarme la vida", "no quiero vivir más", "no quiero seguir viviendo",
     "أريد أن أموت", "اريد ان اموت", "أفكر في الانتحار", "افكر في الانتحار", "أريد الانتحار", "اريد الانتحار", "سأنتحر", "لا أريد أن أعيش",
+    // Maghrebi darija, as typed: Arabic script, and Latin letters with 3, 7, 9 for ع, ح, ق (simulation, 15 November 2026).
+    "بغيت نموت", "باغي نموت", "باغية نموت", "بغيت نقتل راسي", "ما بغيتش نعيش", "مابغيتش نعيش", "ما بقيتش باغي نعيش", "ما بقيتش باغية نعيش",
+    "bghit nmout", "bghit nmot", "baghi nmout", "baghya nmout", "bghit nqtel rasi", "mabghitch n3ich", "ma bghitch n3ich", "mab9itch baghi n3ich", "mab9itch baghya n3ich",
   ],
   self_harm: [
     "been cutting myself", "keep cutting myself", "started cutting myself", "cutting myself again", "cut myself again", "cut myself on purpose",
     "hurt myself on purpose", "hurting myself again", "hurt myself again", "burned myself on purpose", "burn myself on purpose", "make myself bleed",
     "took a bunch of pills", "took too many pills", "swallowed all my pills",
     "je me scarifie", "me suis fait du mal", "me hice daño a propósito", "أؤذي نفسي", "اؤذي نفسي", "جرحت نفسي",
+    "je me fais du mal", "كنجرح راسي", "تانجرح راسي", "kanjre7 rasi", "tanjre7 rasi",
   ],
 };
 export const INDIRECT = {
@@ -60,6 +64,9 @@ export const INDIRECT = {
     "ne plus me réveiller", "ne jamais me réveiller", "fatigué de vivre", "fatiguée de vivre", "disparaître pour toujours",
     "mejor sin mí", "mejor sin mi", "no despertar nunca", "no despertar más", "acabar con todo", "no quiero vivir", "cansado de vivir", "cansada de vivir",
     "إنهاء كل شيء", "تعبت من الحياة",
+    // Darija: to sleep and not wake, better to die, to go with the dead and rest (the first two also said of a lie-in).
+    "وما نفيقش", "ما نفيقش", "حسن لي نموت", "حسن ليا نموت", "نموت ونرتاح", "نمشي معاه ونرتاح", "نمشي معاها ونرتاح", "عييت من الحياة",
+    "ma nfi9ch", "manfi9ch", "7sen li nmout", "hsen li nmout", "7sen lia nmout", "nmout w nrta7", "nmchi m3ah w nrta7", "nmchi m3aha w nrta7", "3yit mn l7ayat", "3yit mn had l7ayat",
     // Plain once, moved here (1.13.2): said of a team or a meeting as well ("the team is better off without me on this").
     "better off without me", "better off if i was gone", "better off if i were gone", "better off if i wasn't here", "better off if i weren't here", "nobody would miss me if i", "mieux sans moi", "todos estarían mejor sin mí", "estarían mejor sin mí", "أفضل بدوني",
     // Plain once, moved here (1.13.1): each is also said of someone else, or as a figure of speech
@@ -68,7 +75,7 @@ export const INDIRECT = {
   ],
   self_harm: [
     // "I cut myself shaving", "cutting myself some slack", "il veut me faire du mal".
-    "i cut myself", "cutting myself", "je me coupe", "me corto", "me faire du mal", "hacerme daño",
+    "i cut myself", "cutting myself", "je me coupe", "me corto", "me faire du mal", "hacerme daño", "je me fais mal", "je me fais un peu mal",
   ],
 };
 

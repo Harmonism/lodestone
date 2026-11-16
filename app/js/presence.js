@@ -52,12 +52,24 @@ export const CARE_MARK = "[[care]]";
 export const hasCareMark = s => /\[\[\s*care\s*\]\]/i.test(String(s || ""));
 
 /** What the model is told on a care moment (care.js). */
+// What the gate caught, said plainly to the model that now answers it (1.18). Before, a template answered.
+const GATE_GUIDE = {
+  self: "They have just said, in plain words, that they are thinking of ending their life or are harming themselves. Answer this before anything else in their message. Ask plainly and gently whether they are safe right now; stay with them; take what they say seriously; give no detail of any means. Say that a human being should hear this now, a person they trust and a crisis line: the app shows the line for their country beneath your answer. Do not lecture, do not leave, do not hand them doctrine, and do not answer the rest of the message as if this had not been said.",
+  acute_dissociation: "They describe acute dissociation: nothing feels real, they do not feel real, or they are losing hold of where they are. Ground first, in a few short sentences: feet flat on the floor, palms pressed on a surface, three things they can see, that they are here. Then say that a person trained in trauma-informed care can hold this, and that if it is severe or they feel unsafe they should call the emergency number the app shows beneath your answer. No doctrine, no analysis, no long reply.",
+  intoxication_distress: "They describe a substance emergency: too many pills, an overdose, a reaction they cannot control. Tell them first, in one sentence, to call the emergency number the app shows beneath your answer now, or poison control if they know the substance; then to unlock the door and have someone stay with them. Give no dose, no antidote and no home remedy. Keep the reply short.",
+  child_safety: "They describe a child in danger now. Tell them first, in one sentence, to call the emergency number the app shows beneath your answer if the child is in immediate danger, and that most countries have a child-protection line beside it. Ask for no detail before that, and do not advise them to confront anyone alone. Keep it short: the call comes before the conversation.",
+};
+
 export function careBlock(care) {
   if (!care) return "";
+  if (care.how === "gate") {
+    const g = GATE_GUIDE[care.category] || GATE_GUIDE.self;
+    return `<crisis_check category="${care.category}">\n${g}\n</crisis_check>`;
+  }
   const shown = care.level === "refer";
   return `<care_check level="${care.level}">
 This message may carry thoughts of not wanting to live, or of harming oneself, said indirectly; or it may not. Read it closely, in the light of the whole conversation.
-If it does: before anything else, ask plainly and gently whether they are thinking of ending their life or of hurting themselves. Stay with them; take what they say seriously; give no detail of any means. Say that a human being should hear this now, a person they trust and a crisis line${shown ? " (the app shows the line for their country beneath your answer)" : `. Then end your reply with ${CARE_MARK} on a line of its own: the app replaces it with the crisis line for their country`}. Do not lecture, do not leave, do not hand them doctrine.
+If it does: before anything else, ask plainly and gently whether they are thinking of ending their life or of hurting themselves. Stay with them; take what they say seriously; give no detail of any means. Say that a human being should hear this now, a person they trust and a crisis line${shown ? " (the app shows the line for their country beneath your answer)" : `. Then end your reply with ${CARE_MARK} on a line of its own: the app replaces it with the crisis line for their country. Write it whenever your reply asks about their safety, names a crisis line or urges them to tell someone; if you cannot tell whether the moment is real, write it: a line shown needlessly costs a moment, a line withheld can cost a life`}. Do not lecture, do not leave, do not hand them doctrine.
 If it plainly does not (work, a task, a loss told calmly, a practice, a figure of speech, a short reply in an ordinary conversation): answer what was asked and say nothing about safety${shown ? "" : `; write no ${CARE_MARK}`}.
 </care_check>`;
 }
