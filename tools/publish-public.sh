@@ -68,6 +68,7 @@ rsync -a --delete --delete-excluded \
   --exclude='*.local' --exclude='*.bak-*' --exclude='*.retired-*' --exclude='.DS_Store' \
   --exclude='/tools/simulate.mjs' --exclude='/tools/simulation-users*.json' \
   --exclude='/tools/sim/' --exclude='/tools/care-fit/vecs.json' \
+  --exclude='/_to_delete/' \
   "$SRC/" "$DEST/"
 if [ -d "$SRC/../lodestone-extension" ]; then
   rsync -a --delete --delete-excluded \

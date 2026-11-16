@@ -17,6 +17,7 @@ import { pipeline, env } from "@huggingface/transformers";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DIR = process.argv[2] || path.join(ROOT, "app", "corpus");
@@ -26,8 +27,18 @@ const BATCH = 32;
 
 env.allowLocalModels = false;
 
-const corpus = JSON.parse(fs.readFileSync(path.join(DIR, "corpus.json"), "utf8"));
+const corpusBytes = fs.readFileSync(path.join(DIR, "corpus.json"));
+const corpus = JSON.parse(corpusBytes.toString("utf8"));
 const runtime = JSON.parse(fs.readFileSync(path.join(DIR, "runtime.json"), "utf8"));
+// The vectors are stamped with the hash of the corpus they were computed from, never
+// with runtime.json's alone: the two can come from different builds (post-build.sh
+// once seeded runtime.json without corpus.json), and a stamp that matches the pack
+// over vectors of another corpus misaligns every passage after the first change.
+const CORPUS_HASH = createHash("sha256").update(corpusBytes).digest("hex").slice(0, 16);
+if (runtime.pack.corpus_hash !== CORPUS_HASH) {
+  console.error(`corpus.json (${CORPUS_HASH}) and runtime.json (${runtime.pack.corpus_hash}) are from different builds in ${DIR}; rebuild the pack or copy both from the same build.`);
+  process.exit(1);
+}
 const { articles, chunks } = corpus;
 const N = chunks.length;
 
@@ -86,7 +97,7 @@ const bin = Buffer.concat([Buffer.from(q.buffer), Buffer.from(scales.buffer)]);
 fs.writeFileSync(path.join(DIR, "embeddings.bin"), bin);
 fs.writeFileSync(path.join(DIR, "embeddings.json"), JSON.stringify({
   model: MODEL, dtype: "q8", dims: DIMS, count: N,
-  corpus_hash: runtime.pack.corpus_hash,
+  corpus_hash: CORPUS_HASH,
   scales_offset: N * DIMS,
   built_at: new Date().toISOString(),
 }));
