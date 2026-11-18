@@ -24,8 +24,50 @@
 // Read from the HF API on 8 Oct 2026.
 
 const BUNDLED = [
+  // Added 17 Nov 2026 at Tahir's request (the 256 GB tier): DeepSeek's July
+  // revision of V4 Flash, which held the backbone in the forty-model suite of
+  // 24 Oct 2026 where the April release (the entry below, now retired) slipped.
+  // Same architecture (deepseek4, present in all four engine builds), same five
+  // parts and sizes to within a kilobyte. V4.1 Flash 1017 (architecture deepseek41)
+  // and GLM-5.3 Flash (glm5-next) do not load on llama.cpp b11243; they wait on an
+  // engine update. Sizes and hashes from the HF API, 17 Nov 2026.
+  {
+    id: "deepseek-v4-flash-0731",
+    label: "DeepSeek V4 Flash (July) · unmodified",
+    repo: "unsloth/DeepSeek-V4-Flash-0731-GGUF",
+    files: [
+      { path: "UD-Q4_K_XL/DeepSeek-V4-Flash-0731-UD-Q4_K_XL-00001-of-00005.gguf", size: 5257408, sha256: "d13ce8f90855547bdaebe7312f531a1f2c4f822178d3103951f27fe884395cfa" },
+      { path: "UD-Q4_K_XL/DeepSeek-V4-Flash-0731-UD-Q4_K_XL-00002-of-00005.gguf", size: 48935523072, sha256: "d5b61668950f4743aacd677675d7fcf7507dbe1db6d304e8ff97ed1f00827bee" },
+      { path: "UD-Q4_K_XL/DeepSeek-V4-Flash-0731-UD-Q4_K_XL-00003-of-00005.gguf", size: 48980787136, sha256: "9705db7e589f360685ca7bd48100b270d78d228d4f5aa980508f3b2778af5494" },
+      { path: "UD-Q4_K_XL/DeepSeek-V4-Flash-0731-UD-Q4_K_XL-00004-of-00005.gguf", size: 49999168416, sha256: "7f13a68e3ca64208454c4ba32cc2757c0cbe78e3e5576c3142bf7007ca97da42" },
+      { path: "UD-Q4_K_XL/DeepSeek-V4-Flash-0731-UD-Q4_K_XL-00005-of-00005.gguf", size: 7174505088, sha256: "ed0d93164d3784968d6ce40d6d201ba98337f16e7db1b31fe495b2b0f334cc09" },
+    ],
+    minMem: 240, hand: "DeepSeek",
+    why: "For Mac Studios and workstations with 256 GB of memory. DeepSeek's July revision of V4 Flash, which held Lodestone's doctrine in Harmonia's October tests where the first release slipped. 284 billion parameters, 13 billion at work on each word, so it answers quickly for its size.",
+  },
+  // Added 17 Nov 2026 at Tahir's request (the 128 GB tier). In the forty-model
+  // suite of 24 Oct 2026 it held the backbone with no factual error, the only
+  // model of its class to do both (run with reasoning on; Lodestone runs it off).
+  // Architecture nemotron_h_moe (hybrid Mamba, latent mixture of experts): present
+  // in the b11243 builds, and the first part's header was read (89 blocks, 512
+  // experts, 22 used). Not yet loaded end to end: no 128 GB machine to hand. Text
+  // only: its vision projector is not wired. Sizes and hashes from the HF API,
+  // 17 Nov 2026; the first part's hash re-computed on the downloaded file.
+  {
+    id: "nemotron35-super",
+    label: "Nemotron 3.5 Super · unmodified",
+    repo: "unsloth/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-GGUF",
+    files: [
+      { path: "UD-Q4_K_XL/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-UD-Q4_K_XL-00001-of-00003.gguf", size: 7874568, sha256: "04e0b45e70ab5c86c6b5d3b0133cc35fc10861015bac7dcff867dcf115dc81c5" },
+      { path: "UD-Q4_K_XL/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-UD-Q4_K_XL-00002-of-00003.gguf", size: 49851272832, sha256: "868a7fa360ff10bc7e072e4bb4f8771b280ca35a087a55125bc21f7ebb9962b7" },
+      { path: "UD-Q4_K_XL/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-UD-Q4_K_XL-00003-of-00003.gguf", size: 37048096032, sha256: "684abb5b5306b18a046ee69e3375a0e863d14d265e0ffa52c33442d375d08b7d" },
+    ],
+    minMem: 120, hand: "NVIDIA",
+    why: "For computers with 128 GB of memory. In Harmonia's October tests it held Lodestone's doctrine without a single factual error, the only model of its size to do both. 120 billion parameters, 12 billion at work on each word. NVIDIA published the data it was tuned on.",
+  },
   {
     id: "deepseek-v4-flash",
+    retired: true,   // off the offered list since 17 Nov 2026: the July revision above replaces it; kept for those who have it
     label: "DeepSeek V4 Flash · unmodified",
     repo: "unsloth/DeepSeek-V4-Flash-GGUF",
     files: [
@@ -71,7 +113,7 @@ const BUNDLED = [
     mmproj: { repo: "mradermacher/gemma-4-26B-A4B-it-uncensored-heretic-GGUF", path: "gemma-4-26B-A4B-it-uncensored-heretic.mmproj-Q8_0.gguf", size: 806408512, sha256: "be045b816757d9e4f1edc1bcf80244306b4e7c8f3b0ec661594d1a6774d2296c" },
     minMem: 32, hand: "Google",
     ugi: { w: 9.2, natint: 34.1, lean: -22.2, base: { w: 1.8, natint: 34.4, lean: -18.2 } },
-    why: "For 32 GB computers. Only 4 billion of its 26 billion parameters work on each word, so it answers quickly; it held Lodestone's doctrine in Harmonia's tests.",
+    why: "For 32 GB computers. Only 4 billion of its 26 billion parameters work on each word, so it answers quickly. The original Gemma 4 26B held Lodestone's doctrine in Harmonia's tests, with slips; this uncensored version has not been tested.",
   },
   {
     id: "gemma4-26b-sompoa",
@@ -91,6 +133,7 @@ const BUNDLED = [
   // tested model, compressed to four bits. Sizes and hashes from the HF API.
   {
     id: "qwen35-35b-a3b",
+    retired: true,   // off the offered list since 17 Nov 2026 at Tahir's request: Qwen 3.8 27B replaces it (0.975 to its 0.925 on 24 Oct); kept for those who have it
     label: "Qwen 3.5 35B · unmodified",
     repo: "unsloth/Qwen3.5-35B-A3B-GGUF",
     files: [{ path: "Qwen3.5-35B-A3B-Q4_K_M.gguf", size: 22016023168, sha256: "3b46d1066bc91cc2d613e3bc22ce691dd77e6f0d33c9060690d24ce6de494375" }],
@@ -239,7 +282,7 @@ const CATALOG = [...BUNDLED];
 // [minimum memory in GB, model id], largest first. A "32 GB" machine reports ~31.x,
 // a "256 GB" Mac Studio ~255; below 32 GB the last entry is shown with a warning.
 // One model per family, one per common memory size: small, medium, high, workstation.
-const BUNDLED_DEFAULTS = [[240, "deepseek-v4-flash"], [30, "qwen38-27b"], [0, "qwen38-27b"]];   // Qwen 3.8 27B outscored Qwen 3.5 35B-A3B too
+const BUNDLED_DEFAULTS = [[240, "deepseek-v4-flash-0731"], [120, "nemotron35-super"], [30, "qwen38-27b"], [0, "qwen38-27b"]];   // 17 Nov 2026: the 128 GB tier filled, the 256 GB tier on the July DeepSeek
 const DEFAULTS = BUNDLED_DEFAULTS.map(d => [...d]);
 
 // The local model recommended ahead of the memory defaults. None since 30 Oct 2026

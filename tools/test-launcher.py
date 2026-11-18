@@ -75,7 +75,7 @@ def main():
         check("on that page Bonsai is tagged recommended and untested", "Recommended for this computer · not yet tested" in pg.text_content("#manageList"))
         pg.screenshot(path="/tmp/launcher-models.png", full_page=True); ctx.close()
 
-        for mem, plat, arch, want in [(64, "darwin", "arm64", "Qwen 3.5 35B"), (16, "darwin", "arm64", "Bonsai 2 27B"), (15.8, "win32", "x64", "Bonsai 2 27B"), (12, "darwin", "arm64", "Ministral 3 14B"), (8, "win32", "x64", "Ministral 3 14B"), (24, "linux", "arm64", "Ministral 3 14B")]:
+        for mem, plat, arch, want in [(255, "darwin", "arm64", "DeepSeek V4 Flash (July)"), (127.4, "darwin", "arm64", "Nemotron 3.5 Super"), (64, "darwin", "arm64", "Qwen 3.8 27B"), (31.5, "win32", "x64", "Qwen 3.8 27B")]:   # 17 Nov 2026: the old rows named models retired on 30 Oct and 17 Nov
             ctx, pg, errs = open_(status(mem, plat, arch))
             check(f"{mem} GB {plat}-{arch}: {want} recommended", want in pg.text_content("#pick"), pg.text_content("#pick")[:80]); ctx.close()
         # Under 16 GB: no model that holds the doctrine fits; the 9B Bonsai is retired, and the memory warning stands

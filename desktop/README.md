@@ -94,16 +94,18 @@ One model per family, one per common memory size, chosen on the doctrinal-fideli
 
 | Memory | Default | Download |
 |---|---|---|
-| 240 GB + | DeepSeek V4 Flash, unmodified, UD-Q4_K_XL (unsloth, 5 parts) | 155.1 GB |
-| 46 GB + | Qwen 3.5 35B-A3B, unmodified, Q4_K_M | 22.0 GB |
-| 30 GB + | Gemma 4 26B-A4B uncensored Heretic, Q4_K_M | 16.8 GB |
-| below | Ministral 3 14B, unmodified, Q4_K_M (the minimum; 16 GB) | 8.2 GB |
+| 240 GB + | DeepSeek V4 Flash 0731 (July revision), unmodified, UD-Q4_K_XL (unsloth, 5 parts) | 155.1 GB |
+| 120 GB + | Nemotron 3.5 Super VL 120B-A12B, unmodified, UD-Q4_K_XL (unsloth, 3 parts, text only) | 86.9 GB |
+| 30 GB + | Qwen 3.8 27B, unmodified, UD-Q4_K_M | 16.5 GB |
+| below | Qwen 3.8 27B, shown with the memory warning (the floor is 32 GB) | 16.5 GB |
 
-Retired models stay usable for anyone who has one downloaded or chosen, never a default (`retired: true`): Gemma 3 12B, Gemma 4 26B Q8_0, Gemma 4 26B SOMPOA-heresy, GLM-4.5-Air Derestricted, Qwen 3.5 27B. *Any other model, from Hugging Face* stays. `MUNAI_TEST_MODEL=tiny` adds a test entry.
+Also offered: Gemma 4 26B-A4B uncensored Heretic, Q4_K_M (16.8 GB, 32 GB +), untested as uncensored. Not offered, for want of an engine that loads them: DeepSeek V4.1 Flash 1017 (`deepseek41`) and GLM-5.3 Flash (`glm5-next`), absent from llama.cpp b11243 (17 Nov 2026).
+
+Retired models stay usable for anyone who has one downloaded or chosen, never a default (`retired: true`): Gemma 3 12B, Gemma 4 26B Q8_0, Gemma 4 26B SOMPOA-heresy, GLM-4.5-Air Derestricted, Qwen 3.5 27B, Qwen 3.5 35B-A3B and DeepSeek V4 Flash (April release), the last two since 17 Nov 2026. *Any other model, from Hugging Face* stays. `MUNAI_TEST_MODEL=tiny` adds a test entry.
 
 Offered untested (`untested: true`), and recommended on Tahir's preference: Bonsai 2 27B Heretic, ternary PTQ1_0 (5.9 GB), from 16 GB up to 45 GB. Under 16 GB no model is recommended to run on the computer: doctrinal fidelity comes before running locally at any cost, and the welcome leads with DeepSeek V4.1 Flash on the account or the practitioner's own key. Bonsai 2 9B (Prism ML's ternary Qwen 3.5 9B, 2.0 GB) is retired (`retired: true`): kept for anyone who has it, never recommended or offered. Mainline llama.cpp loads neither Bonsai. Its entry carries `engine: "prism"`: on first download the app also fetches Prism ML's llama.cpp fork (`PRISM_ENGINE` in `src/models.js`, release prism-b10772-e8fd209, the build Lode desktop runs, SHA-256-checked) into `<userData>/engines/`, and runs that model on it alone. Any other file whose tensor types are Prism ML's (`src/gguf.js`, ported from Lode desktop) is routed there too, a ternary model added from Hugging Face included; the engine is fetched at its first start if it is missing. Such entries are version-bound: `bundledData()` leaves them out of the published catalog, since an older app would load them on the wrong engine, and `applyCatalog()` always keeps them. Every model card links to its Hugging Face repository.
 
-Verified for the large tiers: every part's size and SHA-256 from the Hugging Face API; the architectures (`deepseek4`, `glm4moe`) are present in all four engine builds; the first part of DeepSeek V4 Flash was downloaded and its header read (5 parts, 1,048,576-token native context). Neither large model has been loaded end to end: no machine with the memory was available.
+Verified for the large tiers: every part's size and SHA-256 from the Hugging Face API; the architectures (`deepseek4`, `glm4moe`) are present in all four engine builds; the first part of DeepSeek V4 Flash was downloaded and its header read (5 parts, 1,048,576-token native context). Neither large model has been loaded end to end: no machine with the memory was available. 17 Nov 2026, the same for the two new large tiers: `deepseek4` (DeepSeek V4 Flash 0731) and `nemotron_h_moe` (Nemotron 3.5 Super, its first part downloaded and its header read, hash matching) are present in all four engine builds; neither loaded end to end.
 
 ## 1.17.10: web shell v128 and the 13 November library (13 Nov 2026)
 
