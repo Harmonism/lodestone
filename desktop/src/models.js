@@ -113,7 +113,7 @@ const BUNDLED = [
     mmproj: { repo: "mradermacher/gemma-4-26B-A4B-it-uncensored-heretic-GGUF", path: "gemma-4-26B-A4B-it-uncensored-heretic.mmproj-Q8_0.gguf", size: 806408512, sha256: "be045b816757d9e4f1edc1bcf80244306b4e7c8f3b0ec661594d1a6774d2296c" },
     minMem: 32, hand: "Google",
     ugi: { w: 9.2, natint: 34.1, lean: -22.2, base: { w: 1.8, natint: 34.4, lean: -18.2 } },
-    why: "For 32 GB computers. Only 4 billion of its 26 billion parameters work on each word, so it answers quickly. The original Gemma 4 26B held Lodestone's doctrine in Harmonia's tests, with slips; this uncensored version has not been tested.",
+    why: "For 32 GB computers and up. Faster than Qwen 3.8 27B: only 4 billion of its 26 billion parameters work on each word. Weaker at holding Lodestone's doctrine: the original Gemma 4 26B held it with slips in Harmonia's October tests, scoring below Qwen 3.8 27B, and this uncensored version has not been tested.",
   },
   {
     id: "gemma4-26b-sompoa",
@@ -156,7 +156,7 @@ const BUNDLED = [
     files: [{ path: "Qwen3.8-27B-UD-Q4_K_M.gguf", size: 16464440224, sha256: "322e194ff79741c7baa497c240f677f54b201b0efab44ca8e50f122b39123482" }],
     mmproj: { repo: "unsloth/Qwen3.8-27B-GGUF", path: "mmproj-F16.gguf", size: 927607488, sha256: "cbb841a9ee0636b2ec172f5bb8df2ea8dfeb01e90fe7c6126581d662a0b4e43e" },
     minMem: 32, hand: "Alibaba",
-    why: "For 32 GB computers and up. The most faithful to Lodestone's doctrine of the models a 32 GB computer can hold, in Harmonia's October tests. Every parameter works on every word, so it is slower than Gemma 4 26B.",
+    why: "For 32 GB computers and up. Better than Gemma 4 26B at holding Lodestone's doctrine: the most faithful of the models a 32 GB computer can hold, in Harmonia's October tests. Slower than Gemma 4 26B, since every parameter works on every word.",
   },
   {
     id: "qwen35-27b",

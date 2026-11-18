@@ -37,8 +37,10 @@ function figures(m) {
 
 function card(m, { selectable = false } = {}) {
   const tight = S.memGB < m.minMem - 1;
-  const tag = m.id === S.defaultId ? `Recommended for this computer${m.weaker ? " · smaller and weaker" : ""}${m.untested ? " · not yet tested against the doctrine" : ""}`
-    : tight ? `Needs ${m.minMem} GB of memory — this computer has ${Math.round(S.memGB)}`
+  // A model this computer cannot hold says so even when it is the default (17 Nov 2026:
+  // under 32 GB the default was labelled recommended while its twin said it would not fit).
+  const tag = tight ? `Needs ${m.minMem} GB of memory — this computer has ${Math.round(S.memGB)}`
+    : m.id === S.defaultId ? `Recommended for this computer${m.weaker ? " · smaller and weaker" : ""}${m.untested ? " · not yet tested against the doctrine" : ""}`
     : m.lastResort ? "Last resort · only if no other way is open"
     : m.untested ? `Untested${m.weaker ? " · smaller and weaker" : ""} · for ${m.minMem} GB of memory or more`
     : m.custom ? `Your choice · about ${m.minMem} GB of memory` : `For ${m.minMem} GB of memory or more`;
