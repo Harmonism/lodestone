@@ -36,6 +36,10 @@ from pathlib import Path
 LANGS = ["en", "fr", "es", "ar", "pt", "de", "zh", "ja", "hi", "ru"]
 SKIP_DIRS_ROOT = {"audio", "lodestone-app", "munai-offline", "member", "pagefind-temp"}
 SKIP_DIRS_ANY = {"member"}
+# Translated Lodestone pages: sources for the lodestone.harmonism.io mirror
+# (build-lodestone-mirror.py), 301-redirected away on harmonism.io, and the app
+# carries its own Lodestone. Packing them repacked every translation whenever they changed.
+SKIP_DIRS_TRANSLATED = {"lodestone", "lodestone-faq", "lodestone-privacy", "how-lodestone-works", "harmonic-profile"}
 SKIP_EXT = {".php", ".md", ".epub", ".zip"}
 SKIP_NAMES = {".htaccess", ".DS_Store", "sovereignty-bundle.json"}   # rewritten by every post-build (the bundle's size), and only the website's download button reads it
 
@@ -50,6 +54,9 @@ def files_for(dist: Path, lang: str):
         rel_root = Path(root).relative_to(base)
         parts = rel_root.parts
         if lang == "en" and parts and (parts[0] in LANGS or parts[0] in SKIP_DIRS_ROOT):
+            dirs[:] = []
+            continue
+        if lang != "en" and parts and parts[0] in SKIP_DIRS_TRANSLATED:
             dirs[:] = []
             continue
         if any(p in SKIP_DIRS_ANY for p in parts):

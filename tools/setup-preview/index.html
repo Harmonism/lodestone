@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lodestone: first-run setup (preview)</title>
+<link rel="stylesheet" href="../../app/styles.css">
+<style>
+  body { overflow: auto; display: flex; flex-direction: column; min-height: 100%; }
+  .pv-banner { font-size: 13px; color: var(--text-muted); text-align: center; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .pv-banner select, .pv-banner button { font-size: 13px; background: var(--bg-surface); border: 1px solid var(--border-light); border-radius: 6px; padding: 2px 6px; margin-left: 6px; }
+  .fr-wrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 32px 16px; }
+  .fr { width: 100%; max-width: 560px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 18px; padding: 40px 40px 28px; display: flex; flex-direction: column; height: min(720px, calc(100vh - 90px)); }
+  .fr h1 { font-family: var(--font-header); font-weight: 600; color: var(--text-heading); font-size: 2.1em; line-height: 1.15; margin-bottom: 10px; }
+  .fr .x-lead { color: var(--text-muted); margin-bottom: 18px; }
+  .fr .x-body { flex: 1; overflow-y: auto; margin-right: -12px; padding-right: 12px; }
+  .fr .x-body > :last-child { margin-bottom: 0; }
+  .fr .x-field { margin-bottom: 22px; }
+  .fr .x-label { font-size: .82em; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
+  .x-seg { display: flex; flex-wrap: wrap; gap: 8px; }
+  .x-seg button { background: var(--bg-elevated); border: 1px solid var(--border-light); border-radius: 999px; padding: 7px 16px; font-size: .9em; }
+  .x-seg button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .x-opt { display: flex; gap: 12px; align-items: flex-start; background: var(--bg-elevated); border: 1px solid var(--border-light); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; cursor: pointer; }
+  .x-opt[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .x-opt .x-t { font-weight: 600; color: var(--text-heading); }
+  .x-opt .x-d { font-size: .86em; color: var(--text-muted); }
+  .x-scale { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; margin-bottom: 14px; font-size: .9em; }
+  .x-scale span:last-child { text-align: right; }
+  .x-scale input { width: 180px; accent-color: var(--accent); }
+  .x-checks label { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; font-size: .95em; cursor: pointer; }
+  .x-checks input { margin-top: 5px; flex: none; }
+  .x-checks .x-d { font-size: .86em; color: var(--text-muted); }
+  .x-checks input, .x-switch input { accent-color: var(--accent); width: 18px; height: 18px; }
+  .x-switch { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .x-switch .x-d { font-size: .86em; color: var(--text-muted); }
+  .x-privacy { font-size: .86em; color: var(--text-muted); border-left: 2px solid var(--accent); padding-left: 10px; margin-top: 18px; }
+  .x-adv summary { cursor: pointer; color: var(--link); font-size: .9em; margin-top: 6px; }
+  .x-adv .x-d { font-size: .86em; color: var(--text-muted); margin-top: 8px; }
+  .x-links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+  .x-links a { border: 1px solid var(--border-light); border-radius: 10px; padding: 8px 14px; text-decoration: none; font-size: .9em; }
+  .x-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 28px; }
+  .x-dots { display: flex; gap: 7px; }
+  .x-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--border-light); }
+  .x-dots i.on { background: var(--accent); }
+  .x-btn-s { background: none; border: none; color: var(--text-muted); font-size: .92em; padding: 8px 4px; }
+  .x-btn-p { background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 9px 20px; font-weight: 600; }
+  .x-btn-g { background: none; border: 1px solid var(--border-light); border-radius: 10px; padding: 8px 16px; margin-right: 8px; }
+  .x-rec { display: inline-block; font-size: .68em; letter-spacing: .05em; text-transform: uppercase; color: var(--accent-secondary); border: 1px solid var(--accent-secondary); border-radius: 999px; padding: 0 7px; margin-left: 8px; vertical-align: 2px; font-weight: 600; }
+  .x-seg .x-rec { margin-left: 6px; font-size: .6em; }
+  .x-seg button[aria-pressed="true"] .x-rec { color: #fff; border-color: #fff; }
+  .x-sp { width: 64px; height: 75px; display: block; margin-bottom: 14px; fill: none; stroke: none; }
+  .x-sp.wake { animation: wake 1.6s ease-out both; }
+  .x-sp.blink { animation: blink 4s infinite; }
+  .x-sp.roll { animation: roll 1.4s cubic-bezier(.3,.7,.3,1) both; }
+  @keyframes wake { 0% { opacity: .35; transform: scale(.9); filter: grayscale(1); } 45% { opacity: .35; filter: grayscale(1); } 100% { opacity: 1; transform: scale(1); filter: none; } }
+  @keyframes blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(.9); } }
+  @keyframes roll { 0% { transform: translateX(-160px) rotate(-360deg); } 100% { transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .x-sp { animation: none !important; } }
+  @media (max-width: 600px) { .fr { padding: 28px 22px 20px; height: calc(100vh - 40px); border-radius: 0; border: none; } .x-scale input { width: 120px; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><symbol id="lodestone-sprite" viewBox="0 0 48 56" overflow="visible"><defs><linearGradient id="ls-sheen" x1="0" y1="0" x2="1" y2="1"><stop offset="0.52" stop-color="#9B3DBE" stop-opacity="0"/><stop offset="0.60" stop-color="#9B3DBE" stop-opacity="0.45"/><stop offset="0.66" stop-color="#3DBE9B" stop-opacity="0.35"/><stop offset="0.72" stop-color="#3D6ABE" stop-opacity="0.4"/><stop offset="0.80" stop-color="#3D6ABE" stop-opacity="0"/></linearGradient><linearGradient id="ls-sheensoft" x1="0" y1="0" x2="1" y2="1"><stop offset="0.46" stop-color="#9B3DBE" stop-opacity="0"/><stop offset="0.58" stop-color="#9B3DBE" stop-opacity="0.30"/><stop offset="0.66" stop-color="#3DBE9B" stop-opacity="0.20"/><stop offset="0.74" stop-color="#3D6ABE" stop-opacity="0.26"/><stop offset="0.86" stop-color="#3D6ABE" stop-opacity="0"/></linearGradient><radialGradient id="ls-eyeglow" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#8B6BAE" stop-opacity="0.35"/><stop offset="100%" stop-color="#8B6BAE" stop-opacity="0"/></radialGradient><radialGradient id="ls-facefade" cx="24" cy="26" r="13" gradientUnits="userSpaceOnUse" gradientTransform="translate(24 26) scale(1.15 0.9) translate(-24 -26)"><stop offset="0.45" stop-color="#000"/><stop offset="1" stop-color="#fff"/></radialGradient><mask id="ls-facemask" maskUnits="userSpaceOnUse" x="0" y="0" width="48" height="56"><rect width="48" height="56" fill="url(#ls-facefade)"/></mask><clipPath id="ls-hull"><path d="M24 4 L38 14 L40 30 L34 44 L14 44 L8 30 L10 14 Z"/></clipPath><clipPath id="ls-eyeL"><path d="M14.2 22 Q18 18 21.8 22 Q18 25.5 14.2 22 Z"/></clipPath><clipPath id="ls-eyeR"><path d="M26.2 22 Q30 18 33.8 22 Q30 25.5 26.2 22 Z"/></clipPath><filter id="ls-eyeblur"><feGaussianBlur stdDeviation="0.35" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><g class="sprite-feet"><g class="foot-left"><ellipse cx="18" cy="47" rx="4" ry="2.6" style="fill:var(--sp-foot,#574878);stroke:var(--sp-edge,#3E3160);stroke-width:.5"/><path d="M14.8 46.2 Q18 44.9 21.2 46.2" style="fill:none;stroke:var(--sp-foot-top,#8A84AA);stroke-width:.5;stroke-linecap:round"/></g><g class="foot-right"><ellipse cx="30" cy="47" rx="4" ry="2.6" style="fill:var(--sp-foot,#574878);stroke:var(--sp-edge,#3E3160);stroke-width:.5"/><path d="M26.8 46.2 Q30 44.9 33.2 46.2" style="fill:none;stroke:var(--sp-foot-top,#8A84AA);stroke-width:.5;stroke-linecap:round"/></g></g><g class="sprite-figure"><g class="sprite-crystal"><g clip-path="url(#ls-hull)"><path d="M24 4 L38 14 L40 30 L34 44 L14 44 L8 30 L10 14 Z" style="fill:var(--sp-base,#6F658F)"/><g mask="url(#ls-facemask)"><polygon points="23,25 24,4 38,14" style="fill:var(--sp-f1,#817AA0)"/><polygon points="23,25 38,14 40,30" style="fill:var(--sp-f2,#6F658F)"/><polygon points="23,25 40,30 34,44" style="fill:var(--sp-f3,#615583)"/><polygon points="23,25 34,44 14,44" style="fill:var(--sp-f4,#5E5381)"/><polygon points="23,25 14,44 8,30" style="fill:var(--sp-f5,#655B88)"/><polygon points="23,25 8,30 10,14" style="fill:var(--sp-f6,#786E9A)"/><polygon points="23,25 10,14 24,4" style="fill:var(--sp-f7,#8A84AA)"/></g><g class="sheen-shift"><rect x="-6" y="-6" width="60" height="68" fill="url(#ls-sheensoft)" class="shimmer-layer" style="fill:var(--sp-sheen-fill,url(#ls-sheensoft));opacity:calc(var(--sp-sheen-o,0.6) * .85)"/></g></g><path d="M24 4 L38 14 L40 30 L34 44 L14 44 L8 30 L10 14 Z" style="fill:none;stroke:var(--sp-edge,#3E3160);stroke-width:.55;stroke-linejoin:round"/><path d="M8 30 L10 14 L24 4 L38 14" style="fill:none;stroke:var(--sp-rim,#D2C4F0);stroke-width:.6;stroke-linejoin:round;stroke-linecap:round;opacity:var(--sp-rim-o,0.85)"/><path d="M11.2 13.4 L23.4 5" style="stroke:#fff;stroke-width:.55;stroke-linecap:round;opacity:var(--sp-glint-o,0.85)"/></g><g class="sprite-eyes" filter="url(#ls-eyeblur)"><circle cx="18" cy="22" r="4" fill="url(#ls-eyeglow)" class="eye-glow-left"/><circle cx="30" cy="22" r="4" fill="url(#ls-eyeglow)" class="eye-glow-right"/><g clip-path="url(#ls-eyeL)"><path d="M14.2 22 Q18 18 21.8 22 Q18 25.5 14.2 22 Z" fill="#F0ECF8" class="sclera-left"/><circle cx="18" cy="22" r="1.8" fill="#8B6BAE" class="eye-left"/><circle cx="18" cy="22" r=".95" fill="#2A1B5E" class="pupil-left"/><circle cx="17.3" cy="21.3" r=".55" fill="#fff" opacity=".65"/><circle cx="18.6" cy="22.4" r=".28" fill="#fff" opacity=".3"/></g><g clip-path="url(#ls-eyeR)"><path d="M26.2 22 Q30 18 33.8 22 Q30 25.5 26.2 22 Z" fill="#F0ECF8" class="sclera-right"/><circle cx="30" cy="22" r="1.8" fill="#8B6BAE" class="eye-right"/><circle cx="30" cy="22" r=".95" fill="#2A1B5E" class="pupil-right"/><circle cx="29.3" cy="21.3" r=".55" fill="#fff" opacity=".65"/><circle cx="30.6" cy="22.4" r=".28" fill="#fff" opacity=".3"/></g></g><g class="sprite-eye-outline" style="fill:none;stroke:var(--sp-outline,#3E3160);stroke-width:.45;stroke-linejoin:round;opacity:var(--sp-outline-o,0.55)"><path d="M14.2 22 Q18 18 21.8 22 Q18 25.5 14.2 22 Z"/><path d="M26.2 22 Q30 18 33.8 22 Q30 25.5 26.2 22 Z"/></g><g class="sprite-mouth"><path d="M20 32 Q24 33 28 32" class="mouth-closed" style="fill:none;stroke:var(--sp-mouth,#3A2C58);stroke-width:.8;stroke-linecap:round"/></g></g></symbol></svg>
+<div class="pv-banner">Preview of the first-run setup: nothing is saved.
+  <button type="button" id="pvRestart">Start again</button>
+</div>
+<div class="fr-wrap"><div class="fr" role="dialog" aria-labelledby="frTitle">
+  <div class="x-body" id="frBody"></div>
+  <div class="x-foot">
+    <button class="x-btn-s" type="button" id="frSkip">Use recommended</button>
+    <div class="x-dots" id="frDots" aria-hidden="true"></div>
+    <div><button class="x-btn-g" type="button" id="frPrev">Previous</button><button class="x-btn-p" type="button" id="frNext">Next</button></div>
+  </div>
+</div></div>
+<script>
+const $ = s => document.querySelector(s);
+const REC = { lang: "Auto", theme: "system", size: "Default", mode: "Full", tone: [2,2,2], want: ["Teach me practices", "Check in on me"], lifebook: true, path: true, model: "Key", hp: "talk" };
+const st = Object.assign(JSON.parse(JSON.stringify(REC)), { path0: "rec" });
+const MODEL = 4;
+const tag = '<span class="x-rec">Recommended</span>';
+function useRecommended() { const keep = { lang: st.lang }; Object.assign(st, JSON.parse(JSON.stringify(REC)), keep); applyLook(); i = i < MODEL ? MODEL : screens.length - 1; draw(); }
+const sp = cls => `<svg class="x-sp ${cls}" viewBox="0 0 48 56" aria-hidden="true"><use href="#lodestone-sprite"/></svg>`;
+const seg = (key, opts) => `<div class="x-seg" data-key="${key}">${opts.map(o => `<button type="button" data-v="${o}" aria-pressed="${st[key] === o}">${o}${REC[key] === o && key !== "lang" ? tag : ""}</button>`).join("")}</div>`;
+const WANTS = [
+  ["Listen more, advise less", "Reflects back what you said and asks before offering advice."],
+  ["Teach me practices", "Suggests a concrete practice when one fits what you are going through."],
+  ["Challenge my beliefs", "Says where your reasoning looks weak instead of agreeing."],
+  ["Give me something to do", "Ends with one thing to try before you next talk."],
+  ["Help me set goals", "Turns what you want into goals with dates, and asks about them later."],
+  ["Check in on me", "Writes to you first when a practice is due. Off: it only answers."]
+];
+const SIZES = { Small: "17px", Default: "19px", Large: "21px", "Very large": "23px" };
+const screens = [
+  () => `${sp("wake")}<h1 id="frTitle">Welcome to Lodestone</h1>
+    <p class="x-lead">A guide to living in harmony, in conversation. Your answers stay on this device.</p>
+    <div class="x-field"><div class="x-label">Language</div>${seg("lang", ["Auto", "English", "Français", "Español", "العربية"])}</div>
+    <div class="x-field"><div class="x-label">Setup</div>
+      <div class="x-opt" data-pick="path0" data-v="rec" aria-pressed="${st.path0 === "rec"}"><div><div class="x-t">Recommended settings</div><div class="x-d">Lodestone as it is built to work best. Only the model and the Harmonic Profile are asked. Anything can be changed later.</div></div></div>
+      <div class="x-opt" data-pick="path0" data-v="own" aria-pressed="${st.path0 === "own"}"><div><div class="x-t">Choose each setting</div><div class="x-d">Look, tone and what Lodestone keeps, in a few short steps.</div></div></div></div>`,
+  () => `<h1 id="frTitle">How should it look?</h1><p class="x-lead">You see the change as you choose.</p>
+    <div class="x-field"><div class="x-label">Theme</div>${seg("theme", ["dark", "light", "system"])}</div>
+    <div class="x-field"><div class="x-label">Text size</div>${seg("size", ["Small", "Default", "Large", "Very large"])}</div>`,
+  () => `<h1 id="frTitle">How should Lodestone speak?</h1>
+    <div class="x-field"><div class="x-label">Mode</div>
+      <div class="x-opt" data-pick="mode" data-v="Simple" aria-pressed="${st.mode === "Simple"}"><div><div class="x-t">Simple</div><div class="x-d">Just the conversation. The Wheel, Your path and the Library are hidden.</div></div></div>
+      <div class="x-opt" data-pick="mode" data-v="Full" aria-pressed="${st.mode === "Full"}"><div><div class="x-t">Full${tag}</div><div class="x-d">The conversation, with your Wheel, practices and the Library beside it.</div></div></div></div>
+    <div class="x-field"><div class="x-label">Tone (leave in the middle for no preference)</div>
+      ${[["Casual", "Formal"], ["Gentle", "Direct"], ["Flexible", "Structured"]].map((p, i) => `<div class="x-scale"><span>${p[0]}</span><input type="range" min="0" max="4" value="${st.tone[i]}" data-tone="${i}" aria-label="${p[0]} to ${p[1]}"><span>${p[1]}</span></div>`).join("")}</div>
+    <div class="x-field"><div class="x-label">What should Lodestone do more of?</div>
+      <p style="font-size:.86em;color:var(--text-muted);margin-bottom:8px">Each one changes how it answers. Leave them all off for a balanced guide.</p><div class="x-checks">
+      ${WANTS.map(w => `<label><input type="checkbox" data-want="${w[0]}" ${st.want.includes(w[0]) ? "checked" : ""}><span><span class="x-t">${w[0]}</span>${REC.want.includes(w[0]) ? tag : ""}<br><span class="x-d">${w[1]}</span></span></label>`).join("")}</div></div>`,
+  () => `<h1 id="frTitle">What should Lodestone keep?</h1><p class="x-lead">So that it remembers you from one conversation to the next.</p>
+    <div class="x-switch"><div><div class="x-t">Life book${tag}</div><div class="x-d">Notes on your life: your health and medications, the people close to you, your work and home, your commitments and practices. A note comes back when its subject comes up.</div></div><input type="checkbox" data-sw="lifebook" ${st.lifebook ? "checked" : ""}></div>
+    <div class="x-switch"><div><div class="x-t">Your path${tag}</div><div class="x-d">Your Wheel, your practices and what Lodestone has learned of you, in one place.</div></div><input type="checkbox" data-sw="path" ${st.path ? "checked" : ""}></div>
+    <p class="x-privacy">Both are kept on this device. You can read, correct or erase them at any time.</p>`,
+  () => `<h1 id="frTitle">Where should Lodestone think?</h1><p class="x-lead">The first two keep your conversations between you and the model you chose.</p>
+    <div class="x-opt" data-pick="model" data-v="Local" aria-pressed="${st.model === "Local"}"><div><div class="x-t">A model on your computer (most private)</div><div class="x-d">Nothing leaves your machine and nothing is paid. Needs a recent computer with plenty of memory.</div></div></div>
+    <div class="x-opt" data-pick="model" data-v="Key" aria-pressed="${st.model === "Key"}"><div><div class="x-t">Your own key${tag}</div><div class="x-d">OpenRouter or Featherless. You choose the model and pay the provider directly for what you use. Open-weight models are shown first. Entered once, kept when you switch.</div></div></div>
+    <div class="x-opt" data-pick="model" data-v="Free" aria-pressed="${st.model === "Free"}"><div><div class="x-t">Free</div><div class="x-d">A few answers a day, on Harmonia's account. Good for trying Lodestone.</div></div></div>`,
+  () => `${sp("blink")}<h1 id="frTitle">Your Harmonic Profile</h1><p class="x-lead">A portrait of your temperament and constitution, so Lodestone meets you where you are.</p>
+    ${[["now", "Take it now", "About fifteen minutes of questions."], ["talk", "Let Lodestone ask as we talk", "A few questions at a time, when they fit."], ["later", "Later", "It waits in Your path."]].map(o => `<div class="x-opt" data-pick="hp" data-v="${o[0]}" aria-pressed="${st.hp === o[0]}"><div><div class="x-t">${o[1]}${REC.hp === o[0] ? tag : ""}</div><div class="x-d">${o[2]}</div></div></div>`).join("")}`,
+  () => `${sp("roll")}<h1 id="frTitle">All set</h1><p class="x-lead">Lodestone is open source and runs on what you choose. Begin with whatever is on your mind.</p>
+    <div class="x-links"><a href="#">Source code</a><a href="#">Community</a><a href="#">Support Harmonia</a></div>
+    <details class="x-adv"><summary>Create an account (optional)</summary><p class="x-d">Email or passkey, to keep your devices together. Creating one means agreeing to the terms and the privacy policy.</p></details>`
+];
+let i = 0;
+function applyLook() {
+  const t = st.theme === "system" ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark") : st.theme;
+  document.documentElement.dataset.theme = t;
+  document.documentElement.style.setProperty("--fs-body", SIZES[st.size]);
+}
+function draw() {
+  $("#frBody").innerHTML = screens[i]();
+  $("#frDots").innerHTML = screens.map((_, k) => `<i class="${k <= i ? "on" : ""}"></i>`).join("");
+  $("#frPrev").hidden = i === 0; $("#frSkip").hidden = i === 0 || i >= MODEL;
+  $("#frNext").textContent = i === screens.length - 1 ? "Begin" : "Next";
+  document.querySelectorAll(".x-seg").forEach(g => g.onclick = e => { const b = e.target.closest("button"); if (!b) return; st[g.dataset.key] = b.dataset.v; applyLook(); draw(); });
+  document.querySelectorAll("[data-pick]").forEach(o => o.onclick = () => { st[o.dataset.pick] = o.dataset.v; draw(); });
+  document.querySelectorAll("[data-tone]").forEach(r => r.oninput = () => st.tone[r.dataset.tone] = +r.value);
+  document.querySelectorAll("[data-want]").forEach(c => c.onchange = () => { st.want = c.checked ? [...st.want, c.dataset.want] : st.want.filter(w => w !== c.dataset.want); });
+  document.querySelectorAll("[data-sw]").forEach(c => c.onchange = () => st[c.dataset.sw] = c.checked);
+}
+$("#frNext").onclick = () => { if (i === 0 && st.path0 === "rec") { useRecommended(); return; } if (i < screens.length - 1) { i++; draw(); } else { $("#frBody").innerHTML = `<h1>Done</h1><p class="x-lead">In the app, the first conversation opens here. What was chosen:</p><pre style="font-size:.8em;white-space:pre-wrap;color:var(--text-muted)">${JSON.stringify(st, null, 1)}</pre>`; } };
+$("#frPrev").onclick = () => { if (i > 0) { i--; draw(); } };
+$("#frSkip").onclick = useRecommended;
+$("#pvRestart").onclick = () => { Object.assign(st, JSON.parse(JSON.stringify(REC)), { path0: "rec" }); i = 0; applyLook(); draw(); };
+applyLook(); draw();
+</script>
+</body>
+</html>

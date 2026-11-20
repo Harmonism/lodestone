@@ -18,7 +18,7 @@
 // update of the corpus, the library or the app itself, or "Look this up online"
 // on a question. No telemetry, no automatic update check.
 
-const { app, BrowserWindow, Menu, shell, dialog, ipcMain, session, net, safeStorage } = require("electron");
+const { app, BrowserWindow, Menu, shell, dialog, ipcMain, session, net, safeStorage, powerMonitor } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
@@ -517,6 +517,7 @@ function createWindow(first = null) {
     },
   });
   lockDown(win);
+  watchWindow(win);
   // Opens filling the screen (maximized, not full screen); the size above is what it returns to when un-maximized.
   win.once("ready-to-show", () => { win.maximize(); win.show(); });
   win.on("closed", () => {
@@ -527,6 +528,59 @@ function createWindow(first = null) {
   });
   showLauncher(first);
 }
+
+// ─── A window left blank ────────────────────────────────────────────────────
+// (1.17.14) The window sometimes stayed the theme's colour with nothing on it
+// until Lodestone was quit and opened again. Whatever takes the page away (its
+// renderer gone, a load that failed, the GPU process lost over sleep) is now
+// noticed: the page is loaded again, and why is written to window.log in the
+// data folder, with the page's errors and, twenty seconds after a load, whether
+// anything shows, so the next blank window names its cause.
+const winLog = () => path.join(userDir(), "window.log");
+function logWin(...a) {
+  try {
+    const f = winLog();
+    try { if (fs.statSync(f).size > 512 * 1024) fs.renameSync(f, f + ".1"); } catch {}
+    fs.appendFileSync(f, `${new Date().toISOString()} ${app.getVersion()} ${a.map(String).join(" ")}\n`);
+  } catch {}
+}
+function watchWindow(w) {
+  const wc = w.webContents;
+  let reloads = 0, calm = null, probe = null;
+  const again = why => {
+    logWin("blank:", why, "url:", wc.getURL());
+    if (++reloads > 3) { logWin("not loaded again: three times within a minute"); return; }
+    clearTimeout(calm); calm = setTimeout(() => { reloads = 0; }, 60000);
+    setTimeout(() => {
+      if (w.isDestroyed()) return;
+      if (wc.getURL().startsWith(origin())) openApp(); else showLauncher();
+    }, 500);
+  };
+  wc.on("render-process-gone", (e, d) => { if (d.reason !== "clean-exit") again(`renderer ${d.reason} (exit ${d.exitCode})`); });
+  wc.on("did-fail-load", (e, code, desc, url, isMain) => { if (isMain && code !== -3) again(`load failed ${code} ${desc} ${url}`); });
+  w.on("unresponsive", () => logWin("unresponsive:", wc.getURL()));
+  w.on("responsive", () => logWin("responsive again"));
+  wc.on("console-message", (e, lvl, msg, line, src) => {
+    const level = e?.level ?? lvl, message = e?.message ?? msg;
+    if (level === "error" || level === 3) logWin("page error:", message, `${String(e?.sourceId ?? src ?? "").split("/").pop()}:${e?.lineNumber ?? line ?? ""}`);
+  });
+  wc.on("did-finish-load", () => {
+    clearTimeout(probe);
+    probe = setTimeout(() => {
+      if (w.isDestroyed()) return;
+      wc.executeJavaScript(`(() => { const b = document.body; const shown = b ? [...b.children].filter(x => x.offsetParent !== null || getComputedStyle(x).position === "fixed").map(x => x.id || x.tagName.toLowerCase()) : []; return { text: b ? b.innerText.trim().length : -1, shown }; })()`, true)
+        .then(r => { if (!r || r.text < 1) logWin("nothing on the page 20 s after loading", wc.getURL(), JSON.stringify(r)); })
+        .catch(err => logWin("page did not answer 20 s after loading:", err?.message || err));
+    }, 20000);
+  });
+}
+// The GPU process lost (it can be, over sleep): Chromium starts another, but a
+// window it painted may stay blank until it is asked to paint again.
+function repaintAll(why) {
+  logWin("repaint:", why);
+  setTimeout(() => { for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.invalidate(); }, 1000);
+}
+app.on("child-process-gone", (e, d) => { if (d.type === "GPU") repaintAll(`GPU process ${d.reason} (exit ${d.exitCode})`); });
 
 /** The setup pages. `screen`: "models" or "library"; returns to the current page afterwards. */
 function showLauncher(screen = null, extra = {}) {
@@ -1383,6 +1437,7 @@ function pagePermission(wc, permission, details = {}) {
 }
 
 app.whenReady().then(async () => {
+  powerMonitor.on("resume", () => repaintAll("woke from sleep"));
   loadCfg();
   migrateRetiredRemote();
   session.defaultSession.setPermissionRequestHandler((wc, permission, cb, details) => cb(pagePermission(wc, permission, details)));

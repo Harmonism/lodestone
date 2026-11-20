@@ -37,6 +37,7 @@ import { isNative, lanFetch, pairWith, pairing, computerServer, parsePairLink, o
 import * as shareout from "./shareout.js";
 import * as seal from "./seal.js";
 import { t, setLanguage, uiLang, resolve as resolveUiLang } from "./i18n.js";
+import * as firstRun from "./firstrun.js";
 import { Idiomorph } from "../vendor/idiomorph/idiomorph.esm.js";
 import remend from "../vendor/remend/remend.js";
 
@@ -233,7 +234,9 @@ async function boot() {
   // no one is signed in, opened before anything of it is read.
   if (syncAvailable()) { try { await held.bind(); } catch (e) { console.warn("[memory]", e?.message || e); } }
   await migrateCaches();
-  S.settings = (await store.kv.get("settings")) || { theme: "dark", lang: "auto" };
+  const savedSettings = await store.kv.get("settings");
+  S.settings = savedSettings || { theme: "dark", lang: "auto" };
+  S.freshDevice = !savedSettings;   // November 20, 2026: no Lodestone data yet, so the first-run setup (firstrun.js)
   setLanguage(resolveUiLang(S.settings.uiLang || "auto", S.settings.lang));
   // v99: ask the browser to keep this memory through storage pressure (Safari and
   // Chrome grant it to an app in use or on the Home Screen); asked once, silently.
@@ -268,6 +271,9 @@ async function boot() {
   bindChrome();
   if (isNative()) onAppLink(handleAppLink);
   const installed = await corpusPack.isInstalled();
+  // November 20, 2026: the first-run setup, once, on a device that holds no Lodestone data.
+  // An update or a reinstall leaves the data in place, so it never comes back by itself.
+  if (S.freshDevice && !S.settings.firstRun) await runFirstRun({ needsModel: !DESKTOP && (!installed || !S.settings.tier || !TIERS[S.settings.tier]), carried: await carryLanding() });
   // An unknown tier is an install from before a tier was withdrawn (the light
   // tier, 24 Sep 2026). Everything else it holds is still good; only the choice
   // of where Lodestone thinks has to be made again.
@@ -364,6 +370,82 @@ function applyTheme(t) {
   try { DESKTOP?.setTheme?.(mode); } catch {}
 }
 
+// ─── First run (firstrun.js, November 20, 2026) ──────────────────────────────
+
+/** The first-run setup: language, look, how Lodestone speaks, what it keeps, the Harmonic
+ *  Profile. Where it thinks follows in showSetup when this device has no route yet. */
+async function runFirstRun({ needsModel = false, again = false, carried = false } = {}) {
+  $("#setup").hidden = true; $("#main").hidden = true; syncDock?.();
+  const r = await firstRun.run({
+    settings: S.settings, save: () => store.kv.set("settings", S.settings),
+    desktop: !!DESKTOP, needsModel, carried, applyTheme, applyDisplay, setLanguage, resolveUiLang,
+    lifebookChoose: DESKTOP?.lifebookChoose ? async () => (S.lifeBook = await DESKTOP.lifebookChoose()) : null,
+    aiNotice: $("#aiNotice")?.innerHTML || "",
+  });
+  applyTheme(S.settings.theme); applyDisplay();
+  S.firstRunNext = r?.hp === "now" ? "hp" : null;
+  S.firstMessage = r?.first || "";      // "What brings you here today?": sent as the first message once Lodestone can answer
+  S.openCarried = !!carried;            // the conversation begun on harmonism.io opens instead
+  if (needsModel && !S.preferTier) S.preferTier = "openrouter";   // the own-key route first; the free one stays a click away
+  if (again) { $("#main").hidden = false; syncDock?.(); renderSettings(); if (S.firstRunNext) { S.firstRunNext = null; renderMe(); openDrawer("#drawerMe"); } if (S.firstMessage) afterFirstRun().catch(() => {}); }
+  try { syncSoon(); } catch {}
+}
+
+/**
+ * A first exchange already had on harmonism.io (the landing page's Sprite). Signed in, it is
+ * in this memory as the "On harmonism.io" conversation (held.js record). Anonymous, it lives
+ * only in this tab's sessionStorage, where the website keeps it: carried into the memory
+ * here, once, so the app continues it. True when there is such a conversation.
+ */
+async function carryLanding() {
+  if (DESKTOP) return false;
+  try {
+    if ((await store.messages.forThread(held.WEB_THREAD)).some(m => m.role === "user" && m.content)) return true;
+    let msgs = [];
+    try { msgs = JSON.parse(sessionStorage.getItem("companion-chat-history") || "[]"); } catch {}
+    msgs = (Array.isArray(msgs) ? msgs : []).filter(m => (m?.role === "user" || m?.role === "assistant") && typeof m.content === "string" && m.content.trim());
+    if (!msgs.some(m => m.role === "user")) return false;
+    const now = Date.now();
+    await store.threads.put({ id: held.WEB_THREAD, title: "On harmonism.io", created: now - msgs.length, updated: now, source: "website" });
+    let k = 0;
+    for (const m of msgs) await store.messages.add({ threadId: held.WEB_THREAD, role: m.role, content: m.content, ts: now - msgs.length + (k++), meta: { source: "website", ...(m.role === "assistant" ? { model: "harmonism.io" } : {}) } });
+    return true;
+  } catch (e) { console.warn("[first run] landing conversation", e); return false; }
+}
+
+/** After the first run, once the conversation screen is open: the landing conversation, or the first message. */
+async function afterFirstRun() {
+  if (S.openCarried) {
+    S.openCarried = false;
+    try { const t = await store.threads.get(held.WEB_THREAD); if (t) await openThread(t); } catch {}
+  }
+  const text = S.firstMessage; S.firstMessage = "";
+  if (!text) return;
+  await newThread();
+  for (let i = 0; i < 240 && !S.engineReady; i++) await new Promise(r => setTimeout(r, 250));   // the model may still be starting
+  if (S.engineReady) await send(text); else giveBackTo(text);   // never lost: it waits in the message box
+}
+
+/** Settings → Conversation: the tone and "do more of" chosen at first run, editable here. */
+function renderSpeakSetting() {
+  const box = $("#setSpeak"); if (!box) return;
+  const save = async () => { await store.kv.set("settings", S.settings); try { syncSoon(); } catch {} };
+  const tone = { ...firstRun.RECOMMENDED.tone, ...(S.settings.tone || {}) };
+  const rows = firstRun.TONES.map(t => {
+    const r = el("input", { type: "range", min: "0", max: "4", step: "1", value: String(tone[t.key]), "aria-label": `${t.a} to ${t.b}` });
+    r.onchange = async () => { tone[t.key] = +r.value; S.settings.tone = { ...tone }; await save(); };
+    return el("div", { class: "fr-scale" }, el("span", {}, t.a), r, el("span", {}, t.b));
+  });
+  const checks = firstRun.WANTS.map(w => {
+    const c = el("input", { type: "checkbox" }); c.checked = (S.settings.wants || []).includes(w.id);
+    c.onchange = async () => { const cur = new Set(S.settings.wants || []); c.checked ? cur.add(w.id) : cur.delete(w.id); S.settings.wants = [...cur]; await save(); };
+    return el("label", { class: "check" }, c, el("span", {}, el("b", {}, w.label), el("br"), el("span", { class: "hint" }, w.sub)));
+  });
+  box.replaceChildren(
+    el("h5", { class: "sub-h" }, "How Lodestone speaks"), el("p", { class: "hint" }, "Tone: leave in the middle for no preference."), ...rows,
+    el("h5", { class: "sub-h" }, "What Lodestone does more of"), el("p", { class: "hint" }, "Each one changes how it answers. All off is a balanced guide. Check-ins are set in Your path, under What Lodestone has learned."), ...checks);
+}
+
 // ─── Setup ───────────────────────────────────────────────────────────────────
 
 const remoteName = id => [...RECOMMENDED, ...OFFERED].find(m => m.id === id)?.label || hosted.models?.find(m => m.id === id)?.label || id;
@@ -414,7 +496,7 @@ async function showSetup() {
   $("#srvModel").value = srv.model || (served?.models?.[0] || "");
   $("#srvCtx").value = srv.ctx || 32768;
 
-  const TAGS = { standard: "this browser · offline after one download", server: "owned hardware", hosted: "recommended · free account · internet", openrouter: "recommended · your own key · internet", reader: "no model · offline" };
+  const TAGS = { standard: "this browser · offline after one download", server: "owned hardware", hosted: "free · a few answers a day · internet", openrouter: "recommended · your own key · internet", reader: "no model · offline" };
   // A phone's own page cannot call a plain-http server on the home network
   // (an https page may not), so there "your computer" is a pointer to the
   // copy Lodestone Desktop serves to phones, unless this page is that copy.
@@ -423,7 +505,7 @@ async function showSetup() {
   const nativePair = isNative();
   let paired = nativePair ? await pairing.get().catch(() => null) : null;
   if (nativePair && S.preferComputer) { chosen = "server"; S.preferComputer = false; }
-  const ORDER = phoneOk ? ["hosted", "openrouter", "server", "reader"] : ["server", "reader"];
+  const ORDER = phoneOk ? ["openrouter", "hosted", "server", "reader"] : ["server", "reader"];   // November 20, 2026: the own key first
   const tierList = [...ORDER.filter(k => TIERS[k]), ...Object.keys(TIERS).filter(k => !ORDER.includes(k))].map(k => [k, TIERS[k]]);
   // The web app is for phones and for computers without Lodestone Desktop: the
   // account and OpenRouter come first, and the routes that think on one's own
@@ -754,6 +836,9 @@ function makeEngine() {
 async function startMain() {
   $("#setup").hidden = true; $("#main").hidden = false;
   S.mainStarted = true;
+  // "Take the assessment" chosen in the first-run setup: Your path opens at the Harmonic Profile.
+  if (S.firstRunNext === "hp") { S.firstRunNext = null; setTimeout(() => { try { renderMe(); openDrawer("#drawerMe"); setTimeout(() => $("#hpBox")?.scrollIntoView({ block: "start" }), 300); } catch {} }, 800); }
+  if (S.firstMessage || S.openCarried) setTimeout(() => afterFirstRun().catch(e => console.warn("[first run]", e)), 600);
   S.convCount = await conversationCount();   // v92: the four openings wait on this
   refreshVoiceKey().then(() => setMic()).catch(() => {});
   S.profile = (await store.kv.get("profile")) || {};
@@ -2161,6 +2246,7 @@ async function prepareTurn(text, history, { getWeb = null, files = [], folders =
       calibration: calib.blocks,
       reading: reading.block,
       length: lengthBlock(),
+      prefs: firstRun.prefsBlock(S.settings, { hasProfile: !!S.assessment }),   // first-run choices (November 20, 2026)
       lang,
     } });
     // turns already folded into the summary are not sent a second time
@@ -6594,6 +6680,7 @@ async function renderSettings() {
   if ($("#setComposerChips")) $("#setComposerChips").checked = !!S.settings.composerChips;
   if ($("#setSimple")) $("#setSimple").checked = !!S.settings.simple;
   if ($("#setReplyLen")) $("#setReplyLen").value = replyLen();
+  renderSpeakSetting();
   applyDisplay();
   renderHybridSetting();
   const p = S.pack.runtime.pack;
@@ -8120,6 +8207,7 @@ function bindChrome() {
   if ($("#setFontSize")) $("#setFontSize").onchange = async e => { S.settings.fontSize = e.target.value; applyDisplay(); await store.kv.set("settings", S.settings); syncSoon(); };
   if ($("#setSimple")) $("#setSimple").onchange = async e => { S.settings.simple = e.target.checked; applyDisplay(); if ($("#setReplyLen")) $("#setReplyLen").value = replyLen(); await store.kv.set("settings", S.settings); syncSoon(); renderChat(); renderCheckins(); };
   if ($("#setReplyLen")) $("#setReplyLen").onchange = async e => { S.settings.replyLen = e.target.value; await store.kv.set("settings", S.settings); syncSoon(); };
+  if ($("#setRunSetup")) $("#setRunSetup").onclick = async () => { closeDrawers(); await runFirstRun({ again: true }); };
   if ($("#setComposerChips")) $("#setComposerChips").onchange = async e => { S.settings.composerChips = e.target.checked; applyDisplay(); await store.kv.set("settings", S.settings); syncSoon(); };
   // Search in Settings (November 13, 2026): a section stays when its words (labels,
   // hints, the choices in its lists) hold every word typed, accents and case aside.

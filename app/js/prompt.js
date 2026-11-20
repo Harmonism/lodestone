@@ -142,7 +142,7 @@ export function buildSystem({ tier, runtime, person, turn = {}, now = new Date()
   // One backbone everywhere: the full one, or harmonism.io's own in its place.
   const backbone = tier.backbone === "server" ? SERVER_BACKBONE : runtime.backbone.full;
   // The situation notes come last, nearest the reply (16 November 2026: a restriction note mid-block was overridden).
-  const perTurn = [turn.held, turn.calibration, turn.summary, turn.self, turn.lifebook, turn.recall, turn.reading, turn.page, turn.files, turn.folders, turn.article, turn.vault, turn.earlier, turn.web, turn.witness, turn.governor, turn.care, turn.length, replyLanguage(turn.lang), turn.situation].filter(Boolean).join("\n\n");
+  const perTurn = [turn.held, turn.calibration, turn.summary, turn.self, turn.lifebook, turn.recall, turn.reading, turn.page, turn.files, turn.folders, turn.article, turn.vault, turn.earlier, turn.web, turn.witness, turn.governor, turn.care, turn.length, turn.prefs, replyLanguage(turn.lang), turn.situation].filter(Boolean).join("\n\n");
   return `${PERSONA.replace("%WHERE%", whereLine(where, { device }))}
 
 <doctrinal_backbone>
