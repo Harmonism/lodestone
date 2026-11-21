@@ -7,9 +7,12 @@
 // are (their temperament, their Wheel) is the Harmonic Profile's, never asked here.
 // Spec: Lodestone First Run and Navigation Spec, 2026-11-20 (internal).
 //
-// Where Lodestone thinks is not asked here. On a computer, Lodestone Desktop thinks
-// on the computer by default; in a browser or on a phone, the existing setup screen
-// (main.js showSetup) follows this one and asks it, with the own-key route first.
+// Where Lodestone thinks is not asked here: the screen that asks it follows this one,
+// with the own-key route first. In a browser or on a phone, main.js showSetup; in
+// Lodestone Desktop, the shell's welcome page (desktop/src/launcher.html), which then
+// opens the app again.
+
+import { AWAKEN_SVG } from "./awaken.js";
 
 export const FIRST_RUN_VERSION = 1;
 
@@ -73,6 +76,15 @@ const sprite = cls => {
   s.append(u); return s;
 };
 const tag = () => h("span", { class: "fr-rec" }, "Recommended");
+// The welcome's Sprite: the mark wakes as the window opens, as on harmonism.io; once only.
+let awoke = false;
+const awakening = () => {
+  const box = h("div", { class: "fr-awaken", "aria-hidden": "true", html: AWAKEN_SVG });
+  const svg = box.firstElementChild;
+  if (awoke) svg.classList.add("play", "done");
+  else { awoke = true; requestAnimationFrame(() => setTimeout(() => svg.classList.add("play"), 250)); }
+  return box;
+};
 
 /**
  * Runs the first-run setup. Resolves when the person finishes, with
@@ -125,11 +137,11 @@ export function run(opts) {
   const field = (label, ...kids) => h("div", { class: "fr-field" }, h("div", { class: "fr-label" }, label), ...kids);
 
   const SCREENS = [
-    () => [sprite("fr-wake"), h("h1", {}, "Welcome to Lodestone"),
+    () => [awakening(), h("h1", {}, "Welcome to Lodestone"),
       h("p", { class: "fr-lead" }, "A guide to living in harmony, in conversation. What you answer here stays on this device."),
-      field("Language of the app", seg("uiLang", [["auto", "Auto"], ["en", "English"], ["fr", "Français"]], lang)),
-      field("Setup",
-        card("path", "rec", "Recommended settings", "Lodestone as it is built to work best. Only the Harmonic Profile is asked. Anything can be changed later in Settings."),
+      h("div", { class: "fr-field fr-inline" }, h("div", { class: "fr-label" }, "Language"), seg("uiLang", [["auto", "Auto"], ["en", "English"], ["fr", "Français"]], lang)),
+      h("div", { class: "fr-field" },
+        card("path", "rec", "Recommended settings", "Lodestone as it is built to work best; only the Harmonic Profile is asked."),
         card("path", "own", "Choose each setting", "Look, tone and what Lodestone keeps, in a few short steps.")),
       h("p", { class: "fr-fine", html: opts.aiNotice || "" })],
     () => [h("h1", {}, "How should it look?"), h("p", { class: "fr-lead" }, "You see the change as you choose."),
@@ -170,14 +182,14 @@ export function run(opts) {
     // The last screen. Someone who already spoke with Lodestone on harmonism.io continues
     // that conversation; anyone else is asked what brings them, and that is their first message.
     () => carried
-      ? (desktop || !needsModel
+      ? (!needsModel
         ? [sprite("fr-roll"), h("h1", {}, "All set"), h("p", { class: "fr-lead" }, "Your conversation from harmonism.io is here; it continues where you left it. Everything you chose is in Settings.")]
         : [sprite("fr-roll"), h("h1", {}, "One step left"), h("p", { class: "fr-lead" }, "Choose where Lodestone thinks; your conversation from harmonism.io waits here. With your own key, your conversations stay between you and the model you chose.")])
       : [sprite("fr-roll"), h("h1", {}, "What brings you here today?"),
         h("p", { class: "fr-lead" }, "Write it as it comes. It becomes your first message, and Lodestone begins there."),
         (() => { const ta = h("textarea", { class: "fr-first", rows: "5", "aria-label": "What brings you here today?", placeholder: "A question, something you are going through, something you want to change…" });
           ta.value = st.first; ta.oninput = () => { st.first = ta.value; }; setTimeout(() => ta.focus(), 50); return ta; })(),
-        h("p", { class: "fr-note" }, desktop || !needsModel ? "You can also leave it empty and begin." : "Next, choose where Lodestone thinks; your message waits until then. You can also leave it empty.")],
+        h("p", { class: "fr-note" }, !needsModel ? "You can also leave it empty and begin." : "Next, choose where Lodestone thinks; your message waits until then. You can also leave it empty.")],
   ];
   const LAST = SCREENS.length - 1, HP = 4;
 
@@ -196,7 +208,7 @@ export function run(opts) {
     dots.replaceChildren(...SCREENS.map((_, k) => h("i", { class: k <= i ? "on" : "" })));
     prev.hidden = i === 0;
     skip.hidden = i === 0 || i >= HP;
-    next.textContent = i === LAST ? (desktop || !needsModel ? "Begin" : "Continue") : "Next";
+    next.textContent = i === LAST ? (!needsModel ? "Begin" : "Continue") : "Next";
   };
   look();
   document.getElementById("app")?.append(root);

@@ -18,7 +18,7 @@
 // update of the corpus, the library or the app itself, or "Look this up online"
 // on a question. No telemetry, no automatic update check.
 
-const { app, BrowserWindow, Menu, shell, dialog, ipcMain, session, net, safeStorage, powerMonitor } = require("electron");
+const { app, BrowserWindow, Menu, shell, dialog, ipcMain, session, net, safeStorage, powerMonitor, screen: displays } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
@@ -519,7 +519,16 @@ function createWindow(first = null) {
   lockDown(win);
   watchWindow(win);
   // Opens filling the screen (maximized, not full screen); the size above is what it returns to when un-maximized.
-  win.once("ready-to-show", () => { win.maximize(); win.show(); });
+  // A first launch (November 20, 2026) opens instead as a small window, the size of the setup's
+  // card: the setup and the welcome page sit in it, and it fills the screen once Lodestone is ready.
+  setupWindow = !cfg.firstRunDone && !routed();
+  win.once("ready-to-show", () => {
+    if (setupWindow) {
+      const wa = displays.getPrimaryDisplay().workAreaSize;
+      win.setSize(Math.min(660, wa.width), Math.min(860, wa.height)); win.center();
+    } else win.maximize();
+    win.show();
+  });
   win.on("closed", () => {
     win = null;
     // The hidden Telegram page is a window too; without this, closing Lodestone's
@@ -593,7 +602,10 @@ function showLauncher(screen = null, extra = {}) {
 // so Settings › Change model… turned a light window dark.
 const uiTheme = () => cfg.theme === "light" ? "light" : "dark";
 const themeBg = () => uiTheme() === "light" ? "#f8f6f2" : "#0a0a14";
-function openApp() { win?.loadURL(appURL()); }
+let setupWindow = false;
+/** The first launch's small window fills the screen once the setup is through and a route is chosen. */
+function leaveSetupWindow() { if (setupWindow && win && cfg.firstRunDone && routed()) { setupWindow = false; win.maximize(); } }
+function openApp() { leaveSetupWindow(); win?.loadURL(appURL()); }
 function openLibraryHome() { openSiteWindow(origin() + "/"); }
 
 /**
@@ -692,6 +704,7 @@ handle("status", async () => {
     presets: Object.fromEntries(Object.entries(remote.PRESETS).filter(([, p]) => !p.hidden)),
     hosted: { account: hosted.account(), active: isHosted(cfg.remote), model: isHosted(cfg.remote) ? cfg.remote.model : null, recommended: remote.RECOMMENDED },
     leftovers: leftovers(), returnTo,
+    firstRunDone: !!cfg.firstRunDone,   // the app's first-run setup has been through (November 20, 2026)
   };
 });
 
@@ -1309,6 +1322,12 @@ handle("convert-file", async (_e, name, bytes) => {
   return require("./convert").convert(name.slice(0, 255), bytes);
 }, { app: true });
 handle("open-models", async () => { showLauncher("models"); }, { app: true });
+// The first-run setup (November 20, 2026): on a first launch the app asks its questions
+// first (app/js/firstrun.js), then hands over to the welcome page to choose where it thinks.
+const routed = () => { const m = chosenModel(); return !!(cfg.upstream || cfg.remote || (m && isDownloaded(m))); };
+handle("route-state", async () => ({ routed: routed(), firstRunDone: !!cfg.firstRunDone }), { app: true });
+handle("first-run-done", async () => { if (!cfg.firstRunDone) { cfg.firstRunDone = true; saveCfg(); } leaveSetupWindow(); return { routed: routed() }; }, { app: true });
+handle("open-welcome", async () => { showLauncher(); }, { app: true });
 handle("open-updates", async () => { showLauncher("library"); }, { app: true });
 handle("open-library", async (e, lang) => { showLauncher("library", lang && LANGS[lang] ? { lang } : {}); }, { app: true });
 handle("open-phone", async () => { openPhoneWindow(); }, { app: true });

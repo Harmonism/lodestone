@@ -148,3 +148,23 @@ button:active:not(:disabled) { transform: scale(.97); }
 .ask-btns button { min-width: 96px; }
 button.danger-btn { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 600; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+/* The welcome page after the app's first-run setup (November 20, 2026): the setup's own
+   look, one column no wider than its window, own key first, a model on this computer folded. */
+.welcome { max-width: 600px; width: 100%; margin: 0 auto; display: grid; gap: 14px; }
+.welcome .head { flex-direction: column; text-align: center; gap: 6px; }
+.welcome .head .mark { width: 56px; height: 56px; }
+.welcome .lede { max-width: 34em; margin-inline: auto; }
+.welcome #routeCard { gap: 10px; }
+.welcome .route { display: grid; gap: 2px; text-align: left; width: 100%; padding: 14px 16px; border-radius: 12px; }
+.welcome .route-t { font-weight: 600; color: var(--heading); font-size: 16px; }
+.welcome .route.primary .route-t, .welcome .route.primary .route-d { color: #fff; }
+.welcome .route-d { font-size: 13.5px; color: var(--muted); font-weight: 400; }
+.welcome .rec { display: inline-block; font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; border: 1px solid currentColor; border-radius: 999px; padding: 0 7px; margin-left: 6px; vertical-align: 2px; font-weight: 600; }
+.welcome details.local > summary { display: grid; gap: 2px; list-style: none; color: inherit; }
+.welcome details.local > summary::-webkit-details-marker { display: none; }
+.welcome details.local > summary .route-t::before { content: "▸ "; color: var(--accent-2); }
+.welcome details.local[open] > summary .route-t::before { content: "▾ "; }
+.welcome .center-text { text-align: center; }
+/* In the first launch's small window the page is the window's own colour, as the setup before it. */
+@media (max-width: 700px) { body:has(.welcome:not([hidden])) { background: var(--surface); } }

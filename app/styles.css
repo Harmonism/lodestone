@@ -1412,12 +1412,12 @@ html:not(.composer-chips) #modelRow, html:not(.composer-chips) #voiceWrap { disp
    One window, the same size on every step; a long step scrolls inside it. */
 #firstrun { position: fixed; inset: 0; z-index: 60; background: var(--bg); overflow-y: auto; }
 #firstrun .fr-wrap { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: max(24px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); }
-#firstrun .fr-win { width: 100%; max-width: 560px; height: min(740px, calc(100dvh - 48px)); display: flex; flex-direction: column; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 18px; padding: 36px 36px 22px; }
+#firstrun .fr-win { width: 100%; max-width: 560px; height: min(740px, calc(100dvh - 48px)); display: flex; flex-direction: column; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 18px; padding: 30px 36px 20px; }
 #firstrun .fr-body { flex: 1; min-height: 0; overflow-y: auto; margin-right: -12px; padding-right: 12px; }
 #firstrun .fr-body > :last-child { margin-bottom: 0; }
 #firstrun h1 { font-family: var(--font-header); font-weight: 600; color: var(--text-heading); font-size: 1.9em; line-height: 1.15; margin: 0 0 8px; text-align: center; }
 #firstrun .fr-lead { color: var(--text-muted); margin-bottom: 12px; }
-#firstrun .fr-field { margin-bottom: 16px; }
+#firstrun .fr-field { margin-bottom: 14px; }
 #firstrun .fr-label { font-size: .78em; letter-spacing: .07em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; font-weight: 600; }
 #firstrun .fr-note { font-size: .86em; color: var(--text-muted); margin-bottom: 8px; }
 #firstrun .fr-fine { font-size: .8em; color: var(--text-muted); margin-top: 2px; }
@@ -1444,17 +1444,23 @@ html:not(.composer-chips) #modelRow, html:not(.composer-chips) #voiceWrap { disp
 #firstrun .fr-dots { display: flex; gap: 7px; }
 #firstrun .fr-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--border-light); }
 #firstrun .fr-dots i.on { background: var(--accent); }
-.fr-sprite { width: 52px; height: 61px; display: block; margin: 0 auto 10px; fill: none; stroke: none; }
+.fr-sprite { width: 96px; height: 112px; display: block; margin: 0 auto 6px;
+  filter: drop-shadow(0 0 22px rgba(155, 61, 190, .28)); }
+/* The welcome screen's Sprite at the size of the Lodestone landing page's (139 px there, a little smaller in a window). */
+.fr-sprite.fr-wake { width: 120px; height: 140px; }
+.fr-sprite {  fill: none; stroke: none; }
 .fr-sprite.fr-wake { animation: fr-wake 1.6s ease-out both; }
 .fr-sprite.fr-blink { animation: fr-blink 4s infinite; transform-origin: 50% 60%; }
 .fr-sprite.fr-roll { animation: fr-roll 1.4s cubic-bezier(.3,.7,.3,1) both; }
-@keyframes fr-wake { 0%, 45% { opacity: .4; transform: scale(.92); filter: grayscale(1); } 100% { opacity: 1; transform: none; filter: none; } }
+@keyframes fr-wake { 0%, 45% { opacity: .4; transform: scale(.92); filter: grayscale(1); } 100% { opacity: 1; transform: none; filter: drop-shadow(0 0 22px rgba(155, 61, 190, .28)); } }
 @keyframes fr-blink { 0%, 94%, 100% { transform: none; } 97% { transform: scaleY(.92); } }
 @keyframes fr-roll { 0% { transform: translateX(-140px) rotate(-360deg); } 100% { transform: none; } }
 @media (prefers-reduced-motion: reduce) { .fr-sprite { animation: none !important; } }
-@media (max-width: 600px) {
+/* A phone, or Lodestone Desktop's small first-launch window: the card is the window, no frame around it. */
+@media (max-width: 700px) {
+  #firstrun { background: var(--bg-surface); }
   #firstrun .fr-wrap { padding: 0; align-items: stretch; }
-  #firstrun .fr-win { height: 100dvh; max-width: none; border: none; border-radius: 0; padding: max(22px, env(safe-area-inset-top)) 20px max(16px, env(safe-area-inset-bottom)); }
+  #firstrun .fr-win { height: 100dvh; max-width: none; border: none; border-radius: 0; padding: max(28px, env(safe-area-inset-top)) clamp(20px, 6vw, 40px) max(18px, env(safe-area-inset-bottom)); }
   .fr-scale input { width: 110px; }
   #firstrun .fr-foot { flex-wrap: wrap; }
 }
@@ -1462,3 +1468,69 @@ html:not(.composer-chips) #modelRow, html:not(.composer-chips) #voiceWrap { disp
 .set-speak .check b { color: var(--text-heading); font-weight: 600; }
 #firstrun .fr-first { width: 100%; resize: vertical; min-height: 130px; background: var(--bg-elevated); border: 1px solid var(--border-light); border-radius: 12px; padding: 12px 14px; font: inherit; line-height: 1.5; margin: 4px 0 8px; }
 #firstrun .fr-first:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+@media (max-width: 480px) { .fr-sprite { width: 80px; height: 93px; } .fr-sprite.fr-wake { width: 96px; height: 112px; } }
+#firstrun .fr-inline { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+#firstrun .fr-inline .fr-label { margin: 0; }
+/* A short window (a laptop browser): the card takes the window's full height, no frame above or below. */
+@media (min-width: 701px) and (max-height: 800px) {
+  #firstrun .fr-wrap { padding: 0 16px; align-items: stretch; }
+  #firstrun .fr-win { height: 100dvh; border-top: none; border-bottom: none; border-radius: 0; }
+}
+
+/* ─── The awakening (awaken.js), copied from harmonia-astro/scripts/lodestone-awaken.css ─── */
+/* Lodestone awakening (dark skin; the subdomain is dark-only): the mark becomes the Sprite. Geometry and skins from LodestoneSprite.astro. */
+.lx-awaken{height:auto;overflow:visible;display:block;
+ --m1:#B4A7D7;--m2:#7365A3;--m3:#4C3D83;--m4:#56488C;--m5:#897BB4;--m6:#CABEE9;--m7:#D9CDF5;
+ --sp-f1:#817AA0;--sp-f2:#6F658F;--sp-f3:#615583;--sp-f4:#5E5381;--sp-f5:#655B88;--sp-f6:#786E9A;--sp-f7:#8A84AA;--sp-base:#6F658F;
+ --sp-edge:#3E3160;--sp-rim:#D2C4F0;--sp-rim-o:.85;--sp-glint-o:.85;--sp-sparkle:#FFFFFF;--sp-foot:#574878;--sp-foot-top:#8A84AA;
+ --sp-mouth:#3A2C58;--sp-outline:#3E3160;--sp-outline-o:.55;--sp-sheen-o:.6;--soft:1;--hard:0}
+.lx-awaken *{transform-box:fill-box}
+.lx-awaken .body-base{fill:var(--sp-base)}
+.lx-awaken .f1{fill:var(--sp-f1)}.lx-awaken .m1{fill:var(--m1)}.lx-awaken .f2{fill:var(--sp-f2)}.lx-awaken .m2{fill:var(--m2)}.lx-awaken .f3{fill:var(--sp-f3)}.lx-awaken .m3{fill:var(--m3)}.lx-awaken .f4{fill:var(--sp-f4)}.lx-awaken .m4{fill:var(--m4)}.lx-awaken .f5{fill:var(--sp-f5)}.lx-awaken .m5{fill:var(--m5)}.lx-awaken .f6{fill:var(--sp-f6)}.lx-awaken .m6{fill:var(--m6)}.lx-awaken .f7{fill:var(--sp-f7)}.lx-awaken .m7{fill:var(--m7)}
+.lx-awaken .shimmer{opacity:calc(var(--sp-sheen-o) * .85 * var(--soft))}
+.lx-awaken .shimmer-l{opacity:calc(var(--sp-sheen-o) * .85 * var(--hard))}
+.lx-awaken .body-edge{fill:none;stroke:var(--sp-edge);stroke-width:.55;stroke-linejoin:round}
+.lx-awaken .body-rim{fill:none;stroke:var(--sp-rim);stroke-width:.6;stroke-linejoin:round;stroke-linecap:round;opacity:var(--sp-rim-o)}
+.lx-awaken .body-glint{stroke:#fff;stroke-width:.55;stroke-linecap:round;opacity:var(--sp-glint-o)}
+.lx-awaken .sparkle{fill:var(--sp-sparkle);opacity:0;transform-origin:center;transform:scale(.2)}
+.lx-awaken .foot-shape{fill:var(--sp-foot);stroke:var(--sp-edge);stroke-width:.5}
+.lx-awaken .foot-top{fill:none;stroke:var(--sp-foot-top);stroke-width:.5;stroke-linecap:round}
+.lx-awaken .outline path{fill:none;stroke:var(--sp-outline);stroke-width:.45;stroke-linejoin:round}
+.lx-awaken .outline{opacity:var(--sp-outline-o)}
+.lx-awaken .mouth{fill:none;stroke:var(--sp-mouth);stroke-width:.8;stroke-linecap:round}
+/* before it plays: the mark alone */
+.lx-awaken .sprite-layer,.lx-awaken .sprite-lines,.lx-awaken .face,.lx-awaken .foot,.lx-awaken .glint{opacity:0}
+.lx-awaken .lid{transform-origin:center;transform:scaleY(0)}
+.lx-awaken .mouth{transform-origin:center;transform:scale(.4,0)}
+/* the performance, 3.6 s, played once */
+.lx-awaken.play .glint{animation:lxa-glint .9s linear both}
+.lx-awaken.play .body{transform-origin:50% 100%;animation:lxa-body 3.22s -.2s cubic-bezier(.3,.7,.3,1) both}
+.lx-awaken.play .icon{animation:lxa-out .6s .8s ease-in-out both}
+.lx-awaken.play .sprite-layer,.lx-awaken.play .sprite-lines{animation:lxa-in .6s .8s ease-in-out both}
+.lx-awaken.play .foot{transform-origin:50% 0%;animation:lxa-foot .45s 1.42s cubic-bezier(.3,1.6,.5,1) both}
+.lx-awaken.play .fr{animation-delay:1.5s}
+.lx-awaken.play .feet{animation:lxa-feet 3.22s -.2s cubic-bezier(.3,.7,.3,1) both}
+.lx-awaken.play .sparkle{animation:lxa-sparkle .75s 1.65s cubic-bezier(.3,.7,.4,1)}
+.lx-awaken.play .face{animation:lxa-in .01s 1.9s both}
+.lx-awaken.play .lid{animation:lxa-open .35s 1.95s cubic-bezier(.3,1.4,.5,1) both, lxa-blink .22s 2.8s ease-in-out}
+.lx-awaken.play .eglow{transform-origin:center;animation:lxa-glow .6s 1.95s ease-out both}
+.lx-awaken.play .mouth{animation:lxa-mouth .35s 2.2s cubic-bezier(.3,1.4,.5,1) both}
+@keyframes lxa-glint{from{opacity:1;transform:skewX(-18deg) translateX(26px)}to{opacity:1;transform:skewX(-18deg) translateX(90px)}}
+@keyframes lxa-out{to{opacity:0}}
+@keyframes lxa-in{to{opacity:1}}
+@keyframes lxa-mouth{from{transform:scale(.4,0)}to{transform:scale(1,1)}}
+@keyframes lxa-body{0%,26.8%{transform:none}31.3%{transform:rotate(-4deg)}35.8%{transform:rotate(3.5deg)}40.3%{transform:rotate(-2deg)}43.6%{transform:rotate(0)}49.2%{transform:translateY(-5px)}58.1%{transform:translateY(1px) scale(1.06,.9)}64.8%{transform:translateY(0) scale(.98,1.03)}70.4%,100%{transform:none}}
+@keyframes lxa-feet{0%,100%{transform:none}}
+@keyframes lxa-foot{from{opacity:1;transform:scale(.2,0)}to{opacity:1;transform:none}}
+@keyframes lxa-open{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+@keyframes lxa-blink{0%,100%{transform:scaleY(1)}50%{transform:scaleY(.08)}}
+@keyframes lxa-glow{0%{opacity:0;transform:scale(.4)}60%{opacity:1;transform:scale(1.3)}100%{opacity:1;transform:none}}
+@keyframes lxa-sparkle{0%{opacity:0;transform:scale(.2)}35%{opacity:.9;transform:scale(1.15) rotate(45deg)}100%{opacity:0;transform:scale(.3) rotate(90deg)}}
+@media (prefers-reduced-motion:reduce){.lx-awaken.play *{animation-duration:.01s!important;animation-delay:0s!important}}
+/* Drawn again after it has played (a choice redraws the screen): straight to its last frame. */
+.lx-awaken.play.done * { animation-duration: .001s !important; animation-delay: 0s !important; }
+#firstrun .fr-awaken { width: 120px; margin: 0 auto 6px; filter: drop-shadow(0 0 22px rgba(155, 61, 190, .28)); }
+#firstrun .fr-awaken .lx-awaken { width: 100%; }
+/* SVG's own defaults inside the drawing: the app's icon rule (svg { stroke: currentColor }) is not meant for it. */
+#firstrun .fr-awaken svg { fill: #000; stroke: none; stroke-width: 1; stroke-linecap: butt; stroke-linejoin: miter; }
+@media (max-width: 480px) { #firstrun .fr-awaken { width: 96px; } }

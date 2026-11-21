@@ -57,6 +57,10 @@ if (location.protocol === "file:" && /\/(launcher|phone)\.html$/.test(location.p
   contextBridge.exposeInMainWorld("lodestoneDesktop", {
     info: () => call("info"),
     openModels: () => call("open-models"),
+    // The first-run setup hands over to the welcome page (November 20, 2026).
+    routeState: () => call("route-state"),
+    firstRunDone: () => call("first-run-done"),
+    openWelcome: () => call("open-welcome"),
     quickModels: () => call("quick-models"),
     hostedStatus: () => call("hosted-status"),
     // Folders Lodestone may read (Settings → Advanced)

@@ -18,30 +18,28 @@
     <p class="lede" id="wakingText">Opening…</p>
   </section>
 
-  <!-- First launch: DeepSeek V4.1 Flash on the account or under one's own key, a model on this computer encouraged -->
-  <section id="welcome" hidden>
+  <!-- First launch, after the app's setup (November 20, 2026): your own key first, the
+       account second, a model on this computer folded beneath as the most private choice. -->
+  <section id="welcome" class="welcome" hidden>
     <header class="head">
       <img src="../build/icon.png" alt="" class="mark">
-      <div>
-        <h1>Welcome to Lodestone</h1>
-        <p class="lede">The Harmonist guide. Your conversations, your memory and the library are kept on this computer.</p>
-      </div>
+      <h1>Where should Lodestone think?</h1>
+      <p class="lede">DeepSeek V4.1 Flash, tested against Lodestone's doctrine, answers through your own key or your harmonism.io account. Each message, with the passages it needs, goes to that service; everything else stays on this computer.</p>
     </header>
 
     <div class="card" id="routeCard">
-      <div class="pick">
-        <span class="tag">Recommended to begin · nothing to download</span>
-        <span class="name">DeepSeek V4.1 Flash</span>
-        <span class="why">Tested against Lodestone's doctrine, and the model harmonism.io runs on. Each message, with the passages Lodestone needs to answer it, goes to the service you choose, which reads it; everything else stays on this computer.</span>
-      </div>
-      <div class="row">
-        <button id="welcomeHosted" class="primary big-btn">Use my harmonism.io account · ten free messages a day</button>
-        <button id="welcomeRemote" class="big-btn">Use my own OpenRouter key · no daily limit</button>
-      </div>
+      <button id="welcomeRemote" class="route primary" type="button">
+        <span class="route-t">Use my own OpenRouter key <span class="rec">Recommended</span></span>
+        <span class="route-d">No daily limit. You pay OpenRouter directly for what you use.</span>
+      </button>
+      <button id="welcomeHosted" class="route" type="button">
+        <span class="route-t">Use my harmonism.io account</span>
+        <span class="route-d">Free: ten messages a day for the first month, then five.</span>
+      </button>
     </div>
 
-    <h2 class="sub-head">Or think entirely on this computer</h2>
-    <div class="card">
+    <details class="card local" id="localFold">
+      <summary><span class="route-t">Or think entirely on this computer</span> <span class="route-d">The most private: nothing you say leaves it. One large download.</span></summary>
       <p id="welcomeText"></p>
       <div id="pick"></div>
       <div class="row">
@@ -56,8 +54,8 @@
         <summary>Choose a different model</summary>
         <div id="list" class="list"></div>
       </details>
-    </div>
-    <p class="fine center-text">With a model on this computer, Lodestone works with no internet connection and nothing you say leaves it. Lodestone menu → Model… changes this at any time.</p>
+    </details>
+    <p class="fine center-text">Lodestone menu → Model… changes this at any time.</p>
   </section>
 
   <!-- Something went wrong while starting the model -->

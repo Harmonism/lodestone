@@ -102,6 +102,7 @@ function renderWelcome() {
   $("#pick").replaceChildren(card(m));
   const list = $("#list"); list.innerHTML = "";
   S.catalog.filter(x => x.id !== "tiny" || x.id === S.defaultId).forEach(x => list.append(card(x, { selectable: true })));
+  if (busy || m.partial) $("#localFold").open = true;   // a download under way or to resume stays in view
   const btn = $("#begin");
   btn.disabled = busy;
   btn.textContent = m.downloaded ? "Begin" : m.partial ? `Resume download (${gb(m.partial)} of ${gb(m.size)})` : `Download and begin · ${gb(m.size)}`;
@@ -578,6 +579,9 @@ async function boot() {
   chosen = S.chosen;
   const m = model(chosen);
   if (m?.downloaded) return wake(chosen);
+  // First launch (November 20, 2026): the app's own setup asks its questions first, then
+  // sends the window back here to choose where Lodestone thinks.
+  if (!S.firstRunDone) return D.openApp();
   // First launch, or a download that was interrupted.
   if (!S.catalog.some(x => x.downloaded) || !m) chosen = m ? chosen : S.defaultId;
   renderWelcome();

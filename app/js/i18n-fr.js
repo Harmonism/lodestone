@@ -1249,5 +1249,7 @@ export const FR = {
  "A question, something you are going through, something you want to change…": "Une question, quelque chose que vous traversez, quelque chose que vous voulez changer…",
  "You can also leave it empty and begin.": "Vous pouvez aussi le laisser vide et commencer.",
  "Next, choose where Lodestone thinks; your message waits until then. You can also leave it empty.": "Ensuite, choisissez où Lodestone réfléchit ; votre message attend jusque-là. Vous pouvez aussi le laisser vide.",
- "On harmonism.io": "Sur harmonism.io"
+ "On harmonism.io": "Sur harmonism.io",
+ "Lodestone as it is built to work best; only the Harmonic Profile is asked.": "Lodestone tel qu’il est conçu pour fonctionner au mieux ; seul le Profil harmonique est demandé.",
+ "Language": "Langue"
 };

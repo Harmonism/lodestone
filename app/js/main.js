@@ -273,13 +273,18 @@ async function boot() {
   const installed = await corpusPack.isInstalled();
   // November 20, 2026: the first-run setup, once, on a device that holds no Lodestone data.
   // An update or a reinstall leaves the data in place, so it never comes back by itself.
-  if (S.freshDevice && !S.settings.firstRun) await runFirstRun({ needsModel: !DESKTOP && (!installed || !S.settings.tier || !TIERS[S.settings.tier]), carried: await carryLanding() });
+  // Lodestone Desktop chooses where it thinks on its own welcome page, after this setup (shell 1.x, November 20, 2026).
+  const dRoute = DESKTOP?.routeState ? await DESKTOP.routeState().catch(() => null) : null;
+  if (S.freshDevice && !S.settings.firstRun) await runFirstRun({ needsModel: DESKTOP ? !!(dRoute && !dRoute.routed) : (!installed || !S.settings.tier || !TIERS[S.settings.tier]), carried: await carryLanding() });
   // An unknown tier is an install from before a tier was withdrawn (the light
   // tier, 24 Sep 2026). Everything else it holds is still good; only the choice
   // of where Lodestone thinks has to be made again.
   if (DESKTOP) {
     document.documentElement.classList.add("desktop");
     document.title = "Lodestone";
+    // The setup's questions are answered: the welcome page asks where Lodestone thinks, then opens this page again.
+    if (dRoute && !dRoute.firstRunDone) await DESKTOP.firstRunDone?.().catch(() => {});
+    if (dRoute && !dRoute.routed && DESKTOP.openWelcome) return DESKTOP.openWelcome();
     if (!installed || !desktopConfigured()) return desktopSetup();
     // The app may have brought a newer corpus (an update from harmonism.io, or a
     // new version of the app): take it in before opening. It is local, so quick.
@@ -385,6 +390,8 @@ async function runFirstRun({ needsModel = false, again = false, carried = false 
   applyTheme(S.settings.theme); applyDisplay();
   S.firstRunNext = r?.hp === "now" ? "hp" : null;
   S.firstMessage = r?.first || "";      // "What brings you here today?": sent as the first message once Lodestone can answer
+  // Kept in the settings too: on Desktop the page reloads after the welcome page, and a reload must not lose it.
+  if (S.firstMessage || S.firstRunNext) { S.settings.firstRunPending = { first: S.firstMessage, hp: r?.hp || "" }; try { await store.kv.set("settings", S.settings); } catch {} }
   S.openCarried = !!carried;            // the conversation begun on harmonism.io opens instead
   if (needsModel && !S.preferTier) S.preferTier = "openrouter";   // the own-key route first; the free one stays a click away
   if (again) { $("#main").hidden = false; syncDock?.(); renderSettings(); if (S.firstRunNext) { S.firstRunNext = null; renderMe(); openDrawer("#drawerMe"); } if (S.firstMessage) afterFirstRun().catch(() => {}); }
@@ -415,6 +422,7 @@ async function carryLanding() {
 
 /** After the first run, once the conversation screen is open: the landing conversation, or the first message. */
 async function afterFirstRun() {
+  if (S.settings.firstRunPending) { delete S.settings.firstRunPending; store.kv.set("settings", S.settings).catch(() => {}); }
   if (S.openCarried) {
     S.openCarried = false;
     try { const t = await store.threads.get(held.WEB_THREAD); if (t) await openThread(t); } catch {}
@@ -836,6 +844,13 @@ function makeEngine() {
 async function startMain() {
   $("#setup").hidden = true; $("#main").hidden = false;
   S.mainStarted = true;
+  // What the first-run setup left for the first opening (kept across Desktop's welcome page), taken once.
+  const pend = S.settings.firstRunPending;
+  if (pend) {
+    if (!S.firstMessage && pend.first) S.firstMessage = pend.first;
+    if (!S.firstRunNext && pend.hp === "now") S.firstRunNext = "hp";
+    delete S.settings.firstRunPending; store.kv.set("settings", S.settings).catch(() => {});
+  }
   // "Take the assessment" chosen in the first-run setup: Your path opens at the Harmonic Profile.
   if (S.firstRunNext === "hp") { S.firstRunNext = null; setTimeout(() => { try { renderMe(); openDrawer("#drawerMe"); setTimeout(() => $("#hpBox")?.scrollIntoView({ block: "start" }), 300); } catch {} }, 800); }
   if (S.firstMessage || S.openCarried) setTimeout(() => afterFirstRun().catch(e => console.warn("[first run]", e)), 600);
