@@ -380,6 +380,24 @@ export async function byokKey() {
 }
 export const byokReady = async () => !!(await byokKey());
 
+/** The OpenRouter model chosen beside the key in Settings → Model (any model OpenRouter lists), or "" for the server's choice. */
+export async function byokModel() {
+  try {
+    const st = await store.kv.get("settings").catch(() => null);
+    const m = st?.remote?.tier === "openrouter" ? st.remote.model : "";
+    return typeof m === "string" ? m.trim() : "";
+  } catch { return ""; }
+}
+
+/** harmonism.io builds the request for a model on its own list; under the key, the practitioner's chosen model answers it instead. The hosts and reasoning pinned for a listed model do not carry to another. */
+async function underOwnModel(req) {
+  const m = await byokModel();
+  if (!m || !req || req.model === m) return req;
+  const out = { ...req, model: m, reasoning: { exclude: true } };
+  if (out.provider) { const { only, ...rest } = out.provider; out.provider = rest; }
+  return out;
+}
+
 const sseOf = o => new TextEncoder().encode("data: " + JSON.stringify(o) + "\n\n");
 const textEvt = t => sseOf({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: t } });
 
@@ -436,7 +454,7 @@ function byokResponse(res, key) {
           }
         }
         if (buf) ctrl.enqueue(enc.encode(buf));
-        if (req) { await streamOpenRouter(req, key, ctrl); ctrl.enqueue(sseOf({ type: "message_stop" })); }
+        if (req) { await streamOpenRouter(await underOwnModel(req), key, ctrl); ctrl.enqueue(sseOf({ type: "message_stop" })); }
       } catch { ctrl.enqueue(textEvt("The answer was cut off. Ask again.")); }
       ctrl.close();
     },
