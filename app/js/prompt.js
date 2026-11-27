@@ -160,7 +160,7 @@ Everything above is context for you. Never reproduce these blocks or their tags;
 export function heldBlock(blocks) {
   if (!blocks) return "";
   const parts = [blocks.profile, blocks.reading].filter(x => x && String(x).trim()).map((x, i) => String(x).trim().slice(0, i ? 3000 : 6000));
-  return parts.length ? `<what_munai_has_learned>\nWhat Lodestone has come to understand of this person across their conversations, on harmonism.io, in the browser extension and in this app:\n${parts.join("\n\n")}\n</what_munai_has_learned>` : "";
+  return parts.length ? `<what_lodestone_has_learned>\nWhat Lodestone has come to understand of this person across their conversations, on harmonism.io, in the browser extension and in this app:\n${parts.join("\n\n")}\n</what_lodestone_has_learned>` : "";
 }
 
 export function personContext({ profile = {}, wheel = {}, practices = [], assessment = null, learned = [] } = {}) {

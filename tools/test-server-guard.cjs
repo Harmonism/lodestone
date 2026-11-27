@@ -73,7 +73,7 @@ model.listen(0, "127.0.0.1", async () => {
     });
     await ok("a phone's browser pairs with the code and is answered by its cookie; this computer always is", async () => {
       const code = phone.code().code;
-      const pr = await reqAt("POST", "/munai-pair", {}, JSON.stringify({ code, name: "Phone browser" }));
+      const pr = await reqAt("POST", "/lodestone-pair", {}, JSON.stringify({ code, name: "Phone browser" }));
       const tok = JSON.parse(pr.body).token;
       assert(tok, pr.body);
       assert.strictEqual((await reqAt("POST", "/v1/chat/completions", { Cookie: `lodestone_pair=${tok}` }, body)).status, 200);

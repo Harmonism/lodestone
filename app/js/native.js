@@ -78,7 +78,7 @@ export async function pairWith(baseInput, code) {
   if (code.length !== 6) throw new Error("The code has six digits.");
   let res;
   try {
-    res = await lanFetch(base + "/munai-pair", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, name: deviceName() }) });
+    res = await lanFetch(base + "/lodestone-pair", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, name: deviceName() }) });
   } catch {
     throw new Error(`No answer from ${base}. The phone must be on the same Wi-Fi, Lodestone Desktop open, and Let phones on this Wi-Fi reach Lodestone switched on.`);
   }

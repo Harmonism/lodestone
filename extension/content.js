@@ -26,7 +26,6 @@
   window.__lodestoneInjected = true;
 
   const HOSTNAME = location.hostname;
-  const SESSION_KEY = "munai-chat-v1";
   const MAX_MESSAGES = 20;
 
   // Anonymous lifetime allowance — mirrors the site's conversion architecture:
@@ -72,8 +71,6 @@
   // The tab's conversation is kept by the worker in the extension's own
   // session storage (cleared when the tab closes or the browser quits), never
   // in the page's sessionStorage, which the page's own scripts can read.
-  // 1.x kept it there: whatever it left is removed.
-  try { sessionStorage.removeItem(SESSION_KEY); } catch (e) {}
   function loadSession() {
     return new Promise((resolve) => {
       try {
@@ -783,7 +780,7 @@
   });
 
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && changes["munai-session"]) { refreshMemory(); return; }
+    if (area === "local" && changes["lodestone-session"]) { refreshMemory(); return; }
     if (area === "sync" && changes.memoryLinked) refreshMemory();
   });
 })();

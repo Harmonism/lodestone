@@ -3,7 +3,7 @@
 // The same records, the same rules, as harmonism.io's lodestone-sync-api.php,
 // for sync that never leaves the home network: Lodestone's own window
 // reaches it through the main process, a paired phone through the phone
-// server (server.js, /munai-sync, with the token it was given at pairing).
+// server (server.js, /lodestone-sync, with the token it was given at pairing).
 // What is kept is what the devices send: ciphertext under a key the devices
 // keep (handed device to device since October 19, 2026; a passphrase before),
 // record names that are HMACs. This computer cannot read it either. The link

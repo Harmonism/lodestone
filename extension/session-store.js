@@ -3,12 +3,17 @@
 // session through this instead. A cache, filled from chrome.storage.local
 // before first use, written back on every change.
 
-const KEY = "munai-session";
+const KEY = "lodestone-session";
+const OLD_KEY = "munai-session";   // its name before November 24, 2026: carried over once, then removed
 let cache = {};
 let loaded = null;
 
 export function ready() {
-  if (!loaded) loaded = chrome.storage.local.get({ [KEY]: {} }).then(v => { cache = v[KEY] || {}; });
+  if (!loaded) loaded = chrome.storage.local.get([KEY, OLD_KEY]).then(async v => {
+    if (v[KEY] == null && v[OLD_KEY] != null) { await chrome.storage.local.set({ [KEY]: v[OLD_KEY] }); v[KEY] = v[OLD_KEY]; }
+    if (v[OLD_KEY] != null) await chrome.storage.local.remove(OLD_KEY);
+    cache = v[KEY] || {};
+  });
   return loaded;
 }
 

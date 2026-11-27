@@ -71,7 +71,7 @@ export function wire(desktop = null, opts = {}) {
         if (!p) throw new SyncError("auth", "This phone is no longer paired with a computer. Pair it again under Change where Lodestone thinks → My computer.", 401);
         let res;
         try {
-          res = await lanFetch(p.base + "/munai-sync" + query, {
+          res = await lanFetch(p.base + "/lodestone-sync" + query, {
             method, cache: "no-store",
             // A connection that hangs is given up after a minute, and tried on the next tick.
             signal: AbortSignal.timeout ? AbortSignal.timeout(60000) : undefined,

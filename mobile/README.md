@@ -14,7 +14,7 @@ What the shell adds, because a web page may not do it:
 - `capacitor.config.json` — `server.url` is the live app; `allowNavigation` keeps the WebView on harmonism.io (other sites open in the browser); `errorPath` shows `www/offline.html` when the first opening finds no connection; `SystemBars` handles the edge-to-edge insets (the app's viewport is `viewport-fit=cover`).
 - `www/` — the offline page, and an `index.html` that is never shown.
 - `android/` — the Gradle project made by `npx cap add android`, then: the `lodestone://pair` intent filter and cleartext in `AndroidManifest.xml`; Lodestone's icons and splash; release signing from `../keys/` in `app/build.gradle`.
-- `keys/` — `munai-release.jks` and `keystore.properties` (its passwords). **Keep a copy somewhere safe.** Without it the installed apps cannot be updated in place, only uninstalled (memory lost unless synced) and reinstalled. Not in git.
+- `keys/` — `lodestone-release.jks` and `keystore.properties` (its passwords). **Keep a copy somewhere safe.** Without it the installed apps cannot be updated in place, only uninstalled (memory lost unless synced) and reinstalled. Not in git.
 - `release/` — the newest signed APK, published by `harmonia-astro/post-build.sh` as `/lodestone-app/download/Lodestone-android.apk`, and linked from `/lodestone-mobile` (which reads the version from the file names here at build time) and the Lodestone dropdown's *Lodestone Mobile* row.
 - `build-android.sh` — the build, on a Mac.
 

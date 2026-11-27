@@ -260,9 +260,9 @@ function prismAsset(platform = process.platform, arch = process.arch) {
   return a ? { ...a, url: `https://github.com/PrismML-Eng/llama.cpp/releases/download/${PRISM_ENGINE.tag}/${a.name}` } : null;
 }
 
-// A test-only entry, never shown: MUNAI_TEST_MODEL=tiny exercises the whole
+// A test-only entry, never shown: LODESTONE_TEST_MODEL=tiny exercises the whole
 // download → engine → conversation path with a 0.5 GB file.
-if (process.env.MUNAI_TEST_MODEL === "tiny") BUNDLED.push({
+if (process.env.LODESTONE_TEST_MODEL === "tiny") BUNDLED.push({
   id: "tiny", label: "Test model (0.8B)", repo: "mradermacher/Qwen3.5-0.8B-heretic-v2-GGUF",
   files: [{ path: "Qwen3.5-0.8B-heretic-v2.Q4_K_M.gguf", size: 527503872, sha256: "433f5d53ff18ea9f07f825112206c3b64556a2d24eaa1af84873b251fdd484df" }],
   minMem: 1, hand: "Alibaba", why: "For testing the app only.",
@@ -295,7 +295,7 @@ const PREFERRED_LOCAL = null;
 
 /** The model recommended for a machine with `memGB` of RAM (unified memory on Apple silicon). */
 function defaultFor(memGB) {
-  if (process.env.MUNAI_TEST_MODEL === "tiny") return "tiny";
+  if (process.env.LODESTONE_TEST_MODEL === "tiny") return "tiny";
   const has = id => prismAsset() && CATALOG.some(m => m.id === id && !m.retired);
   if (PREFERRED_LOCAL && memGB >= PREFERRED_LOCAL.from && memGB < PREFERRED_LOCAL.below && has(PREFERRED_LOCAL.id)) return PREFERRED_LOCAL.id;
   for (const [min, id] of DEFAULTS) if (memGB >= min && CATALOG.some(m => m.id === id && !m.retired)) return id;

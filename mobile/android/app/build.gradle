@@ -8,10 +8,10 @@ def keyFile = rootProject.file("../keys/keystore.properties")
 if (keyFile.exists()) keyFile.withInputStream { keyProps.load(it) }
 
 android {
-    namespace = "io.harmonism.munai"
+    namespace = "io.harmonism.lodestone"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "io.harmonism.munai"
+        applicationId "io.harmonism.lodestone"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 3

@@ -332,7 +332,7 @@ export function orPrice(id) { orContext(id); return orPrices?.get(current(String
 export function orThinks(id) { orContext(id); const p = orParams?.get(current(String(id || "").trim())); return p ? p.has("reasoning") : null; }
 
 // ─── The hybrid (v107): a light model of the same maker for the turns that need no depth ───
-// As MunAI on Telegram ran Haiku beside Opus. The light model is found in OpenRouter's
+// As Lodestone on Telegram ran Haiku beside Opus. The light model is found in OpenRouter's
 // own list, the newest of the maker's light line, so no id is written here to go stale.
 // Offered only where the chosen model costs enough for it to matter (from $1 per million
 // input tokens): never for DeepSeek V4.1 Flash, the default, which costs a fraction of that.

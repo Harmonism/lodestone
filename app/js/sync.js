@@ -143,7 +143,11 @@ export async function open(keys, data, name) {
   return td.decode(await unsqueeze(pt[0], pt.subarray(1)));
 }
 
-const CHECK = "munai-sync-check";
+const CHECK = "lodestone-sync-check";
+// A space made before November 24, 2026 was sealed with the check under the
+// app's earlier name: it still opens, and keeps that seal until it is made anew.
+const CHECK_BEFORE = "munai-sync-check";
+const checks = v => v === CHECK || v === CHECK_BEFORE;
 
 // ─── linked devices (v2, October 19, 2026) ──────────────────────────────────
 // No passphrase. Turning sync on makes a random 256-bit key on this device;
@@ -535,7 +539,7 @@ export class Sync {
     const r = await this.remote();
     if (!r.meta) throw new SyncError("no_space", "There is no synced copy on this account yet.");
     const keys = await deriveKeys(passphrase, r.meta.salt);
-    try { if (await open(keys, r.meta.check, "check") !== CHECK) throw 0; }
+    try { if (!checks(await open(keys, r.meta.check, "check"))) throw 0; }
     catch { throw new SyncError("passphrase", "That passphrase does not open the synced copy."); }
     await this.adopt(keys, r.meta, key);
     return this.now();
@@ -574,7 +578,7 @@ export class Sync {
     if (old) {
       try {
         const r = await this.remote();
-        if (r.meta && Sync.linked(r.meta) && r.meta.epoch === epoch && await open(await keysFromSecret(old), r.meta.check, "check") === CHECK) { await saveRoot(old); return old; }
+        if (r.meta && Sync.linked(r.meta) && r.meta.epoch === epoch && checks(await open(await keysFromSecret(old), r.meta.check, "check"))) { await saveRoot(old); return old; }
       } catch {}
       old.fill(0);
     }
@@ -607,7 +611,7 @@ export class Sync {
     if (!Sync.linked(r.meta)) throw new SyncError("passphrase", "This synced copy was made with a passphrase: enter the passphrase instead.");
     const secret = fromB32(code, 32);
     const keys = await keysFromSecret(secret);
-    try { if (await open(keys, r.meta.check, "check") !== CHECK) throw 0; } catch { secret.fill(0); throw new SyncError("code", "That recovery code does not open the synced copy."); }
+    try { if (!checks(await open(keys, r.meta.check, "check"))) throw 0; } catch { secret.fill(0); throw new SyncError("code", "That recovery code does not open the synced copy."); }
     await saveRoot(secret); secret.fill(0);
     await this.adopt(keys, r.meta, key);
     await this.keepLock().catch(() => {});
@@ -652,7 +656,7 @@ export class Sync {
             const secret = new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: raw.subarray(0, 12), additionalData: te.encode("link:" + id) }, k, raw.subarray(12)));
             const keys = await keysFromSecret(secret);
             const r = await this.remote();
-            if (await open(keys, r.meta.check, "check") !== CHECK) throw 0;
+            if (!checks(await open(keys, r.meta.check, "check"))) throw 0;
             await saveRoot(secret); secret.fill(0);
             await this.adopt(keys, r.meta, key);
             this.t.request("DELETE", `?link=1&id=${id}`).catch(() => {});
@@ -725,7 +729,7 @@ export class Sync {
       secret = new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: raw.subarray(0, 12), additionalData: unlockAad(r.meta.epoch) }, pk.key, raw.subarray(12)));
     } catch { return null; }   // locked under another password: changed since
     const keys = await keysFromSecret(secret);
-    try { if (await open(keys, r.meta.check, "check") !== CHECK) throw 0; } catch { secret.fill(0); return null; }
+    try { if (!checks(await open(keys, r.meta.check, "check"))) throw 0; } catch { secret.fill(0); return null; }
     await saveRoot(secret); secret.fill(0);
     await this.adopt(keys, r.meta, key);
     await this.setConf({ lockAt: pk.at, lockEpoch: r.meta.epoch });

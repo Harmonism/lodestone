@@ -1,5 +1,5 @@
 {
-  "name": "munai-offline-desktop",
+  "name": "lodestone-desktop",
   "productName": "Lodestone",
   "version": "1.17.13",
   "description": "Lodestone, the Harmonist guide, and the harmonism.io library, on your own computer.",
@@ -28,7 +28,7 @@
     "electron-builder": "26.15.3"
   },
   "build": {
-    "appId": "io.harmonism.munai-offline",
+    "appId": "io.harmonism.lodestone",
     "productName": "Lodestone",
     "copyright": "CC0 — Harmonia",
     "directories": {

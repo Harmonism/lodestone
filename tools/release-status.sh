@@ -110,7 +110,7 @@ if [ ! -d "$EXT" ]; then unknown "not found at $EXT"; else
   done
   if [ -z "$STALE" ]; then ok "lib/ matches app/js/ (all ten modules)"
   else bad "lib/ is not today's app/js/:$STALE — needs: ./build.sh (a stale copy calls functions that do not exist)"; fi
-  APP_N="$(grep -oE 'munai-offline-shell-v[0-9]+' "$EXT/lib/FROM-APP.txt" 2>/dev/null | sed 's/.*-v//')"
+  APP_N="$(grep -oE 'lodestone-shell-v[0-9]+' "$EXT/lib/FROM-APP.txt" 2>/dev/null | sed 's/.*-v//')"
   [ -n "$APP_N" ] && printf '  lib/ says it carries shell v%s; app/sw.js is v%s\n' "$APP_N" "${SHELL_N:-?}"
   if [ "$EXT_V" != "$EXT_VF" ]; then bad "the two manifests disagree: chromium $EXT_V, firefox $EXT_VF"; else
     for fam in chromium firefox; do

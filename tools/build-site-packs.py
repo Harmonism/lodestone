@@ -34,7 +34,7 @@ import time
 from pathlib import Path
 
 LANGS = ["en", "fr", "es", "ar", "pt", "de", "zh", "ja", "hi", "ru"]
-SKIP_DIRS_ROOT = {"audio", "lodestone-app", "munai-offline", "member", "pagefind-temp"}
+SKIP_DIRS_ROOT = {"audio", "lodestone-app", "member", "pagefind-temp"}
 SKIP_DIRS_ANY = {"member"}
 # Translated Lodestone pages: sources for the lodestone.harmonism.io mirror
 # (build-lodestone-mirror.py), 301-redirected away on harmonism.io, and the app

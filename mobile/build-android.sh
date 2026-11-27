@@ -40,9 +40,9 @@ echo "sdk.dir=$ANDROID_HOME" > android/local.properties
 if [ ! -f keys/keystore.properties ]; then
   mkdir -p keys
   PW="$(openssl rand -base64 24 | tr -d '/+=')"
-  keytool -genkeypair -keystore keys/munai-release.jks -storetype PKCS12 -alias munai -keyalg RSA -keysize 4096 \
+  keytool -genkeypair -keystore keys/lodestone-release.jks -storetype PKCS12 -alias lodestone -keyalg RSA -keysize 4096 \
     -validity 36500 -storepass "$PW" -keypass "$PW" -dname "CN=Lodestone, O=Harmonia, L=harmonism.io"
-  printf 'storeFile=munai-release.jks\nstorePassword=%s\nkeyAlias=munai\nkeyPassword=%s\n' "$PW" "$PW" > keys/keystore.properties
+  printf 'storeFile=lodestone-release.jks\nstorePassword=%s\nkeyAlias=lodestone\nkeyPassword=%s\n' "$PW" "$PW" > keys/keystore.properties
   chmod 600 keys/*
 fi
 

@@ -1,4 +1,4 @@
-package io.harmonism.munai;
+package io.harmonism.lodestone;
 
 import com.getcapacitor.BridgeActivity;
 

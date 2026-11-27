@@ -1,7 +1,5 @@
 // server.js — serves the app's window: the harmonism.io library at /, Lodestone at
 // /lodestone-app/, and the model engine behind /v1 on the same origin.
-// (/munai-offline/ until October 17, 2026: answered with a 301, for
-// library pages and phone bookmarks made before.)
 //
 //   /                        the library (site.js): English ships with the app,
 //                            other languages are downloaded on request
@@ -9,7 +7,7 @@
 //   /lodestone-app/corpus/       the corpus, from an update when there is one
 //   /lodestone-app/v1, /v1       the model engine (OpenAI-compatible)
 //   POST /companion-api.php  the companion on the library's pages (companion.js)
-//   /munai-pair, /munai-sync the Lodestone app for Android, paired with this computer
+//   /lodestone-pair, /lodestone-sync  the Lodestone app for Android, paired with this computer
 //                            a code traded for a token, then the synced
 //                            copy kept here (syncstore.js), token required
 //   *.php otherwise          the member area and the online services: a page
@@ -26,8 +24,6 @@ const { Readable } = require("stream");
 const { LANGS } = require("./site");
 
 const APP = "/lodestone-app/";
-const OLD_APP = "/munai-offline/";   // the address before October 17, 2026
-const OLD_APP_2 = "/munai-app/";     // the address before October 18, 2026 (MunAI → Lodestone)
 const ONLINE = "https://harmonism.io";
 const CORPUS_FILES = new Set(["runtime.json", "corpus.json", "embeddings.json", "embeddings.bin"]);
 
@@ -51,7 +47,7 @@ const MIME = {
 // Each library page also carries a way back to the conversation: the window
 // has no address bar, and the site's own menus lead only around the site.
 const BACK_LINK = `<a class="lodestone-back" href="${APP}" title="Back to the conversation (${process.platform === "darwin" ? "⌘1" : "Ctrl+1"})"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Back to Lodestone</a>`;
-const PAGE_SCRIPT = `<script>(function(){try{var g=Storage.prototype.getItem;Storage.prototype.getItem=function(k){if(k==="munai-anon-msg-count")return"0";if(k==="munai-anon-nudge-shown")return"1";return g.call(this,k)};document.documentElement.classList.add("lodestone-app")}catch(e){}
+const PAGE_SCRIPT = `<script>(function(){try{var g=Storage.prototype.getItem;Storage.prototype.getItem=function(k){if(k==="lodestone-anon-msg-count")return"0";if(k==="lodestone-anon-nudge-shown")return"1";return g.call(this,k)};document.documentElement.classList.add("lodestone-app")}catch(e){}
 if(window.top===window)document.addEventListener("DOMContentLoaded",function(){if(document.querySelector(".lodestone-back"))return;document.body.insertAdjacentHTML("beforeend",${JSON.stringify(BACK_LINK)})});})();</script><style>.nav-account-link{display:none!important}
 .lodestone-back{position:fixed;left:20px;bottom:20px;z-index:2147483647;display:inline-flex;align-items:center;gap:6px;padding:9px 16px 9px 11px;border-radius:999px;background:var(--bg-elevated,#1a1a3a);border:1px solid var(--border,#2a2a55);color:var(--text,#d8d8e8);font:600 15px/1 "Source Sans 3",system-ui,-apple-system,"Segoe UI",sans-serif;text-decoration:none;box-shadow:0 4px 18px rgba(0,0,0,.35)}
 .lodestone-back:hover{border-color:#9B3DBE;color:var(--text-heading,#fff)}.lodestone-back svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
@@ -183,7 +179,7 @@ async function remoteModel(rc, req, res, sub, body) {
 // home network, so its requests carry that origin.
 // Only the routes it needs answer it: the model, pairing and sync.
 const NATIVE_ORIGINS = new Set(["https://lodestone.harmonism.io", "https://harmonism.io"]);
-const NATIVE_PATHS = /^\/(v1\/|lodestone-app\/v1\/|munai-app\/v1\/|munai-pair$|munai-sync$)/;
+const NATIVE_PATHS = /^\/(v1\/|lodestone-app\/v1\/|lodestone-pair$|lodestone-sync$)/;
 function cors(req, res, p, origins = NATIVE_ORIGINS) {
   const o = req.headers.origin;
   if (!o || !origins.has(o) || !NATIVE_PATHS.test(p)) return false;
@@ -270,7 +266,7 @@ function createServer({ webRoot, corpusRoot, site, companion, getConfig, asrRoot
       }
 
       // The Lodestone app for Android
-      if (phone && p === "/munai-pair") {
+      if (phone && p === "/lodestone-pair") {
         if (req.method === "GET") return send(res, 200, phone.hello());
         if (req.method !== "POST") return send(res, 405, { error: { code: "method", message: "Method not allowed" } });
         let body;
@@ -278,7 +274,7 @@ function createServer({ webRoot, corpusRoot, site, companion, getConfig, asrRoot
         const r = phone.pair(body);
         return send(res, r.status, r.json);
       }
-      if (phone && p === "/munai-sync") {
+      if (phone && p === "/lodestone-sync") {
         if (!phone.authorized(bearer(req))) return send(res, 401, { error: { code: "auth", message: "This phone is not paired with Lodestone Desktop, or was forgotten there. Pair it again." } });
         let body = null;
         if (req.method === "PUT" || req.method === "POST") {
@@ -310,8 +306,7 @@ function createServer({ webRoot, corpusRoot, site, companion, getConfig, asrRoot
       if (req.method !== "GET" && req.method !== "HEAD") return send(res, 405, "method not allowed", "text/plain");
 
       // Lodestone
-      if (p === "/lodestone-app" || p === "/munai-offline" || p === "/munai-app") return send(res, 301, "", "text/plain", { Location: APP });
-      for (const old of [OLD_APP, OLD_APP_2]) if (p.startsWith(old)) return send(res, 301, "", "text/plain", { Location: APP + p.slice(old.length) + (url.includes("?") ? url.slice(url.indexOf("?")) : "") });
+      if (p === "/lodestone-app") return send(res, 301, "", "text/plain", { Location: APP });
       if (p.startsWith(APP + "corpus/")) {
         const f = p.slice(APP.length + 7);
         if (CORPUS_FILES.has(f)) return serveFile(path.join(corpusRoot(), f), p, req, res);

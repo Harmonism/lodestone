@@ -3,11 +3,11 @@
 //
 // Website Lodestone used to keep what it learned of a practitioner on the server.
 // It now keeps it here, in the same memory the Lodestone app keeps (IndexedDB
-// "munai-offline", shared by every page of harmonism.io because they share
+// "lodestone-device", shared by every page of harmonism.io because they share
 // an origin), carried between devices by Lodestone sync, encrypted. A website or
 // extension turn sends this memory along (`held`), the server runs the turn
 // on it in a database that lives for that request only, and hands back the
-// updated memory at the end of the stream (`munai_state`), which is kept here.
+// updated memory at the end of the stream (`lodestone_state`), which is kept here.
 //
 //   heldFetch(url, init, ctx)  a drop-in for fetch() to companion-api.php:
 //                              adds the memory, keeps the turn and the state
@@ -36,8 +36,8 @@ export const COMPANION = "companion";        // kv: { state, blocks, at }
 export const WEB_THREAD = "web-harmonism";   // the website's own conversation
 export const TG_THREAD = "telegram-carried"; // Lodestone on Telegram, carried in (October 24, 2026)
 const RECENT = 160;
-const HP_PENDING = "munai-hp-pending";
-const ANON_IMPORT = "munai-held-import";
+const HP_PENDING = "lodestone-hp-pending";
+const ANON_IMPORT = "lodestone-held-import";
 
 let base = (typeof location !== "undefined" && /^https?:/.test(location.protocol)) ? location.origin : "https://harmonism.io";
 let auth = () => hosted.token();
@@ -92,7 +92,7 @@ export async function bind() {
         // This device's memory was this account's: it becomes theirs, and the
         // device begins a memory of its own.
         name = device;
-        await store.accounts.setDevice(newName("munai-device"));
+        await store.accounts.setDevice(newName("lodestone-device"));
       } else name = newName("lodestone-memory");
       await store.accounts.set(key, name);
     }
@@ -127,14 +127,14 @@ export async function adoptDevice() {
     // Nothing here yet: the device's memory simply becomes this account's.
     const key = await keyOf(bound.email);
     await store.accounts.set(key, device);
-    await store.accounts.setDevice(newName("munai-device"));
+    await store.accounts.setDevice(newName("lodestone-device"));
     await store.dropDatabase(name);
     bound = { email: undefined, name: null };
     await bind();
   } else {
     await store.mergeFrom(device);
     await store.dropDatabase(device);
-    await store.accounts.setDevice(newName("munai-device"));
+    await store.accounts.setDevice(newName("lodestone-device"));
   }
   await store.kv.set("held:deviceAnswered", "adopted");
   syncSoon();
@@ -162,11 +162,11 @@ export async function signOutHere({ keep = true } = {}) {
 // (The website's sign-in page sets it in localStorage before any of this is loaded.)
 export const sharedComputer = {
   async get() {
-    try { const v = localStorage.getItem("munai-shared-computer"); if (v != null) return v === "1"; } catch {}
+    try { const v = localStorage.getItem("lodestone-shared-computer"); if (v != null) return v === "1"; } catch {}
     return !!(await store.accounts.getFlag("shared").catch(() => null));
   },
   async set(on) {
-    try { localStorage.setItem("munai-shared-computer", on ? "1" : "0"); } catch {}
+    try { localStorage.setItem("lodestone-shared-computer", on ? "1" : "0"); } catch {}
     await store.accounts.setFlag("shared", on ? 1 : null);
   },
 };
@@ -261,8 +261,8 @@ export async function forPage() {
 
 /** What such a page gives back: the memory with the profile taken in, kept and synced. */
 export async function settle(j) {
-  if (!j || !j.munai_state) return false;
-  await apply(j.munai_state);
+  if (!j || !j.lodestone_state) return false;
+  await apply(j.lodestone_state);
   await store.kv.del("hp_fresh");
   syncSoon();
   return true;
@@ -387,6 +387,26 @@ export async function byokModel() {
     const m = st?.remote?.tier === "openrouter" ? st.remote.model : "";
     return typeof m === "string" ? m.trim() : "";
   } catch { return ""; }
+}
+
+/** Sets, from the website's Sprite, the key and model this browser's Lodestone answers under: the same settings Settings → Model writes in the app. A blank key keeps the saved one. */
+export async function setByok({ key = "", model = "" } = {}) {
+  key = String(key || "").trim(); model = String(model || "").trim();
+  if (!key && !(await secrets.get("openrouter"))) throw new Error("Paste your OpenRouter key.");
+  if (!model) throw new Error("Name the model, as OpenRouter lists it (maker/model).");
+  if (key) await secrets.set("openrouter", key);
+  const st = (await store.kv.get("settings").catch(() => null)) || {};
+  await store.kv.set("settings", { ...st, tier: "openrouter", remote: { tier: "openrouter", model } });
+}
+
+/** Stops answering under the key here: the key is removed from this browser, and Lodestone answers on harmonism.io's tested models again. */
+export async function clearByok() {
+  await secrets.del("openrouter");
+  const st = (await store.kv.get("settings").catch(() => null)) || {};
+  if (st.tier === "openrouter" || st.remote?.tier === "openrouter") {
+    const { remote, ...rest } = st;
+    await store.kv.set("settings", { ...rest, tier: st.tier === "openrouter" ? null : st.tier });
+  }
 }
 
 /** harmonism.io builds the request for a model on its own list; under the key, the practitioner's chosen model answers it instead. The hosts and reasoning pinned for a listed model do not carry to another. */
@@ -520,10 +540,10 @@ async function watch(stream, { lastUser, ctx, byok = false }) {
       if (!line.startsWith("data: ")) continue;
       let evt; try { evt = JSON.parse(line.slice(6)); } catch { continue; }
       if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta") text += evt.delta.text;
-      else if (evt.type === "munai_state") stateEvt = evt;
+      else if (evt.type === "lodestone_state") stateEvt = evt;
     }
   }
-  if (buf.startsWith("data: ")) { try { const evt = JSON.parse(buf.slice(6)); if (evt.type === "munai_state") stateEvt = evt; } catch {} }
+  if (buf.startsWith("data: ")) { try { const evt = JSON.parse(buf.slice(6)); if (evt.type === "lodestone_state") stateEvt = evt; } catch {} }
   if (stateEvt) await apply(stateEvt);
   if (stateEvt?.flags?.reset) { await clearThread(ctx.threadId || WEB_THREAD); await syncSoon(); return; }
   if (text) {
@@ -554,9 +574,9 @@ export async function heldCall(path, body = {}) {
     });
     ok = res.ok; status = res.status; j = await res.json().catch(() => ({}));
   }
-  if (j.munai_state) await apply(j.munai_state);
+  if (j.lodestone_state) await apply(j.lodestone_state);
   else if (j.state) await apply({ state: j.state, blocks: j.blocks });
-  if (j.state || j.munai_state) syncSoon();
+  if (j.state || j.lodestone_state) syncSoon();
   if (!ok || j.error) { const e = new Error(j.error || `harmonism.io answered ${status}.`); e.code = j.error; e.status = status; throw e; }
   return j;
 }

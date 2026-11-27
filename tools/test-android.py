@@ -62,21 +62,21 @@ def main():
         results.append((name, bool(ok), detail)); print(("PASS " if ok else "FAIL ") + name + (f" — {detail}" if detail else ""), flush=True)
 
     # ── the computer, from the network ──────────────────────────────────────
-    st, h, b = req("OPTIONS", "/munai-sync", headers={"Origin": ORIGIN, "Access-Control-Request-Method": "POST", "Access-Control-Request-Private-Network": "true"})
+    st, h, b = req("OPTIONS", "/lodestone-sync", headers={"Origin": ORIGIN, "Access-Control-Request-Method": "POST", "Access-Control-Request-Private-Network": "true"})
     check("the app's origin may reach the sync route, private network included", st == 204 and h.get("Access-Control-Allow-Origin") == ORIGIN and h.get("Access-Control-Allow-Private-Network") == "true", str(st))
-    st, h, b = req("OPTIONS", "/munai-sync", headers={"Origin": "https://evil.example", "Access-Control-Request-Method": "POST"})
+    st, h, b = req("OPTIONS", "/lodestone-sync", headers={"Origin": "https://evil.example", "Access-Control-Request-Method": "POST"})
     check("another origin may not", st in (403, 405) and "Access-Control-Allow-Origin" not in h, str(st))
     st, h, b = req("GET", "/lodestone-app/", headers={"Origin": ORIGIN})
     check("the app's origin gets no CORS on the rest of the server", "Access-Control-Allow-Origin" not in h)
-    st, h, b = req("GET", "/munai-sync?meta=1")
+    st, h, b = req("GET", "/lodestone-sync?meta=1")
     check("sync needs a paired phone's token", st == 401, str(st))
-    st, h, b = req("POST", "/munai-pair", {"code": "000000"})
+    st, h, b = req("POST", "/lodestone-pair", {"code": "000000"})
     check("no code open, no pairing", st == 403 and b"No pairing code" in b)
     good = ctl("/code")["code"]
     wrong = [c for c in ("123450", "123451", "123452", "123453", "999999", "888888") if c != good][:5]
-    for c in wrong: st, h, b = req("POST", "/munai-pair", {"code": c})
+    for c in wrong: st, h, b = req("POST", "/lodestone-pair", {"code": c})
     check("five wrong codes end the code", st == 403 and b"Too many" in b, b.decode()[:120])
-    st, h, b = req("POST", "/munai-pair", {"code": good})
+    st, h, b = req("POST", "/lodestone-pair", {"code": good})
     check("…and the right one no longer works until the computer shows a new one", st == 403 and b"No pairing code" in b)
     check("nothing was paired by guessing", ctl("/paired") == [])
 
@@ -142,7 +142,7 @@ def main():
         menu = A.text_content("#modelMenu")
         check("the model menu says the computer rents", "rents from OpenRouter" in menu and "nothing leaves your network" not in menu.split("No model")[0].split("Test Mac")[0][-60:], menu[:200])
         A.keyboard.press("Escape"); A.wait_for_timeout(200)
-        st, h, b = req("GET", "/munai-pair")
+        st, h, b = req("GET", "/lodestone-pair")
         check("the computer says where its model runs", json.loads(b).get("where") == "openrouter.ai", b.decode()[:120])
         ctl("/where/")
         A.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
@@ -210,7 +210,7 @@ def main():
         # ── a page without the bridge reloads once, not forever ─────────────
         C = phone(cap=False)
         C.goto(ORIGIN + "/lodestone-app/"); C.wait_for_selector("#setup:not([hidden])", timeout=20000); C.wait_for_timeout(800)
-        flag = C.evaluate("sessionStorage.getItem('munai-bridge-reload')")
+        flag = C.evaluate("sessionStorage.getItem('lodestone-bridge-reload')")
         check("the app's page without its bridge is reloaded once, then opens", flag == "1" and C.is_visible("#tierChoices"))
 
         check("no page errors", not errors, "; ".join(errors[:5]))

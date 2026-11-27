@@ -3,7 +3,28 @@
 
 import { blobs, kv } from "./store.js";
 
-const CACHE = "munai-corpus-v1";
+const CACHE = "lodestone-corpus-v1";
+// The pack's cache before November 24, 2026: carried into CACHE once, then removed,
+// so a practitioner never downloads the library twice. Removed only once every
+// file has been copied; a failure leaves it for the next try.
+const OLD_CACHE = "munai-corpus-v1";
+let carried = null;
+async function openPack() {
+  if (!carried) carried = (async () => {
+    try {
+      if (!(await caches.has(OLD_CACHE))) return;
+      const from = await caches.open(OLD_CACHE), to = await caches.open(CACHE);
+      for (const req of await from.keys()) {
+        if (await to.match(req)) continue;
+        const res = await from.match(req);
+        if (res) await to.put(req, res);
+      }
+      await caches.delete(OLD_CACHE);
+    } catch (e) { carried = null; console.warn("[corpus] earlier cache not carried yet:", e); }
+  })();
+  await carried;
+  return caches.open(CACHE);
+}
 const BASE = new URL("../corpus/", import.meta.url);
 const FILES = {
   runtime: "runtime.json",
@@ -33,7 +54,7 @@ async function fetchWithProgress(url, onProgress, init = {}) {
 
 async function putLocal(name, bytes) {
   if (hasCache()) {
-    const c = await caches.open(CACHE);
+    const c = await openPack();
     await c.put(new Request(new URL(name, BASE)), new Response(bytes));
   } else {
     await blobs.set("corpus/" + name, bytes);
@@ -42,7 +63,7 @@ async function putLocal(name, bytes) {
 
 async function getLocal(name) {
   if (hasCache()) {
-    const c = await caches.open(CACHE);
+    const c = await openPack();
     const r = await c.match(new Request(new URL(name, BASE)));
     return r ? new Uint8Array(await r.arrayBuffer()) : null;
   }
@@ -120,7 +141,7 @@ export async function checkForUpdate() {
 }
 
 export async function remove() {
-  if (hasCache()) await caches.delete(CACHE);
+  if (hasCache()) { await caches.delete(CACHE); await caches.delete(OLD_CACHE); }
   for (const f of Object.values(FILES)) await blobs.del("corpus/" + f);
   await kv.del("pack");
 }

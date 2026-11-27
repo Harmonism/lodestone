@@ -2,6 +2,6 @@
 <resources>
     <string name="app_name">Lodestone</string>
     <string name="title_activity_main">Lodestone</string>
-    <string name="package_name">io.harmonism.munai</string>
-    <string name="custom_url_scheme">io.harmonism.munai</string>
+    <string name="package_name">io.harmonism.lodestone</string>
+    <string name="custom_url_scheme">io.harmonism.lodestone</string>
 </resources>

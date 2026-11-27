@@ -72,7 +72,7 @@ const PILLAR_COLOR = k => `var(--pillar-${k})`;
 // from inside the page. A model load that starts and never finishes is recorded
 // here; twice on the same model within five minutes and the app drops to a
 // smaller one instead of trying the same thing forever.
-const GUARD_KEY = "munai-engine-attempts";
+const GUARD_KEY = "lodestone-engine-attempts";
 const guard = {
   read() {
     try { return JSON.parse(localStorage.getItem(GUARD_KEY) || "null") || { n: 0, t: 0, model: "" }; }
@@ -105,7 +105,7 @@ const S = {
 // bundled with the app and is served on this same origin under /v1. There is
 // nothing to choose: setup runs by itself and the practitioner lands in the
 // conversation. The bridge is exposed by desktop/src/preload.js.
-const DESKTOP = window.lodestoneDesktop || window.munaiDesktop || null;   // munaiDesktop: desktop builds before the rename
+const DESKTOP = window.lodestoneDesktop || null;
 // Where attachments and dictation are read: "this computer" in Lodestone Desktop, "this device" in the web app and on the phone.
 const HERE = DESKTOP ? "this computer" : "this device";
 // The folders Lodestone may read: the desktop's own, else the browser's folder access (Chromium on a computer).
@@ -160,42 +160,6 @@ function setWebNext(on) {
   const i = $("#input"); if (i) i.placeholder = S.webNext ? "Ask — Lodestone will also look online…" : "Message";
 }
 
-// ─── The move from /munai-offline/ to /lodestone-app/ ───────────────────
-// The web app's address changed on October 17, 2026. The site answers every
-// old address with a 301, but a worker installed under /munai-offline/ keeps
-// serving its cached copy there; when this code runs at the old path it takes
-// that worker down and goes to the new one. Conversations, practices and
-// memory live in IndexedDB, which belongs to the origin, not the path, so
-// they come along untouched. The corpus, the retrieval model and the shell are
-// cached under their URLs, which carry the path; they are copied to the new
-// path once (migrateCaches), so nothing is downloaded again.
-const OLD_PATH = "/munai-offline/", NEW_PATH = "/lodestone-app/";
-
-async function leaveOldPath() {
-  if (DESKTOP || !location.pathname.startsWith(OLD_PATH)) return false;
-  try { for (const r of await navigator.serviceWorker?.getRegistrations?.() || []) if (new URL(r.scope).pathname.startsWith(OLD_PATH)) await r.unregister(); } catch {}
-  location.replace(NEW_PATH + location.pathname.slice(OLD_PATH.length) + (location.search ? location.search + "&" : "?") + "moved=1" + location.hash);
-  return true;
-}
-
-async function migrateCaches() {
-  if (!self.caches || !location.pathname.startsWith(NEW_PATH)) return;
-  try { if (await store.kv.get("caches-moved")) return; } catch { return; }
-  try {
-    for (const name of await caches.keys()) {
-      const c = await caches.open(name);
-      for (const req of await c.keys()) {
-        const u = new URL(req.url);
-        if (u.origin !== location.origin || !u.pathname.startsWith(OLD_PATH)) continue;
-        u.pathname = NEW_PATH + u.pathname.slice(OLD_PATH.length);
-        if (await c.match(u.href)) continue;
-        const res = await c.match(req);
-        if (res) await c.put(u.href, res);
-      }
-    }
-    await store.kv.set("caches-moved", Date.now());
-  } catch (e) { console.warn("[move] caches not copied:", e); }
-}
 
 /**
  * A phone's browser opened from the computer's QR code (1.13.1): the address
@@ -219,7 +183,7 @@ async function pairBrowserFromCode() {
     if (!code) return toast("Not paired: answers need the code from the computer. Reload the page to type it.", 8000);
   }
   try {
-    const r = await fetch("/munai-pair", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, name: isHandheld() ? "Phone browser" : "Browser" }) });
+    const r = await fetch("/lodestone-pair", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, name: isHandheld() ? "Phone browser" : "Browser" }) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.token) throw new Error(j.error?.message || `The computer answered ${r.status}.`);
     document.cookie = `lodestone_pair=${j.token}; path=/; max-age=${400 * 86400}; SameSite=Strict`;
@@ -228,12 +192,10 @@ async function pairBrowserFromCode() {
 }
 
 async function boot() {
-  if (await leaveOldPath()) return;
   if (await reloadForBridge()) return;
   // One memory per person: the signed-in account's own, or the device's when
   // no one is signed in, opened before anything of it is read.
   if (syncAvailable()) { try { await held.bind(); } catch (e) { console.warn("[memory]", e?.message || e); } }
-  await migrateCaches();
   const savedSettings = await store.kv.get("settings");
   S.settings = savedSettings || { theme: "dark", lang: "auto" };
   S.freshDevice = !savedSettings;   // November 20, 2026: no Lodestone data yet, so the first-run setup (firstrun.js)
@@ -313,9 +275,9 @@ async function boot() {
  */
 async function reloadForBridge() {
   if (!/Lodestone-Android/.test(navigator.userAgent) || window.Capacitor || !navigator.onLine || !self.caches) return false;
-  try { if (sessionStorage.getItem("munai-bridge-reload")) return false; sessionStorage.setItem("munai-bridge-reload", "1"); } catch { return false; }
+  try { if (sessionStorage.getItem("lodestone-bridge-reload")) return false; sessionStorage.setItem("lodestone-bridge-reload", "1"); } catch { return false; }
   for (const k of await caches.keys()) {
-    if (!k.startsWith("munai-offline-shell-")) continue;
+    if (!k.startsWith("lodestone-shell-") && !k.startsWith("munai-offline-shell-")) continue;
     const c = await caches.open(k);
     for (const r of await c.keys()) if (/\/lodestone-app\/(index\.html)?$/.test(new URL(r.url).pathname)) await c.delete(r);
   }
@@ -1002,19 +964,9 @@ async function conversationCount() { try { return (await store.threads.list()).l
 async function showHomeNote() {
   const n = $("#homeNote"); if (!n || DESKTOP) return;
   const standalone = navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
-  let dismissed = false; try { dismissed = localStorage.getItem("munai-home-note") === "1"; } catch {}
-  // Opened from a Home Screen icon made at the old address: that icon
-  // still points there, so ask once for a new one.
-  const moved = new URLSearchParams(location.search).has("moved");
-  let movedSeen = false; try { movedSeen = localStorage.getItem("munai-moved-note") === "1"; } catch {}
-  if (moved && standalone && !movedSeen) {
-    n.querySelector("p").textContent = "Lodestone has a new address. Add it to your Home Screen again from Safari or Chrome, then remove the old icon. Your conversations are kept.";
-    n.hidden = false;
-    $("#homeNoteClose").onclick = () => { n.hidden = true; try { localStorage.setItem("munai-moved-note", "1"); } catch {} };
-    return;
-  }
+  let dismissed = false; try { dismissed = localStorage.getItem("lodestone-home-note") === "1"; } catch {}
   n.hidden = !isIOS() || standalone || dismissed || (await conversationCount()) < 3;   // v89: after the third conversation, not on the first screen
-  $("#homeNoteClose").onclick = () => { n.hidden = true; try { localStorage.setItem("munai-home-note", "1"); } catch {} };
+  $("#homeNoteClose").onclick = () => { n.hidden = true; try { localStorage.setItem("lodestone-home-note", "1"); } catch {} };
 }
 
 function engineStatus(msg, frac = 0) {
@@ -1063,7 +1015,7 @@ function updateBadge() {
  */
 async function desktopWhere(base) {
   try {
-    const r = await lanFetch(base + "/munai-pair", { signal: AbortSignal.timeout(2500) });
+    const r = await lanFetch(base + "/lodestone-pair", { signal: AbortSignal.timeout(2500) });
     return r.ok ? (await r.json()).where || null : null;
   } catch { return undefined; }
 }
@@ -5872,7 +5824,7 @@ function reviewControls() {
     el("label", { class: "check" }, on, el("span", {}, "A review of my week: once a week, a short examen of what came back, what held, what moved, and one question for the week ahead. No scores, no streaks; a week with almost nothing said gets none.")),
     el("div", { class: "row-btns" }, day, hour, now));
 }
-const HP_PENDING = "munai-hp-pending";
+const HP_PENDING = "lodestone-hp-pending";
 const assessmentUrl = () => "/assessment.php?return=lodestone";
 
 function renderAccount(statusEl, btnsEl, a) {
@@ -6747,7 +6699,7 @@ async function renderSettings() {
 
 // ─── The app's version and its updates (web) ─────────────────────────────────
 
-/** The version a service worker reports ("munai-offline-shell-v67"), or null. */
+/** The version a service worker reports ("lodestone-shell-v134"), or null. */
 function swVersion(worker = navigator.serviceWorker?.controller) {
   if (!worker) return Promise.resolve(null);
   return new Promise(res => {
@@ -7229,7 +7181,7 @@ function initSwipeBack() {
 // Conversations stay docked on the left in a wide window (the default); the
 // list button folds them away and the choice is remembered. Narrow windows and
 // phones keep the sliding drawer.
-const DOCK_KEY = "munai-threads-docked";
+const DOCK_KEY = "lodestone-threads-docked";
 const wideMQ = matchMedia("(min-width: 900px)");
 function dockWanted() { try { return localStorage.getItem(DOCK_KEY) !== "0"; } catch { return true; } }
 function threadsDocked() { return document.documentElement.classList.contains("threads-docked"); }
@@ -8116,7 +8068,7 @@ function bindChrome() {
   $("#setDictDownload").onclick = () => ensureSpeechModel(true);
   $("#webBtn").onclick = async () => {
     if (!S.webNext) {
-      let told = false; try { told = localStorage.getItem("munai-web-consent") === "1"; } catch {}
+      let told = false; try { told = localStorage.getItem("lodestone-web-consent") === "1"; } catch {}
       if (!told) {
         const viaProvider = !DESKTOP && ["openrouter", "hosted"].includes(S.engine?.kind);
         if (!await ask(viaProvider
@@ -8124,7 +8076,7 @@ function bindChrome() {
           : DESKTOP
           ? "Look this up online?\n\nYour question will be sent to a search engine (DuckDuckGo, or Wikipedia when DuckDuckGo does not answer), and the pages it finds will be opened from this computer. Nothing else leaves: not your conversations, not your notes.\n\nThis applies to the next question only."
           : "Look this up on Wikipedia?\n\nYour question will be sent to Wikipedia's search, and the introductions of the articles it finds are read with you. (Lodestone Desktop searches the whole web; a browser can read only Wikipedia.) Nothing else leaves: not your conversations, not your notes.\n\nThis applies to the next question only.")) return;
-        try { localStorage.setItem("munai-web-consent", "1"); } catch {}
+        try { localStorage.setItem("lodestone-web-consent", "1"); } catch {}
       }
     }
     setWebNext(!S.webNext); $("#input").focus();
@@ -8279,7 +8231,7 @@ function bindChrome() {
   $("#setExport").onclick = async () => {
     const data = await store.exportAll();
     const blob = new Blob([JSON.stringify(data, null, 1)], { type: "application/json" });
-    const a = el("a", { href: URL.createObjectURL(blob), download: `munai-memory-${new Date().toISOString().slice(0, 10)}.json` });
+    const a = el("a", { href: URL.createObjectURL(blob), download: `lodestone-memory-${new Date().toISOString().slice(0, 10)}.json` });
     document.body.append(a); a.click(); a.remove();
   };
   $("#setImport").onchange = async e => {
@@ -8446,7 +8398,7 @@ function leave(node, ms = 200) {
 }
 
 // ─── The hybrid and the depth of a turn (v107) ───────────────────────────────
-// As MunAI on Telegram ran Haiku for greetings and short exchanges and Opus for
+// As Lodestone on Telegram ran Haiku for greetings and short exchanges and Opus for
 // everything else: on a costly model under one's own key, a light model of the same
 // maker (phone.js lightFor) answers the turns route.js finds light; any turn it cannot
 // place is classified by that light model, a failure counting as deep. Without the

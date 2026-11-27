@@ -13,7 +13,7 @@ Safari can't load web extensions directly; Apple requires wrapping them in a mac
 xcrun safari-web-extension-converter /path/to/lodestone-extension \
   --project-location ~/Desktop/Lodestone-Safari \
   --app-name "Lodestone" \
-  --bundle-identifier io.harmonism.munai \
+  --bundle-identifier io.harmonism.lodestone \
   --macos-only
 ```
 

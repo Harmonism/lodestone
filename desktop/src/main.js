@@ -23,24 +23,11 @@ const path = require("path");
 const fs = require("fs");
 const os = require("os");
 
-// ─── Name, and the data folders of the earlier names ─────────────────────────
-// The app was "MunAI Offline" until 1.2 and "MunAI" from 1.2 to 1.8; each kept
-// its model, conversations, practices and memory in a folder of that name.
-// The newest existing one is used where it is: Chromium has already opened the
-// new folder by the time this runs, so moving an old one into place is not
-// possible, and nothing is gained by copying.
+// ─── Name ────────────────────────────────────────────────────────────────────
+// The data folder is <appData>/Lodestone. Folders of the app's earlier names
+// are no longer adopted (November 24, 2026): move one into place by hand.
 const APP_NAME = "Lodestone";
 app.setName(APP_NAME);
-(() => {
-  const appData = app.getPath("appData");
-  const now = path.join(appData, APP_NAME);
-  if (app.getPath("userData") !== now) return;                         // set explicitly (tests)
-  if (fs.existsSync(path.join(now, "desktop.json"))) return;           // already a Lodestone install
-  for (const legacy of ["MunAI", "MunAI Offline"]) {
-    const before = path.join(appData, legacy);
-    if (fs.existsSync(path.join(before, "desktop.json"))) { app.setPath("userData", before); return; }
-  }
-})();
 
 if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
 
@@ -1407,20 +1394,6 @@ async function offerMoveToApplications() {
   catch (e) { dialog.showErrorBox(APP_NAME, "Lodestone could not move itself into Applications. Drag it there from this window instead.\n\n" + (e.message || e)); }
 }
 
-/** macOS: the app was called "MunAI Offline" until 1.2. Its models and conversations are already here. */
-async function offerRemoveOldApp() {
-  if (process.platform !== "darwin" || !app.isPackaged || cfg.askedOldApp) return;
-  const old = "/Applications/MunAI Offline.app";
-  if (!fs.existsSync(old)) return;
-  cfg.askedOldApp = true; saveCfg();
-  const { response } = await dialog.showMessageBox({
-    type: "question", buttons: ["Move it to the Bin", "Keep it"], defaultId: 0, cancelId: 1,
-    message: "The earlier “MunAI Offline” app is still in Applications.",
-    detail: "Lodestone replaces it and has taken over its model, conversations and memory. The old app is no longer needed.",
-  });
-  if (response === 0) { try { await shell.trashItem(old); } catch {} }
-}
-
 /**
  * The English library that came with this version, unpacked into the data
  * folder on its first launch. A newer English pack already downloaded through
@@ -1466,7 +1439,6 @@ app.whenReady().then(async () => {
   migrateModels();
   loadStoredCatalog();
   await offerMoveToApplications();
-  await offerRemoveOldApp();
   // A new version carries a new web app; the previous one's service worker and
   // HTTP cache would serve it from cache for a launch — 1.5.1's docked
   // conversations ran hidden behind exactly that. Both are dropped once per

@@ -4,8 +4,7 @@ Usage: python3 tools/test-phone.py [path/to/lodestone/app] [path/to/harmonia-ast
 (needs: pip install playwright; playwright install chromium)
 
 Serves the app at http://localhost:8799/lodestone-app/ (localhost is a secure
-context, as harmonism.io's https is) and also at the old /munai-offline/,
-mocks lodestone-desktop-api.php on the same origin, serves the real
+context, as harmonism.io's https is), mocks lodestone-desktop-api.php on the same origin, serves the real
 assessment.php (through `php -S`) when a harmonia-astro folder is given, and
 intercepts Supabase and OpenRouter in the browser.
 """
@@ -17,7 +16,6 @@ APP = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path
 ASTRO = os.path.abspath(sys.argv[2]) if len(sys.argv) > 2 else None
 ROOT = tempfile.mkdtemp(prefix="lodestone-phone-test-")
 os.symlink(APP, os.path.join(ROOT, "lodestone-app"))
-os.symlink(APP, os.path.join(ROOT, "munai-offline"))
 PORT, PHP_PORT = 8799, 8798
 LOG = {"hosted": [], "openrouter": [], "supabase": []}
 SB_KEY = "sb-zccplzknsbpdczfnwkwz-auth-token"
@@ -180,7 +178,7 @@ def main():
         page.evaluate("([k, v]) => localStorage.setItem(k, v)", [SB_KEY, json.dumps(sess)])
         page.reload(); page.wait_for_selector("#main:not([hidden])", timeout=30000)
         # Signing in, the app asks whether the device's memory is this account's (accepted here) and reopens on it.
-        page.wait_for_function("(async () => (await import('./js/store.js')).using() === 'munai-offline')()", timeout=20000)
+        page.wait_for_function("(async () => (await import('./js/store.js')).using() === 'lodestone-device')()", timeout=20000)
         page.wait_for_timeout(800)
         settings(); page.wait_for_selector("#drawerSettings:not([hidden])"); page.wait_for_timeout(400)
         page.click("#setChangeTier"); page.wait_for_selector("#setup:not([hidden])", timeout=10000)
@@ -202,16 +200,16 @@ def main():
               bool(LOG["supabase"]) and LOG["supabase"][-1]["body"].get("refresh_token") == "REFRESH1" and stored["access_token"] == "ACCESS2" and stored["refresh_token"] == "REFRESH2" and LOG["hosted"][-1]["auth"] == "Bearer ACCESS2")
 
         page.wait_for_timeout(1500)   # let the last turn's stream close before navigating away
-        page.evaluate("([k, v]) => localStorage.setItem(k, v)", ["munai-hp-pending", hp_code(7.0)])
+        page.evaluate("([k, v]) => localStorage.setItem(k, v)", ["lodestone-hp-pending", hp_code(7.0)])
         page.reload(); page.wait_for_selector("#main:not([hidden])", timeout=30000)
         page.wait_for_function("[...document.querySelectorAll('.msg.user .body')].some(b => b.textContent.includes('Harmonic Profile from the assessment'))", timeout=10000)
-        st = page.evaluate("async () => { const m = await import('./js/store.js'); return { wheel: await m.kv.get('wheel'), a: await m.kv.get('assessment'), pending: localStorage.getItem('munai-hp-pending') }; }")
+        st = page.evaluate("async () => { const m = await import('./js/store.js'); return { wheel: await m.kv.get('wheel'), a: await m.kv.get('assessment'), pending: localStorage.getItem('lodestone-hp-pending') }; }")
         check("a profile left by the assessment is taken in once", st["wheel"].get("presence") == 4 and st["a"].startswith("Altitude") and st["pending"] is None, json.dumps(st)[:160])
         page.click("#btnMe"); page.wait_for_timeout(500)
         check("Your path then offers a retake", "Retake" in page.text_content("#hpBtns") and "Taken" in page.text_content("#hpStatus"))
         page.screenshot(path=os.path.join(ROOT, "yourpath.png"))
         page.click("#drawerMe [data-close]")
-        page.evaluate("([k, v]) => localStorage.setItem(k, v)", ["munai-hp-pending", hp_code(9.5)])
+        page.evaluate("([k, v]) => localStorage.setItem(k, v)", ["lodestone-hp-pending", hp_code(9.5)])
         page.evaluate("() => document.dispatchEvent(new Event('visibilitychange'))")
         page.wait_for_timeout(1500)
         w = page.evaluate("async () => (await (await import('./js/store.js')).kv.get('wheel'))")
@@ -230,14 +228,14 @@ def main():
             pg.on("dialog", lambda d: d.accept())
             ph = f"http://127.0.0.1:{PHP_PORT}"
             pg.goto(ph + "/assessment.php?return=lodestone")
-            ok = pg.evaluate("() => typeof sendToLodestoneApp === 'function' && sessionStorage.getItem('munai-return') === '1'")
+            ok = pg.evaluate("() => typeof sendToLodestoneApp === 'function' && sessionStorage.getItem('lodestone-return') === '1'")
             check("assessment.php opened from Lodestone remembers to return", ok)
             pg.route("**/lodestone-app/**", lambda r: r.fulfill(status=200, body="<p>app</p>", content_type="text/html"))
             pg.evaluate("() => { document.getElementById('shareConsentCheckbox').checked = true; }")
             try:
                 pg.evaluate("() => sendToLodestoneApp()")
                 pg.wait_for_url("**/lodestone-app/**", timeout=5000)
-                code = pg.evaluate("() => localStorage.getItem('munai-hp-pending')")
+                code = pg.evaluate("() => localStorage.getItem('lodestone-hp-pending')")
                 check("the assessment leaves an HP code and goes to Lodestone", bool(code) and code.startswith("HP::"), (code or "")[:24])
             except Exception as e:
                 check("the assessment leaves an HP code and goes to Lodestone", False, str(e)[:300])

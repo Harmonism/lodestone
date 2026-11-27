@@ -1,5 +1,5 @@
 // route.js — how much depth a turn needs (v107).
-// A port of MunAI on Telegram's router (harmonia-astro/telegram-companion/companion-classifier.php),
+// A port of Lodestone on Telegram's router (harmonia-astro/telegram-companion/companion-classifier.php),
 // which ran Haiku for greetings and short exchanges and Opus for everything that matters.
 // Here it decides two things: in the hybrid, which model answers (the chosen one, or a light
 // model of the same maker); and for any untested thinking model, how much it deliberates.
